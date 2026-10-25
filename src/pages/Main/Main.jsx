@@ -1,3 +1,5 @@
+import { useState } from 'react'
+
 import './Main.css'
 
 import cuadroEfecto from '../../assets/decorations/cuadroefecto.svg'
@@ -13,6 +15,7 @@ import palomitasText from '../../assets/text/palomitastexto.svg'
 import preparaText from '../../assets/text/preparatexto.svg'
 import tusText from '../../assets/text/tustexto.svg'
 import yText from '../../assets/text/ytexto.svg'
+import { signInWithOAuth } from '../../lib/supabase.js'
 
 const textLayers = [
   { source: preparaText, label: 'Prepara' },
@@ -40,18 +43,49 @@ function WaveGroup({ position = 'center' }) {
   )
 }
 
-function AccessButton({ provider, icon, variant }) {
+function AccessButton({
+  provider,
+  icon,
+  variant,
+  onClick,
+  disabled,
+  isLoading,
+}) {
   return (
     <div className={`access-button-entry access-button-entry--${variant}`}>
-      <button className={`access-button access-button--${variant}`} type="button">
+      <button
+        className={`access-button access-button--${variant}`}
+        type="button"
+        onClick={onClick}
+        disabled={disabled}
+        aria-busy={isLoading}
+      >
         <img src={icon} alt="" aria-hidden="true" />
-        <span>Continuar con {provider}</span>
+        <span>{isLoading ? `Conectando con ${provider}` : `Continuar con ${provider}`}</span>
       </button>
     </div>
   )
 }
 
 function Main() {
+  const [activeProvider, setActiveProvider] = useState(null)
+  const [authError, setAuthError] = useState('')
+
+  const handleSignIn = async (provider) => {
+    setAuthError('')
+    setActiveProvider(provider)
+
+    try {
+      await signInWithOAuth(provider)
+    } catch (error) {
+      console.error('No fue posible iniciar el flujo OAuth.', error)
+      setAuthError(
+        'No fue posible iniciar sesión. Verifica la configuración e inténtalo de nuevo.',
+      )
+      setActiveProvider(null)
+    }
+  }
+
   return (
     <main className="main-page">
       <div className="background" aria-hidden="true">
@@ -87,9 +121,29 @@ function Main() {
           </div>
 
           <div className="access-actions" aria-label="Opciones de acceso">
-            <AccessButton provider="Google" icon={googleLogo} variant="google" />
-            <AccessButton provider="GitHub" icon={githubLogo} variant="github" />
+            <AccessButton
+              provider="Google"
+              icon={googleLogo}
+              variant="google"
+              onClick={() => handleSignIn('google')}
+              disabled={activeProvider !== null}
+              isLoading={activeProvider === 'google'}
+            />
+            <AccessButton
+              provider="GitHub"
+              icon={githubLogo}
+              variant="github"
+              onClick={() => handleSignIn('github')}
+              disabled={activeProvider !== null}
+              isLoading={activeProvider === 'github'}
+            />
           </div>
+
+          {authError && (
+            <p className="auth-error" role="alert">
+              {authError}
+            </p>
+          )}
         </section>
       </div>
     </main>

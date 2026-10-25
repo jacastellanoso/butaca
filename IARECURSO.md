@@ -5,9 +5,9 @@
 ## 1. Estado del proyecto
 
 - Aplicación creada con React 19 y Vite 8.
-- Rama de la pantalla inicial: `pf2_InicioPantalla`.
+- Rama actual de autenticación: `pf3_OAuth20`, basada en `pf2_InicioPantalla`.
 - Pantalla implementada: `Main`, destinada visualmente a visitantes sin sesión.
-- Alcance actual: presentación visual y animaciones. No existe autenticación, manejo de sesiones, rutas protegidas ni conexión con servicios externos.
+- Alcance actual: presentación visual, animaciones e inicio de sesión OAuth 2.0 con Google o GitHub mediante Supabase. El cliente conserva y renueva la sesión; todavía no existen rutas protegidas ni una pantalla posterior al acceso.
 - Tipografía oficial de toda la aplicación: **Montserrat**. Está instalada localmente mediante `@fontsource/montserrat` y se cargan solamente los subconjuntos latinos de los pesos 400, 600, 700 y 800 desde `src/main.jsx`.
 
 ## 2. Regla de actualización
@@ -18,7 +18,8 @@ Antes de implementar un cambio:
 2. Revisar el componente y los estilos relacionados.
 3. Mantener la arquitectura y las convenciones aquí descritas.
 4. No renombrar recursos existentes sin actualizar todas sus importaciones.
-5. No agregar autenticación ni servicios externos hasta que se soliciten expresamente.
+5. La autenticación se centraliza en `src/lib/supabase.js`; no se deben crear clientes adicionales dentro de componentes.
+6. Nunca incluir claves secretas, `service_role` ni secretos de proveedores en el frontend. Solo se permite la clave publicable de Supabase mediante variables `VITE_`.
 
 Después de implementar un cambio:
 
@@ -40,6 +41,8 @@ src/
 │   ├── icons/               # Logotipos usados por controles de interfaz.
 │   ├── images/              # Imágenes PNG decorativas.
 │   └── text/                # Seis capas SVG de la composición del título.
+├── lib/
+│   └── supabase.js          # Cliente único de Supabase y entrada a OAuth.
 └── pages/
     └── Main/
         ├── Main.jsx         # Estructura semántica de la pantalla inicial.
@@ -53,7 +56,8 @@ Los recursos gráficos están clasificados dentro de `src/assets/` según su fun
 - `Main`: organiza tres niveles visuales independientes: fondo, decoraciones y contenido principal.
 - `central-scene`: contenedor de escena a pantalla completa que agrupa la onda central y `main-content`. Ambos comparten el mismo centro y escalan mediante reglas responsive sin depender de coordenadas independientes.
 - `WaveGroup`: reutiliza `cuadroefecto.svg` en cuatro capas concéntricas. Se instancia en el centro, esquina superior izquierda y esquina inferior derecha.
-- `AccessButton`: componente reutilizable para los botones visuales de Google y GitHub. Los botones son deliberadamente inactivos; no deben conectarse a autenticación todavía.
+- `AccessButton`: componente reutilizable para Google y GitHub. Recibe la acción OAuth, bloquea ambos controles mientras comienza la redirección y comunica el estado de carga con `aria-busy`.
+- `handleSignIn`: limpia errores previos, identifica el proveedor activo y solicita a Supabase el inicio de OAuth. Los errores se muestran en una región con `role="alert"` sin exponer detalles internos al usuario.
 - `textLayers`: arreglo ordenado que registra las seis capas SVG del título. Su orden también determina el `z-index` y el retraso de aparición.
 
 ## 5. Recursos gráficos
@@ -70,6 +74,16 @@ Las siguientes imágenes están en `src/assets/text/`, comparten el mismo lienzo
 6. `butacatexto.svg`
 
 No se deben recortar, reposicionar o escalar individualmente. La adaptación de tamaño siempre se realiza sobre el contenedor padre.
+
+### Recursos de texto reservados para `pf4`
+
+Los siguientes SVG se conservaron en `src/assets/text/` para la siguiente fase. Comparten un lienzo `2608 × 960`, todavía no se importan en ningún componente y no deben eliminarse por parecer recursos sin uso:
+
+1. `quetexto.svg`
+2. `veremostexto.svg`
+3. `hoytexto.svg`
+
+Cuando `pf4` defina su composición visual, debe importarlos desde esta carpeta y documentar aquí el componente, orden de superposición y comportamiento responsive que adopte.
 
 ### Decoraciones
 
@@ -107,17 +121,38 @@ No se deben recortar, reposicionar o escalar individualmente. La adaptación de 
 - El documento usa `lang="es"`.
 - El título visual compuesto por SVG cuenta con un `h1` oculto visualmente para lectores de pantalla.
 - Las imágenes decorativas se ocultan a tecnologías de asistencia.
-- Los botones usan elementos `<button>` reales y no enlaces porque actualmente no navegan.
+- Los botones usan elementos `<button>` reales porque inician una acción; anuncian el estado de carga y se deshabilitan para evitar solicitudes duplicadas.
 - Los estados de foco son visibles y las animaciones respetan la preferencia de movimiento reducido.
 
-## 9. Funcionalidades pendientes
+## 9. Autenticación y entorno
 
-- Definir e implementar el flujo real de autenticación cuando se autorice.
+- Dependencia oficial: `@supabase/supabase-js`.
+- Proyecto Supabase: `fxumhujdmabgxjqmzoxs`.
+- Proveedores habilitados en Supabase: Google y GitHub.
+- `src/lib/supabase.js` crea una única instancia con persistencia, renovación automática y detección de sesión en la URL.
+- Variables requeridas: `VITE_SUPABASE_URL` y `VITE_SUPABASE_PUBLISHABLE_KEY`.
+- `.env.example` documenta los nombres sin publicar credenciales. `.env.local` contiene la configuración local y Git lo ignora.
+- La URL de retorno enviada a Supabase es `window.location.origin`. Cada origen usado en desarrollo o producción debe incluirse en **Authentication > URL Configuration > Redirect URLs** del panel de Supabase.
+- El servidor MCP de Supabase para Codex está configurado y autenticado con el proyecto correcto. El MCP sirve para administración y documentación; la aplicación usa el SDK en tiempo de ejecución.
+
+## 10. Funcionalidades pendientes
+
+- Definir la pantalla o ruta a mostrar después de una autenticación exitosa.
+- Añadir cierre de sesión y una interfaz que represente al usuario autenticado.
 - Añadir navegación y rutas cuando existan más pantallas.
 - Sustituir el favicon provisional de Vite por el recurso oficial de Butaca cuando se proporcione.
 - Incorporar pruebas automatizadas cuando se definan los flujos funcionales.
 
-## 10. Historial
+## 11. Historial
+
+### 2026-10-25 — OAuth 2.0 con Supabase
+
+- Se instaló el cliente oficial `@supabase/supabase-js` y se creó una instancia centralizada.
+- Los botones de Google y GitHub ahora inician el flujo OAuth correspondiente.
+- Se incorporaron estados accesibles de carga, bloqueo contra solicitudes duplicadas y mensajes seguros de error.
+- Se documentaron las variables de entorno y se protegió la configuración local mediante `.gitignore`.
+- Se configuró y autenticó en Codex el MCP de Supabase para el proyecto `fxumhujdmabgxjqmzoxs`.
+- Se incorporaron `quetexto.svg`, `veremostexto.svg` y `hoytexto.svg` en `src/assets/text/` como recursos reservados para el desarrollo de `pf4`.
 
 ### 2026-10-24 — Secuencia cinematográfica y escena responsive
 

@@ -262,10 +262,31 @@
   transform: translateY(0) scale(0.98);
 }
 
+.access-button:disabled {
+  cursor: wait;
+  opacity: 0.72;
+  transform: none;
+  filter: none;
+}
+
 .access-button:focus-visible {
   outline: 3px solid #ffffff;
   outline-offset: 4px;
   box-shadow: 0 0 0 6px rgb(0 49 180 / 65%);
+}
+
+.auth-error {
+  width: min(100%, 540px);
+  margin: 12px 0 0;
+  padding: 8px 12px;
+  border: 1px solid rgb(255 255 255 / 55%);
+  border-radius: 10px;
+  color: #ffffff;
+  background: rgb(0 0 70 / 68%);
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.4;
+  text-align: center;
 }
 
 .visually-hidden {
