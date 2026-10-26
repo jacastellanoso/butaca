@@ -7,6 +7,7 @@
 - Aplicación creada con React 19 y Vite 8.
 - Rama actual de autenticación: `pf3_OAuth20`, basada en `pf2_InicioPantalla`.
 - Rama de la pantalla de rostro: `pf4_RostroPantalla`, basada en `dev`.
+- Rama del backend: `pf5_Express`, basada en `dev`. API REST con Express 5 en `backend/`, puerto `3010`.
 - Pantallas implementadas: `Main`, destinada visualmente a visitantes sin sesión, y `Rostro`, con cámara, consentimiento e interfaz de detección de emociones (accesible temporalmente desde `/#rostro`).
 - Alcance actual: presentación visual, animaciones e inicio de sesión OAuth 2.0 con Google o GitHub mediante Supabase. El cliente conserva y renueva la sesión; todavía no existen rutas protegidas ni una pantalla posterior al acceso.
 - Tipografía oficial de toda la aplicación: **Montserrat**. Está instalada localmente mediante `@fontsource/montserrat` y se cargan solamente los subconjuntos latinos de los pesos 400, 600, 700 y 800 desde `src/main.jsx`.
@@ -21,6 +22,9 @@ Antes de implementar un cambio:
 4. No renombrar recursos existentes sin actualizar todas sus importaciones.
 5. La autenticación se centraliza en `src/lib/supabase.js`; no se deben crear clientes adicionales dentro de componentes.
 6. Nunca incluir claves secretas, `service_role` ni secretos de proveedores en el frontend. Solo se permite la clave publicable de Supabase mediante variables `VITE_`.
+7. En el backend, `process.env` solo se lee en `backend/src/config/env.js`; el resto del código importa `env`.
+8. En el backend, los controladores no guardan ni consultan datos directamente: siempre llaman a un service de `backend/src/services/`.
+9. El usuario de una petición se obtiene **siempre** de `req.user` (token verificado por `requireAuth`), nunca de un id enviado en el body, la query o la URL.
 
 Después de implementar un cambio:
 
@@ -28,6 +32,7 @@ Después de implementar un cambio:
 2. Registrar decisiones técnicas relevantes.
 3. Actualizar la lista de funcionalidades pendientes.
 4. Ejecutar `npm run lint` y `npm run build`.
+5. Si se modificó el backend, levantarlo con `npm run dev` dentro de `backend/` y comprobar que `GET /api/health` responde `200`.
 
 ## 3. Arquitectura actual
 
@@ -55,6 +60,22 @@ src/
         ├── EmotionStatus.jsx  # Presentación de los estados de detección.
         ├── emotions.js        # Etiquetas en español de las expresiones de face-api.js.
         └── useCamera.js       # Ciclo de vida de getUserMedia y errores de cámara.
+```
+
+```text
+backend/                       # API REST (Express 5, ES Modules). Proyecto npm independiente.
+├── package.json               # Scripts: dev (node --watch), start, test (node --test).
+├── .env.example               # Nombres de las variables del backend, sin valores.
+└── src/
+    ├── server.js              # Único archivo que hace listen (puerto de env.port).
+    ├── app.js                 # Crea y exporta Express sin listen (lo usan las pruebas).
+    ├── config/env.js          # Única lectura de process.env.
+    ├── constants/emociones.js # Emociones de face-api.js y tipos de contenido válidos.
+    ├── lib/supabase.js        # Cliente de servidor para verificar sesiones.
+    ├── middlewares/           # requireAuth, notFound y errorHandler.
+    ├── routes/                # index.js monta /api; un router por recurso.
+    ├── controllers/           # Leen req, validan y eligen el código HTTP.
+    └── services/              # Lógica y datos; se reemplazan sin tocar controladores.
 ```
 
 Los recursos gráficos están clasificados dentro de `src/assets/` según su función. Conservan exactamente sus nombres originales y se importan desde `Main.jsx`. No se deben duplicar en la raíz ni entre subcarpetas.
@@ -120,7 +141,95 @@ Diseño de la pantalla de cámara, consentimiento e interfaz de detección. **No
 - Animaciones: `rostro-rise` (entrada del encabezado, recuadro y panel), `face-scan` (barrido al analizar) y `status-pulse` (indicador de análisis). Todas se desactivan con `prefers-reduced-motion`.
 - Accesibilidad: `EmotionStatus` usa `role="status"` con `aria-live="polite"`, los errores de cámara usan `role="alert"`, la confianza se expone como `role="meter"` y todos los botones conservan foco visible.
 
-## 6. Recursos gráficos
+## 6. Backend Express (`pf5_Express`)
+
+### Alcance
+
+Configuración de Express, rutas, controladores y API REST. Los datos se guardan **temporalmente en memoria** (se borran al reiniciar el servidor) y las recomendaciones son **datos de ejemplo**. La base de datos (`pf6_Supabase`, `pf7_Prisma`), TMDB (`pf11_TMDB`), Zod (`pf15_Zod`), pruebas (`pf14_Testing`) y seguridad (`pf16_Seguridad`) se integran en sus ramas sin cambiar el contrato de esta sección.
+
+### Ejecución local
+
+```bash
+cd backend
+npm.cmd install        # solo la primera vez
+npm.cmd run dev        # http://localhost:3010 (se reinicia al guardar)
+```
+
+El backend tiene su propio `package.json` y `node_modules`; se instala y ejecuta desde `backend/`, independiente del front.
+
+### Capas
+
+Una petición recorre: **ruta** → `requireAuth` → **controlador** → **service** → respuesta.
+
+- `routes/index.js`: `GET /api/health` es pública y está **antes** de `requireAuth`; todo lo montado después exige sesión.
+- `controllers/`: validación mínima con `if` (la reemplaza Zod en `pf15`) y elección del código HTTP.
+- `services/`: objetos `animosService`, `favoritosService` y `recomendacionesService` con funciones `async`. Las ramas posteriores reemplazan el **cuerpo** de esas funciones conservando nombres, parámetros y forma de la respuesta.
+- `app.js` aplica en orden: `express.json()`, `/api`, `notFound`, `errorHandler`. Los middlewares de `pf16` van antes de las rutas.
+
+### Autenticación
+
+El front debe enviar el token de la sesión de Supabase en cada petición protegida:
+
+```js
+const { data } = await supabase.auth.getSession()
+fetch('http://localhost:3010/api/animos', {
+  headers: { Authorization: `Bearer ${data.session.access_token}` },
+})
+```
+
+- `requireAuth` exige `Authorization: Bearer <token>` y lo verifica con `supabase.auth.getUser(token)` mediante `authService.obtenerUsuario`.
+- Si es válido deja `req.user = { id, email }`; el `id` es el de `auth.users` de Supabase y es la clave para separar los datos de cada persona.
+- Sin token o con token inválido/expirado responde `401`. Si Supabase no está configurado o no responde, el error llega a `errorHandler` (`500`), para no culpar al usuario.
+- `authService` se exporta como objeto para poder reemplazar `obtenerUsuario` en las pruebas sin iniciar sesión real.
+
+### Endpoints
+
+| Método | Ruta | Sesión | Body / query | Respuestas |
+|---|---|---|---|---|
+| GET | `/api/health` | No | — | `200 { status: 'ok' }` |
+| POST | `/api/animos` | Sí | `{ emocion, confianza }` | `201` ánimo creado · `400` |
+| GET | `/api/animos` | Sí | — | `200` lista de ánimos del usuario |
+| GET | `/api/recomendaciones` | Sí | `?emocion=happy&tipo=movie` (`tipo` opcional, por defecto `movie`) | `200` · `400` |
+| GET | `/api/favoritos` | Sí | — | `200` lista de favoritos del usuario |
+| POST | `/api/favoritos` | Sí | `{ tmdbId, tipo, titulo, poster? }` | `201` creado · `200` si ya existía · `400` |
+| DELETE | `/api/favoritos/:id` | Sí | — | `204` · `404` si no existe o no pertenece al usuario |
+
+- `emocion`: una de `neutral`, `happy`, `sad`, `angry`, `fearful`, `disgusted`, `surprised` (las mismas de `src/pages/Rostro/emotions.js`).
+- `confianza`: número entre `0` y `1` (la probabilidad de face-api.js).
+- `tipo`: `movie` o `tv` (los nombres de TMDB).
+- Todas las respuestas de error tienen la forma `{ error: 'mensaje' }`.
+
+### Formas de respuesta
+
+```js
+// Ánimo
+{ id, emocion, confianza, creadoEn }            // creadoEn en ISO 8601
+
+// Favorito (no se duplica la combinación tmdbId + tipo por usuario)
+{ id, tmdbId, tipo, titulo, poster, creadoEn }
+
+// Recomendaciones
+{ emocion, tipo, fuente, resultados: [
+  { tmdbId, titulo, descripcion, poster, fecha, calificacion, tipo },
+] }
+```
+
+`fuente` vale `'ejemplo'` mientras no exista la integración con TMDB. Los campos de `resultados` están normalizados en español para que la galería no tenga que distinguir entre películas (`title`, `release_date`) y series (`name`, `first_air_date`) de TMDB.
+
+### Manejo de errores
+
+- `notFound`: `404` en JSON para rutas inexistentes. Dentro de `/api`, sin sesión se responde `401` antes de evaluar la ruta (no se revela qué rutas existen).
+- `errorHandler`: JSON mal formado → `400`; cualquier otro error → `500` con mensaje genérico. El detalle solo se imprime en la consola del servidor.
+
+### Contratos para otras ramas
+
+- `pf7_Prisma`: reemplazar el cuerpo de `animosService` y `favoritosService` por consultas filtradas por `usuarioId`. Conviene un índice único `(usuarioId, tmdbId, tipo)` en favoritos.
+- `pf11_TMDB`: reemplazar `recomendacionesService.obtener({ emocion, tipo })`, guardar la API key como variable del backend (agregarla a `config/env.js` y `.env.example`) y devolver la forma documentada con `fuente: 'tmdb'`.
+- `pf15_Zod`: reemplazar las validaciones `if` de los controladores y la lectura de `config/env.js` por esquemas.
+- `pf14_Testing`: importar `app` desde `src/app.js` con supertest y simular sesiones con `mock.method(authService, 'obtenerUsuario', ...)`.
+- `pf16_Seguridad`: agregar helmet, CORS con lista blanca y rate limit en `app.js`, antes de `app.use('/api', ...)`.
+
+## 7. Recursos gráficos
 
 ### Título compuesto
 
@@ -156,7 +265,7 @@ Cuando `pf4` defina su composición visual, debe importarlos desde esta carpeta 
 - `src/assets/images/palomitasdiseño.png`: esquina inferior derecha.
 - `src/assets/icons/logogoogle.svg` y `src/assets/icons/logogithub.svg`: iconos de los botones de acceso.
 
-## 7. Estilos y responsive
+## 8. Estilos y responsive
 
 - Fondo a pantalla completa: degradado vertical de `#0470F6` a `#0000B0`.
 - La página usa `100svh`, evita barras de desplazamiento y controla los niveles mediante contextos de apilamiento.
@@ -167,7 +276,7 @@ Cuando `pf4` defina su composición visual, debe importarlos desde esta carpeta 
 - Todos los controles interactivos conservan foco visible para navegación con teclado.
 - `prefers-reduced-motion: reduce` desactiva animaciones y muestra todas las capas del título directamente.
 
-## 8. Animaciones
+## 9. Animaciones
 
 - `build-center-wave`: efecto introductorio de expansión elástica controlada de la onda central.
 - `build-top-left-wave` y `build-bottom-right-wave`: trasladan y expanden las ondas exteriores hasta sus esquinas definitivas.
@@ -178,7 +287,7 @@ Cuando `pf4` defina su composición visual, debe importarlos desde esta carpeta 
 - `float`: flotación sutil, asíncrona y permanente de las cuatro decoraciones cinematográficas, con duraciones distintas.
 - Los botones incluyen transiciones discretas para `hover`, `focus-visible` y `active`.
 
-## 9. Accesibilidad
+## 10. Accesibilidad
 
 - El documento usa `lang="es"`.
 - El título visual compuesto por SVG cuenta con un `h1` oculto visualmente para lectores de pantalla.
@@ -186,7 +295,7 @@ Cuando `pf4` defina su composición visual, debe importarlos desde esta carpeta 
 - Los botones usan elementos `<button>` reales porque inician una acción; anuncian el estado de carga y se deshabilitan para evitar solicitudes duplicadas.
 - Los estados de foco son visibles y las animaciones respetan la preferencia de movimiento reducido.
 
-## 10. Autenticación y entorno
+## 11. Autenticación y entorno
 
 - Dependencia oficial: `@supabase/supabase-js`.
 - Proyecto Supabase: `fxumhujdmabgxjqmzoxs`.
@@ -195,18 +304,32 @@ Cuando `pf4` defina su composición visual, debe importarlos desde esta carpeta 
 - Variables requeridas: `VITE_SUPABASE_URL` y `VITE_SUPABASE_PUBLISHABLE_KEY`.
 - `.env.example` documenta los nombres sin publicar credenciales. `.env.local` contiene la configuración local y Git lo ignora.
 - La URL de retorno enviada a Supabase es `window.location.origin`. Cada origen usado en desarrollo o producción debe incluirse en **Authentication > URL Configuration > Redirect URLs** del panel de Supabase.
+- Backend: `backend/.env` (ignorado por Git) con `PORT`, `SUPABASE_URL` y `SUPABASE_PUBLISHABLE_KEY`. Los dos últimos tienen los mismos valores que las variables `VITE_` del front; el backend los usa solo para verificar tokens. Si faltan, `server.js` muestra un aviso y las rutas protegidas responden `500`.
 - El servidor MCP de Supabase para Codex está configurado y autenticado con el proyecto correcto. El MCP sirve para administración y documentación; la aplicación usa el SDK en tiempo de ejecución.
 
-## 11. Funcionalidades pendientes
+## 12. Funcionalidades pendientes
 
 - Definir la pantalla o ruta a mostrar después de una autenticación exitosa.
 - Añadir cierre de sesión y una interfaz que represente al usuario autenticado.
 - Añadir navegación y rutas cuando existan más pantallas, reemplazando el acceso temporal `/#rostro`.
 - Integrar face-api.js en `Rostro` mediante `onVideoReady` y `detection` (`pf10_FaceAPI`).
+- Conectar el front con el backend enviando `Authorization: Bearer <access_token>` en cada petición protegida.
+- Reemplazar el almacenamiento en memoria del backend por Prisma + Supabase (`pf7_Prisma`) y las recomendaciones de ejemplo por TMDB (`pf11_TMDB`).
+- Habilitar CORS con lista blanca, helmet y rate limit en el backend (`pf16_Seguridad`); hasta entonces el navegador bloquea las peticiones desde `localhost:5173`.
 - Sustituir el favicon provisional de Vite por el recurso oficial de Butaca cuando se proporcione.
 - Incorporar pruebas automatizadas cuando se definan los flujos funcionales.
 
-## 12. Historial
+## 13. Historial
+
+### 2026-10-26 — Backend Express (`pf5_Express`)
+
+- Se creó `backend/` como proyecto npm independiente con Express 5, dotenv y `@supabase/supabase-js`.
+- Se separó `app.js` (configuración exportable) de `server.js` (único `listen`) para permitir pruebas con supertest.
+- Se implementó la API REST de ánimos, recomendaciones y favoritos con arquitectura de rutas, controladores y services.
+- Se agregó `requireAuth`, que verifica el token de Supabase y expone `req.user`; `GET /api/health` queda pública.
+- Se agregaron `notFound` y `errorHandler` con respuestas JSON y sin exponer detalles internos.
+- Los datos se guardan temporalmente en memoria y las recomendaciones son de ejemplo hasta `pf7_Prisma` y `pf11_TMDB`.
+- Se documentaron las variables en `backend/.env.example`.
 
 ### 2026-10-25 — Pantalla de rostro (`pf4_RostroPantalla`)
 
