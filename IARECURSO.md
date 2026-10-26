@@ -6,7 +6,8 @@
 
 - Aplicación creada con React 19 y Vite 8.
 - Rama actual de autenticación: `pf3_OAuth20`, basada en `pf2_InicioPantalla`.
-- Pantalla implementada: `Main`, destinada visualmente a visitantes sin sesión.
+- Rama de la pantalla de rostro: `pf4_RostroPantalla`, basada en `dev`.
+- Pantallas implementadas: `Main`, destinada visualmente a visitantes sin sesión, y `Rostro`, con cámara, consentimiento e interfaz de detección de emociones (accesible temporalmente desde `/#rostro`).
 - Alcance actual: presentación visual, animaciones e inicio de sesión OAuth 2.0 con Google o GitHub mediante Supabase. El cliente conserva y renueva la sesión; todavía no existen rutas protegidas ni una pantalla posterior al acceso.
 - Tipografía oficial de toda la aplicación: **Montserrat**. Está instalada localmente mediante `@fontsource/montserrat` y se cargan solamente los subconjuntos latinos de los pesos 400, 600, 700 y 800 desde `src/main.jsx`.
 
@@ -32,7 +33,7 @@ Después de implementar un cambio:
 
 ```text
 src/
-├── App.jsx                  # Punto de composición; renderiza la página Main.
+├── App.jsx                  # Punto de composición; muestra Main o Rostro (/#rostro).
 ├── App.css                  # Regla mínima del contenedor raíz.
 ├── index.css                # Estilos globales, Montserrat y normalización.
 ├── main.jsx                 # Inicio de React y carga local de la tipografía.
@@ -44,9 +45,16 @@ src/
 ├── lib/
 │   └── supabase.js          # Cliente único de Supabase y entrada a OAuth.
 └── pages/
-    └── Main/
-        ├── Main.jsx         # Estructura semántica de la pantalla inicial.
-        └── Main.css         # Diseño, responsive y animaciones de Main.
+    ├── Main/
+    │   ├── Main.jsx         # Estructura semántica de la pantalla inicial.
+    │   └── Main.css         # Diseño, responsive y animaciones de Main.
+    └── Rostro/
+        ├── Rostro.jsx         # Pantalla de cámara, consentimiento y estado de detección.
+        ├── Rostro.css         # Diseño, responsive y animaciones de Rostro.
+        ├── CameraConsent.jsx  # Solicitud de consentimiento y variante de rechazo.
+        ├── EmotionStatus.jsx  # Presentación de los estados de detección.
+        ├── emotions.js        # Etiquetas en español de las expresiones de face-api.js.
+        └── useCamera.js       # Ciclo de vida de getUserMedia y errores de cámara.
 ```
 
 Los recursos gráficos están clasificados dentro de `src/assets/` según su función. Conservan exactamente sus nombres originales y se importan desde `Main.jsx`. No se deben duplicar en la raíz ni entre subcarpetas.
@@ -60,7 +68,59 @@ Los recursos gráficos están clasificados dentro de `src/assets/` según su fun
 - `handleSignIn`: limpia errores previos, identifica el proveedor activo y solicita a Supabase el inicio de OAuth. Los errores se muestran en una región con `role="alert"` sin exponer detalles internos al usuario.
 - `textLayers`: arreglo ordenado que registra las seis capas SVG del título. Su orden también determina el `z-index` y el retraso de aparición.
 
-## 5. Recursos gráficos
+## 5. Pantalla Rostro (`pf4_RostroPantalla`)
+
+### Alcance
+
+Diseño de la pantalla de cámara, consentimiento e interfaz de detección. **No** incluye face-api.js ni detecciones simuladas: la integración del motor corresponde a `pf10_FaceAPI`.
+
+### Acceso temporal
+
+`App.jsx` muestra `Rostro` solo cuando el hash es exactamente `#rostro` y escucha `hashchange`. Cualquier otro hash (incluido el retorno de OAuth de Supabase) sigue mostrando `Main`. Cuando exista la navegación definitiva, se reemplaza esta condición por la ruta correspondiente; `Rostro` no depende de ella.
+
+### Flujo
+
+1. **Consentimiento** (`CameraConsent`): explica que Butaca necesita la cámara para analizar expresiones faciales y ofrecer recomendaciones personalizadas, e indica que no se guardan imágenes ni videos. Botones "Activar cámara" y "Ahora no".
+2. **Rechazo**: "Ahora no" o "Apagar cámara" muestran la variante "La cámara está desactivada" con la opción de activarla luego.
+3. **Solicitud**: mientras el navegador pide permiso, el botón muestra "Esperando permiso…" con `aria-busy`.
+4. **Cámara activa**: video en vivo en espejo, guía de encuadre ovalada, `EmotionStatus` y botón "Apagar cámara".
+5. **Error de cámara** (`CameraError`): mensaje específico y botón "Intentar de nuevo".
+
+### `useCamera`
+
+- Solicita solo video (`facingMode: 'user'`, ideal 1280 × 720, `audio: false`) y únicamente tras la aceptación del usuario.
+- Estados: `idle`, `requesting`, `active`, `error`.
+- Errores (`CAMERA_ERRORS`): `denied` (NotAllowedError/SecurityError), `notFound` (NotFoundError/OverconstrainedError), `busy` (NotReadableError/AbortError), `insecure` (contexto no seguro), `unsupported` (sin `mediaDevices`), `interrupted` (el track terminó) y `unknown`.
+- Detiene todos los tracks al apagar, al desmontar la pantalla (incluido el cambio de hash), en `pagehide` y si la pantalla se cierra mientras el navegador aún pedía permiso.
+- No graba, no captura fotogramas y no almacena imágenes.
+
+### Contrato para `pf10_FaceAPI`
+
+```jsx
+<Rostro
+  onVideoReady={(video) => { /* <video> en vivo, o null al apagar */ }}
+  detection={{ status, emotion, confidence, message }}
+/>
+```
+
+- `onVideoReady(video)`: se llama en `loadeddata` con el `HTMLVideoElement` que debe usarse como entrada de face-api.js y con `null` en `emptied` (cámara apagada). El espejo es solo visual (CSS); los fotogramas no se alteran.
+- `detection.status`: `ready` (por defecto), `analyzing`, `detected`, `inconclusive` o `error`.
+- `detection.emotion`: clave de `EMOTIONS` (`neutral`, `happy`, `sad`, `angry`, `fearful`, `disgusted`, `surprised`), las mismas expresiones que entrega face-api.js.
+- `detection.confidence`: probabilidad entre 0 y 1; se muestra como barra y porcentaje.
+- `detection.message`: texto opcional que reemplaza la descripción por defecto.
+- El estado también se refleja en la guía de encuadre mediante `data-detection`: blanco con barrido en `analyzing`, verde en `detected`, amarillo en `inconclusive` y rojo en `error`.
+
+### Diseño
+
+- Reutiliza de `Main.css` el degradado, las ondas de esquina (`WaveGroup` local con las mismas clases) y las cuatro decoraciones con sus animaciones.
+- Título en Montserrat 800: "¿Cómo te **sentís** hoy?". La palabra resaltada imita las píldoras blancas con texto `#0072FF` y rotación `-3.1deg` de los títulos SVG.
+- Recuadro translúcido con desenfoque; 4:3 en escritorio y 4:5 hasta `820px`, limitado por el ancho del contenedor (`100cqi`) y la altura de la ventana. En consentimiento o error crece si el texto lo necesita.
+- `.rostro-scroll` permite desplazamiento vertical en pantallas bajas sin modificar `body { overflow: hidden }`.
+- Hasta `1100px` se ocultan lentes y ticket; hasta `820px` las decoraciones bajan al 55 % de opacidad y el panel de estado pasa a columna; hasta `480px` los botones ocupan todo el ancho; con altura de hasta `640px` en escritorio se compacta el contenido.
+- Animaciones: `rostro-rise` (entrada del encabezado, recuadro y panel), `face-scan` (barrido al analizar) y `status-pulse` (indicador de análisis). Todas se desactivan con `prefers-reduced-motion`.
+- Accesibilidad: `EmotionStatus` usa `role="status"` con `aria-live="polite"`, los errores de cámara usan `role="alert"`, la confianza se expone como `role="meter"` y todos los botones conservan foco visible.
+
+## 6. Recursos gráficos
 
 ### Título compuesto
 
@@ -85,6 +145,8 @@ Los siguientes SVG se conservaron en `src/assets/text/` para la siguiente fase. 
 
 Cuando `pf4` defina su composición visual, debe importarlos desde esta carpeta y documentar aquí el componente, orden de superposición y comportamiento responsive que adopte.
 
+`pf4_RostroPantalla` no los utiliza porque componen el texto "¿Qué veremos hoy?" y la pantalla de rostro usa "¿Cómo te sentís hoy?" en Montserrat. Se mantienen reservados para una pantalla futura.
+
 ### Decoraciones
 
 - `src/assets/decorations/cuadroefecto.svg`: ondas de fondo con rotación de `-3.1deg` y opacidad de `34 %`.
@@ -94,7 +156,7 @@ Cuando `pf4` defina su composición visual, debe importarlos desde esta carpeta 
 - `src/assets/images/palomitasdiseño.png`: esquina inferior derecha.
 - `src/assets/icons/logogoogle.svg` y `src/assets/icons/logogithub.svg`: iconos de los botones de acceso.
 
-## 6. Estilos y responsive
+## 7. Estilos y responsive
 
 - Fondo a pantalla completa: degradado vertical de `#0470F6` a `#0000B0`.
 - La página usa `100svh`, evita barras de desplazamiento y controla los niveles mediante contextos de apilamiento.
@@ -105,7 +167,7 @@ Cuando `pf4` defina su composición visual, debe importarlos desde esta carpeta 
 - Todos los controles interactivos conservan foco visible para navegación con teclado.
 - `prefers-reduced-motion: reduce` desactiva animaciones y muestra todas las capas del título directamente.
 
-## 7. Animaciones
+## 8. Animaciones
 
 - `build-center-wave`: efecto introductorio de expansión elástica controlada de la onda central.
 - `build-top-left-wave` y `build-bottom-right-wave`: trasladan y expanden las ondas exteriores hasta sus esquinas definitivas.
@@ -116,7 +178,7 @@ Cuando `pf4` defina su composición visual, debe importarlos desde esta carpeta 
 - `float`: flotación sutil, asíncrona y permanente de las cuatro decoraciones cinematográficas, con duraciones distintas.
 - Los botones incluyen transiciones discretas para `hover`, `focus-visible` y `active`.
 
-## 8. Accesibilidad
+## 9. Accesibilidad
 
 - El documento usa `lang="es"`.
 - El título visual compuesto por SVG cuenta con un `h1` oculto visualmente para lectores de pantalla.
@@ -124,7 +186,7 @@ Cuando `pf4` defina su composición visual, debe importarlos desde esta carpeta 
 - Los botones usan elementos `<button>` reales porque inician una acción; anuncian el estado de carga y se deshabilitan para evitar solicitudes duplicadas.
 - Los estados de foco son visibles y las animaciones respetan la preferencia de movimiento reducido.
 
-## 9. Autenticación y entorno
+## 10. Autenticación y entorno
 
 - Dependencia oficial: `@supabase/supabase-js`.
 - Proyecto Supabase: `fxumhujdmabgxjqmzoxs`.
@@ -135,15 +197,24 @@ Cuando `pf4` defina su composición visual, debe importarlos desde esta carpeta 
 - La URL de retorno enviada a Supabase es `window.location.origin`. Cada origen usado en desarrollo o producción debe incluirse en **Authentication > URL Configuration > Redirect URLs** del panel de Supabase.
 - El servidor MCP de Supabase para Codex está configurado y autenticado con el proyecto correcto. El MCP sirve para administración y documentación; la aplicación usa el SDK en tiempo de ejecución.
 
-## 10. Funcionalidades pendientes
+## 11. Funcionalidades pendientes
 
 - Definir la pantalla o ruta a mostrar después de una autenticación exitosa.
 - Añadir cierre de sesión y una interfaz que represente al usuario autenticado.
-- Añadir navegación y rutas cuando existan más pantallas.
+- Añadir navegación y rutas cuando existan más pantallas, reemplazando el acceso temporal `/#rostro`.
+- Integrar face-api.js en `Rostro` mediante `onVideoReady` y `detection` (`pf10_FaceAPI`).
 - Sustituir el favicon provisional de Vite por el recurso oficial de Butaca cuando se proporcione.
 - Incorporar pruebas automatizadas cuando se definan los flujos funcionales.
 
-## 11. Historial
+## 12. Historial
+
+### 2026-10-25 — Pantalla de rostro (`pf4_RostroPantalla`)
+
+- Se creó `src/pages/Rostro/` con la pantalla "¿Cómo te sentís hoy?", consentimiento previo, vista previa de cámara y estados visuales de detección.
+- Se implementó `useCamera` sobre `getUserMedia`: activación solo tras el consentimiento, apagado manual, manejo de errores y liberación de la cámara al salir.
+- Se creó `EmotionStatus` como componente de presentación listo para recibir resultados de face-api.js, sin implementar ni simular detecciones.
+- `App.jsx` habilita temporalmente la pantalla en `/#rostro` sin afectar `Main` ni el retorno de OAuth.
+- No se agregaron dependencias.
 
 ### 2026-10-25 — OAuth 2.0 con Supabase
 
