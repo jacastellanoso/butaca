@@ -333,6 +333,13 @@ Cuando `pf4` defina su composición visual, debe importarlos desde esta carpeta 
 
 ## 13. Historial
 
+### 2026-10-27 — Modelos, migraciones y CRUD con Prisma (`pf7_Prisma`)
+
+- Se configuró Prisma ORM en `backend/prisma/schema.prisma` conectado a PostgreSQL en Supabase mediante `DATABASE_URL` y `DIRECT_URL`.
+- Se definieron los modelos `Usuario`, `Animo` y `Favorito` con relaciones 1–N, borrado en cascada y unicidad `@@unique([usuarioId, tmdbId, tipo])` en favoritos.
+- Se ejecutó la migración inicial `init_butaca_models` y se creó la instancia única `PrismaClient` en `backend/src/lib/prisma.js`.
+- Se reemplazó el almacenamiento temporal en memoria de `animosService` y `favoritosService` por consultas reales a PostgreSQL sin alterar los controladores.
+
 ### 2026-10-26 — Configuración PostgreSQL (`pf6_Supabase`)
 
 - Se agregó `DATABASE_URL` a `backend/.env.example` y su lectura centralizada como `env.databaseUrl` en `backend/src/config/env.js`.
