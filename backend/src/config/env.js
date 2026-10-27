@@ -6,4 +6,5 @@ export const env = {
   port: Number(process.env.PORT) || 3010,
   supabaseUrl: process.env.SUPABASE_URL ?? '',
   supabasePublishableKey: process.env.SUPABASE_PUBLISHABLE_KEY ?? '',
+  databaseUrl: process.env.DATABASE_URL ?? '',
 }

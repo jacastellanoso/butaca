@@ -8,6 +8,7 @@
 - Rama actual de autenticación: `pf3_OAuth20`, basada en `pf2_InicioPantalla`.
 - Rama de la pantalla de rostro: `pf4_RostroPantalla`, basada en `dev`.
 - Rama del backend: `pf5_Express`, basada en `dev`. API REST con Express 5 en `backend/`, puerto `3010`.
+- Rama de configuración PostgreSQL: `pf6_Supabase`. Configuración preparada y conexión verificada con una herramienta temporal; el backend todavía guarda los datos en memoria.
 - Pantallas implementadas: `Main`, destinada visualmente a visitantes sin sesión, y `Rostro`, con cámara, consentimiento e interfaz de detección de emociones (accesible temporalmente desde `/#rostro`).
 - Alcance actual: presentación visual, animaciones e inicio de sesión OAuth 2.0 con Google o GitHub mediante Supabase. El cliente conserva y renueva la sesión; todavía no existen rutas protegidas ni una pantalla posterior al acceso.
 - Tipografía oficial de toda la aplicación: **Montserrat**. Está instalada localmente mediante `@fontsource/montserrat` y se cargan solamente los subconjuntos latinos de los pesos 400, 600, 700 y 800 desde `src/main.jsx`.
@@ -223,7 +224,7 @@ fetch('http://localhost:3010/api/animos', {
 
 ### Contratos para otras ramas
 
-- `pf7_Prisma`: reemplazar el cuerpo de `animosService` y `favoritosService` por consultas filtradas por `usuarioId`. Conviene un índice único `(usuarioId, tmdbId, tipo)` en favoritos.
+- `pf7_Prisma`: implementar modelos, migraciones, cliente Prisma y persistencia de datos; reemplazar el cuerpo de `animosService` y `favoritosService` por consultas filtradas por `usuarioId`. Conviene un índice único `(usuarioId, tmdbId, tipo)` en favoritos.
 - `pf11_TMDB`: reemplazar `recomendacionesService.obtener({ emocion, tipo })`, guardar la API key como variable del backend (agregarla a `config/env.js` y `.env.example`) y devolver la forma documentada con `fuente: 'tmdb'`.
 - `pf15_Zod`: reemplazar las validaciones `if` de los controladores y la lectura de `config/env.js` por esquemas.
 - `pf14_Testing`: importar `app` desde `src/app.js` con supertest y simular sesiones con `mock.method(authService, 'obtenerUsuario', ...)`.
@@ -304,8 +305,19 @@ Cuando `pf4` defina su composición visual, debe importarlos desde esta carpeta 
 - Variables requeridas: `VITE_SUPABASE_URL` y `VITE_SUPABASE_PUBLISHABLE_KEY`.
 - `.env.example` documenta los nombres sin publicar credenciales. `.env.local` contiene la configuración local y Git lo ignora.
 - La URL de retorno enviada a Supabase es `window.location.origin`. Cada origen usado en desarrollo o producción debe incluirse en **Authentication > URL Configuration > Redirect URLs** del panel de Supabase.
-- Backend: `backend/.env` (ignorado por Git) con `PORT`, `SUPABASE_URL` y `SUPABASE_PUBLISHABLE_KEY`. Los dos últimos tienen los mismos valores que las variables `VITE_` del front; el backend los usa solo para verificar tokens. Si faltan, `server.js` muestra un aviso y las rutas protegidas responden `500`.
+- Backend: `backend/.env` (ignorado por Git) con `PORT`, `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` y `DATABASE_URL`. `SUPABASE_URL` y `SUPABASE_PUBLISHABLE_KEY` corresponden a las variables `VITE_` del front; el backend los usa solo para verificar tokens. Si faltan, `server.js` muestra un aviso y las rutas protegidas responden `500`.
 - El servidor MCP de Supabase para Codex está configurado y autenticado con el proyecto correcto. El MCP sirve para administración y documentación; la aplicación usa el SDK en tiempo de ejecución.
+
+### Configuración PostgreSQL (`pf6_Supabase`)
+
+- Alcance: preparar la configuración de PostgreSQL en Supabase para la futura integración con Prisma, sin implementar modelos, migraciones ni persistencia.
+- `SUPABASE_URL` es la URL de API/Auth usada por el cliente Supabase; `DATABASE_URL` es la cadena privada de conexión PostgreSQL. No son intercambiables y `DATABASE_URL` nunca debe exponerse mediante variables `VITE_`.
+- `backend/src/config/env.js` lee `DATABASE_URL` y la expone como `env.databaseUrl`, con cadena vacía si no está definida. El resto del backend mantiene la regla de importar `env` sin leer `process.env` directamente. `backend/.env.example` documenta `DATABASE_URL=` sin valores privados.
+- Para la prueba local mediante IPv4 se utilizó el Session pooler de Supabase.
+- La conexión se verificó con una herramienta temporal de Node.js y `pg`, instalada fuera del repositorio y sin agregar dependencias al proyecto. Se ejecutó únicamente `SELECT 1 AS conexion;`, que devolvió `conexion = 1`, con tiempo límite de conexión y cierre del cliente al finalizar.
+- La prueba validó TLS y el hostname mediante la CA oficial descargada de Supabase, configurada en `ssl.ca` con `rejectUnauthorized: true`.
+- El certificado y la herramienta temporal permanecen fuera del directorio del repositorio; las credenciales solo se mantienen en el archivo local `backend/.env`, ignorado por Git y fuera del contenido versionado. No se publican contraseñas ni cadenas de conexión.
+- **El backend todavía no utiliza PostgreSQL para guardar datos**: ánimos y favoritos continúan en memoria. Prisma no está implementado; los modelos, migraciones, cliente Prisma y persistencia corresponden a `pf7_Prisma`.
 
 ## 12. Funcionalidades pendientes
 
@@ -320,6 +332,13 @@ Cuando `pf4` defina su composición visual, debe importarlos desde esta carpeta 
 - Incorporar pruebas automatizadas cuando se definan los flujos funcionales.
 
 ## 13. Historial
+
+### 2026-10-26 — Configuración PostgreSQL (`pf6_Supabase`)
+
+- Se agregó `DATABASE_URL` a `backend/.env.example` y su lectura centralizada como `env.databaseUrl` en `backend/src/config/env.js`.
+- Se preparó la configuración privada local, ignorada por Git, para el Session pooler de Supabase mediante IPv4.
+- Se verificó la conexión con una herramienta temporal externa al repositorio: `SELECT 1 AS conexion;` devolvió `1`, con validación TLS y del hostname mediante la CA oficial de Supabase.
+- La prueba no creó tablas, modificó datos ni ejecutó migraciones. El backend conserva el almacenamiento en memoria; la integración con Prisma queda pendiente para `pf7_Prisma`.
 
 ### 2026-10-26 — Backend Express (`pf5_Express`)
 
