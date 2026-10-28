@@ -7,4 +7,5 @@ export const env = {
   supabaseUrl: process.env.SUPABASE_URL ?? '',
   supabasePublishableKey: process.env.SUPABASE_PUBLISHABLE_KEY ?? '',
   databaseUrl: process.env.DATABASE_URL ?? '',
+  directUrl: process.env.DIRECT_URL ?? '',
 }

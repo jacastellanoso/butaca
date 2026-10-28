@@ -1,0 +1,39 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Usuario {
+  id        String     @id
+  email     String?
+  creadoEn  DateTime   @default(now())
+  animos    Animo[]
+  favoritos Favorito[]
+}
+
+model Animo {
+  id        String   @id @default(uuid())
+  usuarioId String
+  emocion   String
+  confianza Float
+  creadoEn  DateTime @default(now())
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+}
+
+model Favorito {
+  id        String   @id @default(uuid())
+  usuarioId String
+  tmdbId    Int
+  tipo      String
+  titulo    String
+  poster    String?
+  creadoEn  DateTime @default(now())
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@unique([usuarioId, tmdbId, tipo])
+}
