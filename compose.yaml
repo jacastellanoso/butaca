@@ -1,5 +1,9 @@
 name: butaca
 
+# Solo el gateway publica un puerto hacia tu computadora (3000).
+# Los microservicios quedan dentro de la red interna: nadie los llama
+# directamente desde afuera, todo pasa por el gateway.
+
 services:
   api-gateway:
     build:
@@ -14,6 +18,92 @@ services:
       CATALOG_SERVICE_URL: http://catalog-service:3023
       RECOMMENDATIONS_SERVICE_URL: http://recommendations-service:3024
       LIBRARY_SERVICE_URL: http://library-service:3025
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      emotions-service:
+        condition: service_healthy
+      catalog-service:
+        condition: service_healthy
+      recommendations-service:
+        condition: service_healthy
+      library-service:
+        condition: service_healthy
+    networks:
+      - microservices
+    restart: unless-stopped
+
+  auth-service:
+    build:
+      context: ./microservicios/auth-service
+      args:
+        PORT: 3021
+    env_file:
+      - path: ./microservicios/auth-service/.env
+        required: false
+    environment:
+      SERVICE_NAME: auth-service
+      PORT: 3021
+    networks:
+      - microservices
+    restart: unless-stopped
+
+  emotions-service:
+    build:
+      context: ./microservicios/emotions-service
+      args:
+        PORT: 3022
+    env_file:
+      - path: ./microservicios/emotions-service/.env
+        required: false
+    environment:
+      SERVICE_NAME: emotions-service
+      PORT: 3022
+    networks:
+      - microservices
+    restart: unless-stopped
+
+  catalog-service:
+    build:
+      context: ./microservicios/catalog-service
+      args:
+        PORT: 3023
+    env_file:
+      - path: ./microservicios/catalog-service/.env
+        required: false
+    environment:
+      SERVICE_NAME: catalog-service
+      PORT: 3023
+    networks:
+      - microservices
+    restart: unless-stopped
+
+  recommendations-service:
+    build:
+      context: ./microservicios/recommendations-service
+      args:
+        PORT: 3024
+    env_file:
+      - path: ./microservicios/recommendations-service/.env
+        required: false
+    environment:
+      SERVICE_NAME: recommendations-service
+      PORT: 3024
+    networks:
+      - microservices
+    restart: unless-stopped
+
+  library-service:
+    build:
+      context: ./microservicios/library-service
+      args:
+        PORT: 3025
+    env_file:
+      - path: ./microservicios/library-service/.env
+        required: false
+    environment:
+      SERVICE_NAME: library-service
+      PORT: 3025
     networks:
       - microservices
     restart: unless-stopped

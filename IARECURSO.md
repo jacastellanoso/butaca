@@ -11,6 +11,7 @@
 - Rama de configuración PostgreSQL: `pf6_Supabase`. Preparó y verificó la conexión que posteriormente utiliza `pf7_Prisma`.
 - Rama de persistencia: `pf7_Prisma`, integrada en `dev`. Ánimos y favoritos se guardan mediante Prisma en PostgreSQL de Supabase.
 - Rama del API Gateway: `pf8_APIGateway`, basada en `dev`. Gateway Express independiente en `apigateway/`, puerto `3000`, preparado para conectar cinco microservicios mediante Docker.
+- Rama de contenedores: `pf9_Docker`, basada en `dev`. Esqueletos de los cinco microservicios en `microservicios/`, cada uno con su `Dockerfile`, y `compose.yaml` que levanta los seis contenedores con health checks.
 - Pantallas implementadas: `Main`, destinada visualmente a visitantes sin sesión, y `Rostro`, con cámara, consentimiento e interfaz de detección de emociones (accesible temporalmente desde `/#rostro`).
 - Alcance actual: presentación visual, animaciones e inicio de sesión OAuth 2.0 con Google o GitHub mediante Supabase. El cliente conserva y renueva la sesión; todavía no existen rutas protegidas ni una pantalla posterior al acceso.
 - Tipografía oficial de toda la aplicación: **Montserrat**. Está instalada localmente mediante `@fontsource/montserrat` y se cargan solamente los subconjuntos latinos de los pesos 400, 600, 700 y 800 desde `src/main.jsx`.
@@ -30,6 +31,9 @@ Antes de implementar un cambio:
 9. El usuario de una petición se obtiene **siempre** de `req.user` (token verificado por `requireAuth`), nunca de un id enviado en el body, la query o la URL.
 10. En el API Gateway, `process.env` solo se lee en `apigateway/src/config/env.js`; las rutas y destinos se declaran en `apigateway/src/config/services.js`.
 11. El gateway no procesa el body antes del proxy. Cada microservicio valida su propio contenido y recibe sin cambios el método, ruta, query y encabezado `Authorization`.
+12. Cada microservicio es un proyecto npm independiente en `microservicios/<servicio>/`. No importa código de otro servicio ni de `backend/`: si necesita algo, lo copia o lo pide por HTTP a través de su contrato.
+13. Los secretos de un microservicio viven en `microservicios/<servicio>/.env` (ignorado por Git y por `.dockerignore`) y se documentan sin valores en su `.env.example`. Nunca se escriben en el `Dockerfile` ni en `compose.yaml`.
+14. Solo `api-gateway` publica un puerto en `compose.yaml`. Los microservicios no deben agregar `ports:`.
 
 Después de implementar un cambio:
 
@@ -39,6 +43,7 @@ Después de implementar un cambio:
 4. Ejecutar `npm run lint` y `npm run build`.
 5. Si se modificó el backend, levantarlo con `npm run dev` dentro de `backend/` y comprobar que `GET /api/health` responde `200`.
 6. Si se modificó el gateway, ejecutar `npm test` dentro de `apigateway/`, comprobar `GET /health` y validar `docker compose config` cuando Docker esté disponible.
+7. Si se modificó un microservicio, ejecutar `npm test` dentro de su carpeta y `docker compose up --build -d` desde la raíz; `docker compose ps` debe mostrar los seis contenedores `healthy`.
 
 ## 3. Arquitectura actual
 
@@ -102,7 +107,25 @@ apigateway/                    # Entrada única para los microservicios (Express
 └── test/
     └── gateway.test.js        # Health, 404 y microservicio no disponible.
 
-compose.yaml                   # Contenedor del gateway y red butaca-microservices.
+microservicios/                # Cinco microservicios Express independientes (pf9_Docker).
+├── auth-service/              # 3021 · /api/sesiones, /api/usuarios
+├── emotions-service/          # 3022 · /api/animos
+├── catalog-service/           # 3023 · /api/catalogo
+├── recommendations-service/   # 3024 · /api/recomendaciones
+└── library-service/           # 3025 · /api/favoritos, /api/historial
+    ├── package.json           # Scripts: dev, start y test (node:test).
+    ├── .env.example           # SERVICE_NAME, PORT y variables propias sin valores.
+    ├── Dockerfile             # Node 22 Alpine, npm ci, usuario node y HEALTHCHECK.
+    ├── .dockerignore          # Excluye node_modules, .env y test de la imagen.
+    ├── src/
+    │   ├── server.js          # listen y cierre ordenado con SIGTERM/SIGINT.
+    │   ├── app.js             # /health, punto de montaje de rutas, notFound y errorHandler.
+    │   ├── config/env.js      # Única lectura de process.env.
+    │   └── middlewares/       # notFound (con nombre del servicio) y errorHandler.
+    └── test/
+        └── health.test.js     # Health, 404 en JSON y ausencia de X-Powered-By.
+
+compose.yaml                   # Gateway + cinco microservicios en la red butaca-microservices.
 ```
 
 Los recursos gráficos están clasificados dentro de `src/assets/` según su función. Conservan exactamente sus nombres originales y se importan desde `Main.jsx`. No se deben duplicar en la raíz ni entre subcarpetas.
@@ -285,12 +308,87 @@ Cada servicio debe aceptar la misma ruta pública recibida. El gateway no elimin
 ### Docker
 
 - `compose.yaml` construye `apigateway/Dockerfile`, publica `3000:3000` y crea la red bridge `butaca-microservices`.
-- Los cinco microservicios todavía no se implementan en esta rama. Cuando sus responsables agreguen los contenedores, deben usar los nombres y puertos de la tabla y conectarlos a `microservices`.
+- Los contenedores de los cinco microservicios se agregaron en `pf9_Docker` (sección 8).
 - Docker resuelve los servicios por nombre dentro de la red; no se deben fijar direcciones IP de contenedores.
-- El gateway puede iniciar antes que los microservicios. `/health` responde normalmente y las rutas aún no disponibles devuelven `502`.
+- Ejecutado fuera de Docker, el gateway puede iniciar sin los microservicios: `/health` responde normalmente y las rutas sin destino devuelven `502`.
 - Para ejecutar solo el gateway: `docker compose up --build api-gateway` desde la raíz.
 
-## 8. Recursos gráficos
+## 8. Docker y microservicios (`pf9_Docker`)
+
+### Alcance
+
+Infraestructura de contenedores para todo el backend de microservicios. Crea un **esqueleto funcional** de cada uno de los cinco servicios (Express mínimo con `/health`, pruebas y `Dockerfile`) y los conecta con el gateway en `compose.yaml`. **No** implementa lógica de negocio: cada responsable agrega sus rutas en su rama (`pf12` a `pf16`). El frontend no se contenedoriza: se ejecuta con `npm run dev` y se despliega en Vercel. `backend/` (pf5–pf7) no forma parte de `compose.yaml`; su código sirve de referencia para migrar la lógica a los microservicios.
+
+### Ejecución
+
+```bash
+# Desde la raíz, con Docker Desktop encendido
+docker compose up --build -d     # construye y levanta los seis contenedores
+docker compose ps                # todos deben verse (healthy)
+docker compose logs -f library-service   # logs de un servicio
+docker compose down              # detiene y elimina contenedores y red
+```
+
+Para desarrollar un servicio sin Docker: `cd microservicios/<servicio>`, copiar `.env.example` como `.env`, `npm.cmd install` y `npm.cmd run dev`.
+
+### Servicios
+
+| Servicio Docker | Carpeta | Puerto interno | Rutas que recibe | Rama responsable |
+|---|---|---:|---|---|
+| `api-gateway` | `apigateway/` | 3000 (publicado) | todas | `pf8_APIGateway` |
+| `auth-service` | `microservicios/auth-service/` | 3021 | `/api/sesiones`, `/api/usuarios` | `pf12_MSAutenticacion` |
+| `emotions-service` | `microservicios/emotions-service/` | 3022 | `/api/animos` | `pf13_MSEmociones` |
+| `catalog-service` | `microservicios/catalog-service/` | 3023 | `/api/catalogo` | `pf14_MSCatalogo` |
+| `recommendations-service` | `microservicios/recommendations-service/` | 3024 | `/api/recomendaciones` | `pf15_MSRecomendaciones` |
+| `library-service` | `microservicios/library-service/` | 3025 | `/api/favoritos`, `/api/historial` | `pf16_MSBiblioteca` |
+
+### Esqueleto común
+
+- Los cinco servicios tienen el mismo `src/`. `SERVICE_NAME` y `PORT` llegan por variables de entorno (`compose.yaml` o `.env`), por lo que cada contenedor se identifica sin cambiar código.
+- `GET /health` responde `200 { status: 'ok', service }`. Lo usan el `HEALTHCHECK` del `Dockerfile` y `depends_on` del gateway.
+- Rutas inexistentes responden `404 { error, service }`. El campo `service` permite comprobar a qué contenedor llegó una petición.
+- `errorHandler` responde `400` ante JSON mal formado y `500` genérico en otros casos; el detalle solo se imprime en el log del contenedor.
+- `x-powered-by` está deshabilitado.
+- `server.js` atiende `SIGTERM` (la señal de `docker compose down`) y cierra conexiones antes de salir.
+
+### Dockerfile
+
+- Base `node:22-alpine`, igual que el gateway.
+- Copia `package.json` y `package-lock.json` antes que `src/` para aprovechar la caché de capas: cambiar código no reinstala dependencias.
+- `npm ci --omit=dev`: instalación exacta del lockfile, sin dependencias de desarrollo.
+- `ARG PORT` → `ENV PORT`: el mismo `Dockerfile` sirve para los cinco servicios.
+- `USER node`: el proceso no se ejecuta como root.
+- `HEALTHCHECK` con `node` + `fetch` contra `/health` (Alpine no incluye `curl`).
+- `CMD ["node", "src/server.js"]`: Node recibe directamente las señales de Docker.
+- `.dockerignore` excluye `node_modules`, `.env`, `.env.*` (excepto `.env.example`), `test` y `coverage`.
+
+### compose.yaml
+
+- Red bridge `butaca-microservices`. Los servicios se resuelven por nombre (`http://library-service:3025`); no se usan IP fijas.
+- Solo `api-gateway` publica `3000:3000`. Los microservicios son accesibles únicamente dentro de la red, por lo que no se puede evitar el gateway.
+- `api-gateway` declara `depends_on` con `condition: service_healthy` para los cinco servicios: no arranca hasta que todos superan su health check.
+- Cada microservicio declara `env_file` apuntando a su `.env` con `required: false`. Los secretos se inyectan al arrancar el contenedor y nunca quedan dentro de la imagen.
+- `environment` fija `SERVICE_NAME` y `PORT`, y prevalece sobre el `.env`.
+- `restart: unless-stopped` reinicia un contenedor caído salvo que se haya detenido manualmente.
+
+### Cómo agregar la lógica de un microservicio (`pf12` a `pf16`)
+
+1. Trabajar solo dentro de `microservicios/<servicio>/`.
+2. Crear rutas, controladores y services siguiendo la arquitectura de `backend/` (sección 6) y montarlos en `src/app.js`, en el bloque marcado, con la **misma ruta pública** del gateway (por ejemplo `app.use('/api/favoritos', favoritosRouter)`).
+3. Instalar dependencias con `npm.cmd install <paquete>` dentro de la carpeta del servicio para actualizar su `package-lock.json`.
+4. Declarar nuevas variables en `src/config/env.js` y documentarlas sin valores en `.env.example`. Los valores reales van en `.env`.
+5. Si el servicio usa Prisma, ajustar su `Dockerfile`: instalar OpenSSL (`RUN apk add --no-cache openssl`, Prisma lo necesita en Alpine), copiar `prisma/` y ejecutar `npx prisma generate` dentro de la imagen. Como `prisma` es dependencia de desarrollo, en ese caso instalar con `npm ci`, generar el cliente y luego `npm prune --omit=dev`.
+6. No agregar `ports:` en `compose.yaml`; para probar, pasar por `http://localhost:3000`.
+7. Verificar con `npm test`, `docker compose up --build -d` y `docker compose ps`.
+
+### Verificación realizada
+
+- `npm test` en los cinco servicios: 3/3 pruebas en cada uno.
+- `docker compose up --build -d`: seis imágenes construidas y seis contenedores `healthy`.
+- A través del gateway, cada ruta llegó a su servicio (`404` con el `service` correspondiente, en lugar del `502` previo) y `/api/nada` fue rechazada por el gateway.
+- `http://localhost:3021/health` no responde desde el host: los microservicios no están expuestos.
+
+## 9. Recursos gráficos
 
 ### Título compuesto
 
@@ -326,7 +424,7 @@ Cuando `pf4` defina su composición visual, debe importarlos desde esta carpeta 
 - `src/assets/images/palomitasdiseño.png`: esquina inferior derecha.
 - `src/assets/icons/logogoogle.svg` y `src/assets/icons/logogithub.svg`: iconos de los botones de acceso.
 
-## 9. Estilos y responsive
+## 10. Estilos y responsive
 
 - Fondo a pantalla completa: degradado vertical de `#0470F6` a `#0000B0`.
 - La página usa `100svh`, evita barras de desplazamiento y controla los niveles mediante contextos de apilamiento.
@@ -337,7 +435,7 @@ Cuando `pf4` defina su composición visual, debe importarlos desde esta carpeta 
 - Todos los controles interactivos conservan foco visible para navegación con teclado.
 - `prefers-reduced-motion: reduce` desactiva animaciones y muestra todas las capas del título directamente.
 
-## 10. Animaciones
+## 11. Animaciones
 
 - `build-center-wave`: efecto introductorio de expansión elástica controlada de la onda central.
 - `build-top-left-wave` y `build-bottom-right-wave`: trasladan y expanden las ondas exteriores hasta sus esquinas definitivas.
@@ -348,7 +446,7 @@ Cuando `pf4` defina su composición visual, debe importarlos desde esta carpeta 
 - `float`: flotación sutil, asíncrona y permanente de las cuatro decoraciones cinematográficas, con duraciones distintas.
 - Los botones incluyen transiciones discretas para `hover`, `focus-visible` y `active`.
 
-## 11. Accesibilidad
+## 12. Accesibilidad
 
 - El documento usa `lang="es"`.
 - El título visual compuesto por SVG cuenta con un `h1` oculto visualmente para lectores de pantalla.
@@ -356,7 +454,7 @@ Cuando `pf4` defina su composición visual, debe importarlos desde esta carpeta 
 - Los botones usan elementos `<button>` reales porque inician una acción; anuncian el estado de carga y se deshabilitan para evitar solicitudes duplicadas.
 - Los estados de foco son visibles y las animaciones respetan la preferencia de movimiento reducido.
 
-## 12. Autenticación y entorno
+## 13. Autenticación y entorno
 
 - Dependencia oficial: `@supabase/supabase-js`.
 - Proyecto Supabase: `fxumhujdmabgxjqmzoxs`.
@@ -379,7 +477,7 @@ Cuando `pf4` defina su composición visual, debe importarlos desde esta carpeta 
 - El certificado y la herramienta temporal permanecen fuera del directorio del repositorio; las credenciales solo se mantienen en el archivo local `backend/.env`, ignorado por Git y fuera del contenido versionado. No se publican contraseñas ni cadenas de conexión.
 - El backend utiliza PostgreSQL mediante Prisma para guardar ánimos y favoritos. La configuración inicial de `pf6_Supabase` se conserva como antecedente de conexión; los modelos, migraciones y CRUD vigentes están documentados en `pf7_Prisma`.
 
-## 13. Funcionalidades pendientes
+## 14. Funcionalidades pendientes
 
 - Definir la pantalla o ruta a mostrar después de una autenticación exitosa.
 - Añadir cierre de sesión y una interfaz que represente al usuario autenticado.
@@ -387,13 +485,21 @@ Cuando `pf4` defina su composición visual, debe importarlos desde esta carpeta 
 - Integrar face-api.js en `Rostro` mediante `onVideoReady` y `detection` (`pf10_FaceAPI`).
 - Conectar el front con el backend enviando `Authorization: Bearer <access_token>` en cada petición protegida.
 - Cambiar la URL del frontend para consumir el API Gateway en el puerto `3000` en lugar de conocer cada microservicio.
-- Implementar y conectar los cinco microservicios definidos por `pf8_APIGateway`.
+- Implementar la lógica de los cinco microservicios dentro de sus esqueletos de `microservicios/` (`pf12` a `pf16`).
 - Reemplazar las recomendaciones de ejemplo por TMDB (`pf11_TMDB`).
 - Habilitar CORS con lista blanca, helmet y rate limit en el backend (`pf16_Seguridad`); hasta entonces el navegador bloquea las peticiones desde `localhost:5173`.
 - Sustituir el favicon provisional de Vite por el recurso oficial de Butaca cuando se proporcione.
 - Incorporar pruebas automatizadas cuando se definan los flujos funcionales.
 
-## 14. Historial
+## 15. Historial
+
+### 2026-10-28 — Docker y esqueletos de microservicios (`pf9_Docker`)
+
+- Se creó `microservicios/` con `auth-service`, `emotions-service`, `catalog-service`, `recommendations-service` y `library-service`, cada uno como proyecto Express independiente con `/health`, `notFound`, `errorHandler`, cierre ordenado y tres pruebas con `node:test`.
+- Se agregó un `Dockerfile` por servicio (Node 22 Alpine, `npm ci --omit=dev`, usuario `node`, `HEALTHCHECK`) y su `.dockerignore`.
+- `compose.yaml` ahora levanta los seis contenedores en la red `butaca-microservices`; solo el gateway publica el puerto `3000` y espera a que los cinco servicios estén `healthy`.
+- Cada microservicio puede recibir secretos con `env_file` sin incluirlos en la imagen.
+- Verificado con Docker Desktop: seis contenedores `healthy` y enrutamiento correcto del gateway hacia cada servicio.
 
 ### 2026-10-28 — API Gateway y contratos de microservicios (`pf8_APIGateway`)
 
