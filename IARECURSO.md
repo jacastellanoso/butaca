@@ -8,7 +8,9 @@
 - Rama actual de autenticación: `pf3_OAuth20`, basada en `pf2_InicioPantalla`.
 - Rama de la pantalla de rostro: `pf4_RostroPantalla`, basada en `dev`.
 - Rama del backend: `pf5_Express`, basada en `dev`. API REST con Express 5 en `backend/`, puerto `3010`.
-- Rama de configuración PostgreSQL: `pf6_Supabase`. Configuración preparada y conexión verificada con una herramienta temporal; el backend todavía guarda los datos en memoria.
+- Rama de configuración PostgreSQL: `pf6_Supabase`. Preparó y verificó la conexión que posteriormente utiliza `pf7_Prisma`.
+- Rama de persistencia: `pf7_Prisma`, integrada en `dev`. Ánimos y favoritos se guardan mediante Prisma en PostgreSQL de Supabase.
+- Rama del API Gateway: `pf8_APIGateway`, basada en `dev`. Gateway Express independiente en `apigateway/`, puerto `3000`, preparado para conectar cinco microservicios mediante Docker.
 - Pantallas implementadas: `Main`, destinada visualmente a visitantes sin sesión, y `Rostro`, con cámara, consentimiento e interfaz de detección de emociones (accesible temporalmente desde `/#rostro`).
 - Alcance actual: presentación visual, animaciones e inicio de sesión OAuth 2.0 con Google o GitHub mediante Supabase. El cliente conserva y renueva la sesión; todavía no existen rutas protegidas ni una pantalla posterior al acceso.
 - Tipografía oficial de toda la aplicación: **Montserrat**. Está instalada localmente mediante `@fontsource/montserrat` y se cargan solamente los subconjuntos latinos de los pesos 400, 600, 700 y 800 desde `src/main.jsx`.
@@ -26,6 +28,8 @@ Antes de implementar un cambio:
 7. En el backend, `process.env` solo se lee en `backend/src/config/env.js`; el resto del código importa `env`.
 8. En el backend, los controladores no guardan ni consultan datos directamente: siempre llaman a un service de `backend/src/services/`.
 9. El usuario de una petición se obtiene **siempre** de `req.user` (token verificado por `requireAuth`), nunca de un id enviado en el body, la query o la URL.
+10. En el API Gateway, `process.env` solo se lee en `apigateway/src/config/env.js`; las rutas y destinos se declaran en `apigateway/src/config/services.js`.
+11. El gateway no procesa el body antes del proxy. Cada microservicio valida su propio contenido y recibe sin cambios el método, ruta, query y encabezado `Authorization`.
 
 Después de implementar un cambio:
 
@@ -34,6 +38,7 @@ Después de implementar un cambio:
 3. Actualizar la lista de funcionalidades pendientes.
 4. Ejecutar `npm run lint` y `npm run build`.
 5. Si se modificó el backend, levantarlo con `npm run dev` dentro de `backend/` y comprobar que `GET /api/health` responde `200`.
+6. Si se modificó el gateway, ejecutar `npm test` dentro de `apigateway/`, comprobar `GET /health` y validar `docker compose config` cuando Docker esté disponible.
 
 ## 3. Arquitectura actual
 
@@ -77,6 +82,27 @@ backend/                       # API REST (Express 5, ES Modules). Proyecto npm 
     ├── routes/                # index.js monta /api; un router por recurso.
     ├── controllers/           # Leen req, validan y eligen el código HTTP.
     └── services/              # Lógica y datos; se reemplazan sin tocar controladores.
+```
+
+```text
+apigateway/                    # Entrada única para los microservicios (Express 5).
+├── package.json               # Scripts: dev, start y test con node:test.
+├── .env.example               # Puerto, timeout y destinos locales sin secretos.
+├── Dockerfile                 # Imagen Node 22 Alpine con health check.
+├── README.md                  # Contratos de rutas, ejecución y nombres Docker.
+├── src/
+│   ├── server.js              # Escucha en GATEWAY_PORT y realiza cierre ordenado.
+│   ├── app.js                 # Health check, proxies y middlewares finales.
+│   ├── config/
+│   │   ├── env.js             # Única lectura y validación de process.env.
+│   │   └── services.js        # Cinco destinos y sus rutas públicas.
+│   ├── routes/
+│   │   └── gateway.routes.js  # Proxies, timeouts y respuesta 502 uniforme.
+│   └── middlewares/           # notFound y errorHandler del gateway.
+└── test/
+    └── gateway.test.js        # Health, 404 y microservicio no disponible.
+
+compose.yaml                   # Contenedor del gateway y red butaca-microservices.
 ```
 
 Los recursos gráficos están clasificados dentro de `src/assets/` según su función. Conservan exactamente sus nombres originales y se importan desde `Main.jsx`. No se deben duplicar en la raíz ni entre subcarpetas.
@@ -146,7 +172,7 @@ Diseño de la pantalla de cámara, consentimiento e interfaz de detección. **No
 
 ### Alcance
 
-Configuración de Express, rutas, controladores y API REST. Los datos se guardan **temporalmente en memoria** (se borran al reiniciar el servidor) y las recomendaciones son **datos de ejemplo**. La base de datos (`pf6_Supabase`, `pf7_Prisma`), TMDB (`pf11_TMDB`), Zod (`pf15_Zod`), pruebas (`pf14_Testing`) y seguridad (`pf16_Seguridad`) se integran en sus ramas sin cambiar el contrato de esta sección.
+Configuración de Express, rutas, controladores y API REST. La versión inicial de `pf5_Express` guardaba los datos temporalmente en memoria; `pf7_Prisma`, ya integrada en `dev`, reemplazó esa implementación por PostgreSQL sin cambiar el contrato HTTP. Las recomendaciones continúan siendo **datos de ejemplo** hasta `pf11_TMDB`. Zod (`pf15_Zod`), pruebas (`pf14_Testing`) y seguridad (`pf16_Seguridad`) se integran en sus ramas sin cambiar el contrato de esta sección.
 
 ### Ejecución local
 
@@ -164,7 +190,7 @@ Una petición recorre: **ruta** → `requireAuth` → **controlador** → **serv
 
 - `routes/index.js`: `GET /api/health` es pública y está **antes** de `requireAuth`; todo lo montado después exige sesión.
 - `controllers/`: validación mínima con `if` (la reemplaza Zod en `pf15`) y elección del código HTTP.
-- `services/`: objetos `animosService`, `favoritosService` y `recomendacionesService` con funciones `async`. Las ramas posteriores reemplazan el **cuerpo** de esas funciones conservando nombres, parámetros y forma de la respuesta.
+- `services/`: objetos `animosService`, `favoritosService` y `recomendacionesService` con funciones `async`. Ánimos y favoritos ya consultan Prisma; recomendaciones conserva datos de ejemplo. Las ramas posteriores deben mantener nombres, parámetros y forma de la respuesta.
 - `app.js` aplica en orden: `express.json()`, `/api`, `notFound`, `errorHandler`. Los middlewares de `pf16` van antes de las rutas.
 
 ### Autenticación
@@ -224,13 +250,47 @@ fetch('http://localhost:3010/api/animos', {
 
 ### Contratos para otras ramas
 
-- `pf7_Prisma`: implementar modelos, migraciones, cliente Prisma y persistencia de datos; reemplazar el cuerpo de `animosService` y `favoritosService` por consultas filtradas por `usuarioId`. Conviene un índice único `(usuarioId, tmdbId, tipo)` en favoritos.
+- `pf7_Prisma` (completada): implementó modelos, migraciones, cliente Prisma, consultas filtradas por `usuarioId` y el índice único `(usuarioId, tmdbId, tipo)` en favoritos.
 - `pf11_TMDB`: reemplazar `recomendacionesService.obtener({ emocion, tipo })`, guardar la API key como variable del backend (agregarla a `config/env.js` y `.env.example`) y devolver la forma documentada con `fuente: 'tmdb'`.
 - `pf15_Zod`: reemplazar las validaciones `if` de los controladores y la lectura de `config/env.js` por esquemas.
 - `pf14_Testing`: importar `app` desde `src/app.js` con supertest y simular sesiones con `mock.method(authService, 'obtenerUsuario', ...)`.
 - `pf16_Seguridad`: agregar helmet, CORS con lista blanca y rate limit en `app.js`, antes de `app.use('/api', ...)`.
 
-## 7. Recursos gráficos
+## 7. API Gateway (`pf8_APIGateway`)
+
+### Responsabilidad
+
+El gateway en `apigateway/` es la única dirección que debe conocer el frontend. No contiene lógica de negocio ni accede directamente a Supabase, Prisma o TMDB: conserva la petición y la delega al microservicio responsable.
+
+- Puerto local y Docker: `3000`.
+- Health check público: `GET /health`.
+- Los destinos y el timeout se configuran mediante variables de entorno.
+- `Authorization: Bearer <token>` se reenvía sin cambios para que el servicio de sesión o cada servicio protegido valide la identidad.
+- Si el destino no existe, rechaza la conexión o excede el timeout, el gateway responde `502` con `{ error, service }` sin exponer detalles internos.
+- Una ruta que no pertenece a ningún contrato responde `404` en JSON.
+- No se usa `express.json()` antes de los proxies porque consumiría el stream del body; cada microservicio es responsable de analizar y validar su contenido.
+
+### Contratos de rutas
+
+| Rutas públicas | Servicio Docker | Puerto | Variable | Responsabilidad futura |
+|---|---|---:|---|---|
+| `/api/sesiones`, `/api/usuarios` | `auth-service` | 3021 | `AUTH_SERVICE_URL` | Validar sesiones de Supabase y gestionar el usuario |
+| `/api/animos` | `emotions-service` | 3022 | `EMOTIONS_SERVICE_URL` | Guardar y consultar resultados emocionales autorizados |
+| `/api/catalogo` | `catalog-service` | 3023 | `CATALOG_SERVICE_URL` | Consultar películas, series y detalles en TMDB |
+| `/api/recomendaciones` | `recommendations-service` | 3024 | `RECOMMENDATIONS_SERVICE_URL` | Relacionar emociones con contenido recomendado |
+| `/api/favoritos`, `/api/historial` | `library-service` | 3025 | `LIBRARY_SERVICE_URL` | Administrar favoritos e historial |
+
+Cada servicio debe aceptar la misma ruta pública recibida. El gateway no elimina `/api` ni renombra recursos.
+
+### Docker
+
+- `compose.yaml` construye `apigateway/Dockerfile`, publica `3000:3000` y crea la red bridge `butaca-microservices`.
+- Los cinco microservicios todavía no se implementan en esta rama. Cuando sus responsables agreguen los contenedores, deben usar los nombres y puertos de la tabla y conectarlos a `microservices`.
+- Docker resuelve los servicios por nombre dentro de la red; no se deben fijar direcciones IP de contenedores.
+- El gateway puede iniciar antes que los microservicios. `/health` responde normalmente y las rutas aún no disponibles devuelven `502`.
+- Para ejecutar solo el gateway: `docker compose up --build api-gateway` desde la raíz.
+
+## 8. Recursos gráficos
 
 ### Título compuesto
 
@@ -266,7 +326,7 @@ Cuando `pf4` defina su composición visual, debe importarlos desde esta carpeta 
 - `src/assets/images/palomitasdiseño.png`: esquina inferior derecha.
 - `src/assets/icons/logogoogle.svg` y `src/assets/icons/logogithub.svg`: iconos de los botones de acceso.
 
-## 8. Estilos y responsive
+## 9. Estilos y responsive
 
 - Fondo a pantalla completa: degradado vertical de `#0470F6` a `#0000B0`.
 - La página usa `100svh`, evita barras de desplazamiento y controla los niveles mediante contextos de apilamiento.
@@ -277,7 +337,7 @@ Cuando `pf4` defina su composición visual, debe importarlos desde esta carpeta 
 - Todos los controles interactivos conservan foco visible para navegación con teclado.
 - `prefers-reduced-motion: reduce` desactiva animaciones y muestra todas las capas del título directamente.
 
-## 9. Animaciones
+## 10. Animaciones
 
 - `build-center-wave`: efecto introductorio de expansión elástica controlada de la onda central.
 - `build-top-left-wave` y `build-bottom-right-wave`: trasladan y expanden las ondas exteriores hasta sus esquinas definitivas.
@@ -288,7 +348,7 @@ Cuando `pf4` defina su composición visual, debe importarlos desde esta carpeta 
 - `float`: flotación sutil, asíncrona y permanente de las cuatro decoraciones cinematográficas, con duraciones distintas.
 - Los botones incluyen transiciones discretas para `hover`, `focus-visible` y `active`.
 
-## 10. Accesibilidad
+## 11. Accesibilidad
 
 - El documento usa `lang="es"`.
 - El título visual compuesto por SVG cuenta con un `h1` oculto visualmente para lectores de pantalla.
@@ -296,7 +356,7 @@ Cuando `pf4` defina su composición visual, debe importarlos desde esta carpeta 
 - Los botones usan elementos `<button>` reales porque inician una acción; anuncian el estado de carga y se deshabilitan para evitar solicitudes duplicadas.
 - Los estados de foco son visibles y las animaciones respetan la preferencia de movimiento reducido.
 
-## 11. Autenticación y entorno
+## 12. Autenticación y entorno
 
 - Dependencia oficial: `@supabase/supabase-js`.
 - Proyecto Supabase: `fxumhujdmabgxjqmzoxs`.
@@ -317,21 +377,33 @@ Cuando `pf4` defina su composición visual, debe importarlos desde esta carpeta 
 - La conexión se verificó con una herramienta temporal de Node.js y `pg`, instalada fuera del repositorio y sin agregar dependencias al proyecto. Se ejecutó únicamente `SELECT 1 AS conexion;`, que devolvió `conexion = 1`, con tiempo límite de conexión y cierre del cliente al finalizar.
 - La prueba validó TLS y el hostname mediante la CA oficial descargada de Supabase, configurada en `ssl.ca` con `rejectUnauthorized: true`.
 - El certificado y la herramienta temporal permanecen fuera del directorio del repositorio; las credenciales solo se mantienen en el archivo local `backend/.env`, ignorado por Git y fuera del contenido versionado. No se publican contraseñas ni cadenas de conexión.
-- **El backend todavía no utiliza PostgreSQL para guardar datos**: ánimos y favoritos continúan en memoria. Prisma no está implementado; los modelos, migraciones, cliente Prisma y persistencia corresponden a `pf7_Prisma`.
+- El backend utiliza PostgreSQL mediante Prisma para guardar ánimos y favoritos. La configuración inicial de `pf6_Supabase` se conserva como antecedente de conexión; los modelos, migraciones y CRUD vigentes están documentados en `pf7_Prisma`.
 
-## 12. Funcionalidades pendientes
+## 13. Funcionalidades pendientes
 
 - Definir la pantalla o ruta a mostrar después de una autenticación exitosa.
 - Añadir cierre de sesión y una interfaz que represente al usuario autenticado.
 - Añadir navegación y rutas cuando existan más pantallas, reemplazando el acceso temporal `/#rostro`.
 - Integrar face-api.js en `Rostro` mediante `onVideoReady` y `detection` (`pf10_FaceAPI`).
 - Conectar el front con el backend enviando `Authorization: Bearer <access_token>` en cada petición protegida.
-- Reemplazar el almacenamiento en memoria del backend por Prisma + Supabase (`pf7_Prisma`) y las recomendaciones de ejemplo por TMDB (`pf11_TMDB`).
+- Cambiar la URL del frontend para consumir el API Gateway en el puerto `3000` en lugar de conocer cada microservicio.
+- Implementar y conectar los cinco microservicios definidos por `pf8_APIGateway`.
+- Reemplazar las recomendaciones de ejemplo por TMDB (`pf11_TMDB`).
 - Habilitar CORS con lista blanca, helmet y rate limit en el backend (`pf16_Seguridad`); hasta entonces el navegador bloquea las peticiones desde `localhost:5173`.
 - Sustituir el favicon provisional de Vite por el recurso oficial de Butaca cuando se proporcione.
 - Incorporar pruebas automatizadas cuando se definan los flujos funcionales.
 
-## 13. Historial
+## 14. Historial
+
+### 2026-10-28 — API Gateway y contratos de microservicios (`pf8_APIGateway`)
+
+- Se creó `apigateway/` como proyecto Express independiente con configuración centralizada y cinco destinos configurables.
+- Se implementaron proxies para sesiones/usuarios, emociones, catálogo TMDB, recomendaciones, favoritos e historial.
+- El gateway conserva las rutas y credenciales de autorización, incorpora timeouts y devuelve errores `502` uniformes cuando un servicio no está disponible.
+- Se añadieron pruebas con `node:test` para health, rutas desconocidas y destinos desconectados.
+- Se agregó una imagen Docker con health check y `compose.yaml` con la red `butaca-microservices`.
+- Se verificó la configuración con Docker Engine 29.9.2 y Compose 5.6.1: la imagen construyó correctamente, el contenedor alcanzó estado `healthy`, `/health` respondió `200` y un destino inexistente devolvió `502`.
+- Los microservicios no se implementaron; quedaron documentados sus nombres Docker, puertos, variables y contratos para las ramas responsables.
 
 ### 2026-10-27 — Modelos, migraciones y CRUD con Prisma (`pf7_Prisma`)
 
