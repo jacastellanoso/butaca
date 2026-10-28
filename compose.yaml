@@ -1,0 +1,24 @@
+name: butaca
+
+services:
+  api-gateway:
+    build:
+      context: ./apigateway
+    ports:
+      - "3000:3000"
+    environment:
+      GATEWAY_PORT: 3000
+      PROXY_TIMEOUT_MS: 5000
+      AUTH_SERVICE_URL: http://auth-service:3021
+      EMOTIONS_SERVICE_URL: http://emotions-service:3022
+      CATALOG_SERVICE_URL: http://catalog-service:3023
+      RECOMMENDATIONS_SERVICE_URL: http://recommendations-service:3024
+      LIBRARY_SERVICE_URL: http://library-service:3025
+    networks:
+      - microservices
+    restart: unless-stopped
+
+networks:
+  microservices:
+    name: butaca-microservices
+    driver: bridge
