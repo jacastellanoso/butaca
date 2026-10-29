@@ -163,6 +163,10 @@ function Rostro({ detection, onVideoReady }) {
               </button>
             </div>
           )}
+
+          <a className="rostro-button rostro-button--gallery" href="#galeria">
+            Explorar la galería
+          </a>
         </section>
       </div>
     </main>

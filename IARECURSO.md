@@ -388,7 +388,40 @@ Para desarrollar un servicio sin Docker: `cd microservicios/<servicio>`, copiar 
 - A través del gateway, cada ruta llegó a su servicio (`404` con el `service` correspondiente, en lugar del `502` previo) y `/api/nada` fue rechazada por el gateway.
 - `http://localhost:3021/health` no responde desde el host: los microservicios no están expuestos.
 
-## 9. Recursos gráficos
+## 9. Galería principal (`pf10_GaleriaPrincipal`)
+
+### Alcance
+
+- La pantalla se abre en `/#galeria` y conserva el sistema de navegación por hash existente. `/#rostro` sigue mostrando la cámara y cualquier otro hash muestra la bienvenida.
+- `Rostro` incluye el enlace **Explorar la galería**. Desde la galería, **Escanearme** regresa a `/#rostro` sin recargar la aplicación.
+- **Mis Recomendaciones** muestra un aviso temporal hasta que `pf15_MSRecomendaciones` implemente su pantalla y contrato.
+- La interfaz usa los SVG oficiales `logobutacaoficial.svg`, `iconoescanearme.svg` e `iconomisreconocimientos.svg` ubicados en la raíz del proyecto.
+
+### Componentes y datos
+
+- `GaleriaPrincipal.jsx`: coordina carga, filtro activo, selección y avisos.
+- `components/EncabezadoGaleria.jsx`: logo y acciones de navegación.
+- `components/FiltrosGaleria.jsx`: categorías controladas mediante estado de React.
+- `components/CuadriculaContenido.jsx` y `TarjetaContenido.jsx`: cuadrícula y tarjetas reutilizables.
+- `components/DetalleContenido.jsx`: modal responsive; cierra mediante botón, clic en el fondo o tecla Escape.
+- `components/EstadoGaleria.jsx`: skeletons y estados de error o ausencia de resultados.
+- `data/contenidosDemo.js`: datos visuales temporales identificados expresamente como demostración; no representan datos de TMDB.
+- `services/catalogo.js`: único punto de acceso a datos. `pf14_MSCatalogo` debe reemplazar su respuesta simulada por una solicitud al API Gateway, sin agregar consultas HTTP a las tarjetas.
+
+### Contrato de integración pendiente
+
+- El frontend solo debe consumir la ruta pública existente `/api/catalogo` mediante el API Gateway en el puerto `3000`; nunca debe llamar directamente a `catalog-service:3023`.
+- No se definió un formato definitivo ni se inventaron subrutas. `pf14` debe documentar el contrato real antes de sustituir los datos simulados.
+- El botón de favoritos es solo visual y permanece deshabilitado. Su persistencia corresponde a `pf16_MSBiblioteca`.
+
+### Diseño y accesibilidad
+
+- Fondo oficial `#0470F6` a `#0000B0`, encabezado blanco fijo, filtros desplazables y hasta siete columnas en escritorio, cinco en pantallas medianas, tres en tabletas y dos en teléfonos.
+- Las tarjetas mantienen proporción `2 / 3`, muestran placeholder cuando no hay portada y revelan título/tipo mediante hover o foco.
+- Todos los controles usan elementos semánticos, foco visible y nombres accesibles. El modal usa `role="dialog"`, `aria-modal` y recibe foco al abrirse.
+- Las animaciones se desactivan con `prefers-reduced-motion`.
+
+## 10. Recursos gráficos
 
 ### Título compuesto
 
@@ -424,7 +457,7 @@ Cuando `pf4` defina su composición visual, debe importarlos desde esta carpeta 
 - `src/assets/images/palomitasdiseño.png`: esquina inferior derecha.
 - `src/assets/icons/logogoogle.svg` y `src/assets/icons/logogithub.svg`: iconos de los botones de acceso.
 
-## 10. Estilos y responsive
+## 11. Estilos y responsive
 
 - Fondo a pantalla completa: degradado vertical de `#0470F6` a `#0000B0`.
 - La página usa `100svh`, evita barras de desplazamiento y controla los niveles mediante contextos de apilamiento.
@@ -435,7 +468,7 @@ Cuando `pf4` defina su composición visual, debe importarlos desde esta carpeta 
 - Todos los controles interactivos conservan foco visible para navegación con teclado.
 - `prefers-reduced-motion: reduce` desactiva animaciones y muestra todas las capas del título directamente.
 
-## 11. Animaciones
+## 12. Animaciones
 
 - `build-center-wave`: efecto introductorio de expansión elástica controlada de la onda central.
 - `build-top-left-wave` y `build-bottom-right-wave`: trasladan y expanden las ondas exteriores hasta sus esquinas definitivas.
@@ -446,7 +479,7 @@ Cuando `pf4` defina su composición visual, debe importarlos desde esta carpeta 
 - `float`: flotación sutil, asíncrona y permanente de las cuatro decoraciones cinematográficas, con duraciones distintas.
 - Los botones incluyen transiciones discretas para `hover`, `focus-visible` y `active`.
 
-## 12. Accesibilidad
+## 13. Accesibilidad
 
 - El documento usa `lang="es"`.
 - El título visual compuesto por SVG cuenta con un `h1` oculto visualmente para lectores de pantalla.
@@ -454,7 +487,7 @@ Cuando `pf4` defina su composición visual, debe importarlos desde esta carpeta 
 - Los botones usan elementos `<button>` reales porque inician una acción; anuncian el estado de carga y se deshabilitan para evitar solicitudes duplicadas.
 - Los estados de foco son visibles y las animaciones respetan la preferencia de movimiento reducido.
 
-## 13. Autenticación y entorno
+## 14. Autenticación y entorno
 
 - Dependencia oficial: `@supabase/supabase-js`.
 - Proyecto Supabase: `fxumhujdmabgxjqmzoxs`.
@@ -477,7 +510,7 @@ Cuando `pf4` defina su composición visual, debe importarlos desde esta carpeta 
 - El certificado y la herramienta temporal permanecen fuera del directorio del repositorio; las credenciales solo se mantienen en el archivo local `backend/.env`, ignorado por Git y fuera del contenido versionado. No se publican contraseñas ni cadenas de conexión.
 - El backend utiliza PostgreSQL mediante Prisma para guardar ánimos y favoritos. La configuración inicial de `pf6_Supabase` se conserva como antecedente de conexión; los modelos, migraciones y CRUD vigentes están documentados en `pf7_Prisma`.
 
-## 14. Funcionalidades pendientes
+## 15. Funcionalidades pendientes
 
 - Definir la pantalla o ruta a mostrar después de una autenticación exitosa.
 - Añadir cierre de sesión y una interfaz que represente al usuario autenticado.
@@ -491,7 +524,14 @@ Cuando `pf4` defina su composición visual, debe importarlos desde esta carpeta 
 - Sustituir el favicon provisional de Vite por el recurso oficial de Butaca cuando se proporcione.
 - Incorporar pruebas automatizadas cuando se definan los flujos funcionales.
 
-## 15. Historial
+## 16. Historial
+
+### 2026-10-29 — Galería principal (`pf10_GaleriaPrincipal`)
+
+- Se implementó la pantalla `/#galeria` con encabezado oficial, filtros por categoría, cuadrícula responsive, tarjetas y modal de detalle.
+- Se separaron componentes, datos simulados y capa de acceso a catálogo para permitir la integración posterior con `/api/catalogo`.
+- Se conectó la navegación entre reconocimiento facial y galería sin instalar una librería de rutas ni modificar los microservicios.
+- Se prepararon estados de carga, error y vacío, foco visible, cierre con Escape y compatibilidad con movimiento reducido.
 
 ### 2026-10-28 — Docker y esqueletos de microservicios (`pf9_Docker`)
 
