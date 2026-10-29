@@ -303,6 +303,13 @@
   flex: 0 0 auto;
 }
 
+.rostro-button--gallery {
+  color: var(--rostro-highlight);
+  background: #ffffff;
+  text-decoration: none;
+  animation: rostro-rise 420ms cubic-bezier(0.2, 0.75, 0.3, 1) 600ms both;
+}
+
 /* Estado de la detección */
 
 .rostro-panel {
