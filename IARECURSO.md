@@ -12,6 +12,7 @@
 - Rama de persistencia: `pf7_Prisma`, integrada en `dev`. Ánimos y favoritos se guardan mediante Prisma en PostgreSQL de Supabase.
 - Rama del API Gateway: `pf8_APIGateway`, basada en `dev`. Gateway Express independiente en `apigateway/`, puerto `3000`, preparado para conectar cinco microservicios mediante Docker.
 - Rama de contenedores: `pf9_Docker`, basada en `dev`. Esqueletos de los cinco microservicios en `microservicios/`, cada uno con su `Dockerfile`, y `compose.yaml` que levanta los seis contenedores con health checks.
+- Rama del pie de página: `pf11_Pie`, basada en `dev` (con la galería de `pf10_GaleriaPrincipal` ya integrada). Componente reutilizable `Footer` integrado en la galería.
 - Pantallas implementadas: `Main`, destinada visualmente a visitantes sin sesión, y `Rostro`, con cámara, consentimiento e interfaz de detección de emociones (accesible temporalmente desde `/#rostro`).
 - Alcance actual: presentación visual, animaciones e inicio de sesión OAuth 2.0 con Google o GitHub mediante Supabase. El cliente conserva y renueva la sesión; todavía no existen rutas protegidas ni una pantalla posterior al acceso.
 - Tipografía oficial de toda la aplicación: **Montserrat**. Está instalada localmente mediante `@fontsource/montserrat` y se cargan solamente los subconjuntos latinos de los pesos 400, 600, 700 y 800 desde `src/main.jsx`.
@@ -58,6 +59,8 @@ src/
 │   ├── icons/               # Logotipos usados por controles de interfaz.
 │   ├── images/              # Imágenes PNG decorativas.
 │   └── text/                # Seis capas SVG de la composición del título.
+├── components/
+│   └── Footer/              # Pie de página reutilizable (pf11_Pie).
 ├── lib/
 │   └── supabase.js          # Cliente único de Supabase y entrada a OAuth.
 └── pages/
@@ -421,7 +424,37 @@ Para desarrollar un servicio sin Docker: `cd microservicios/<servicio>`, copiar 
 - Todos los controles usan elementos semánticos, foco visible y nombres accesibles. El modal usa `role="dialog"`, `aria-modal` y recibe foco al abrirse.
 - Las animaciones se desactivan con `prefers-reduced-motion`.
 
-## 10. Recursos gráficos
+## 10. Pie de página (`pf11_Pie`)
+
+### Alcance
+
+- Componente reutilizable `Footer` en `src/components/Footer/` (`Footer.jsx` y `Footer.css`). Es el primer componente compartido entre pantallas; por eso vive fuera de `src/pages/`.
+- Distribución inspirada en el pie de AlbaCinema, sin usar su marca: identidad de Butaca, columna **Menú**, columna **Sobre Butaca** y franja inferior con copyright e información legal.
+- Integrado únicamente en `GaleriaPrincipal`, después de `<main>` y dentro de `.gallery-page`, que es el contenedor con scroll. `Main` y `Rostro` no lo incluyen: son pantallas de altura fija (`100svh`) con composición centrada y un pie rompería su diseño. Si en el futuro se agrega, debe hacerse una sola vez por pantalla.
+
+### Contenido y enlaces
+
+| Elemento | Destino |
+|---|---|
+| Inicio | `#` → `Main` |
+| Explorar películas | `#galeria` |
+| Escanearme | `#rostro` |
+| Mis recomendaciones | Prop opcional `onRecommendations`. Si se recibe, se muestra como `<button>` (la galería le pasa el mismo aviso temporal del encabezado); si no, se muestra como texto atenuado no interactivo. Cuando `pf15_MSRecomendaciones` cree su pantalla, reemplazar por su ruta en `menuLinks`. |
+| Privacidad, Términos y condiciones | Texto no interactivo (`title="Próximamente"`) hasta que existan sus páginas. |
+
+- No se incluye información de contacto: el proyecto no cuenta todavía con teléfono, correo ni redes sociales oficiales. No se deben inventar.
+- El logo es `logobutacaoficial.svg` (raíz). Como es azul `#0470F6`, el pie lo muestra en blanco con `filter: brightness(0) invert(1)`, sin duplicar el recurso.
+
+### Diseño y responsive
+
+- Fondo `#0000B0` → `#00007A` con un brillo radial `#0470F6`, línea superior en `#72B4FF`, texto blanco, separadores `rgb(255 255 255 / 16%)` y títulos de columna en `#9CCAFF`, mayúsculas y Montserrat 800.
+- Hover discreto en los enlaces (color, opacidad y desplazamiento de 3 px), foco visible y sin animaciones de entrada. `prefers-reduced-motion` desactiva las transiciones.
+- Escritorio: tres columnas (`1.15fr 0.85fr 1.15fr`) con separadores verticales.
+- Hasta `900px`: la identidad ocupa todo el ancho y Menú/Sobre Butaca quedan en dos columnas.
+- Hasta `560px`: una columna, identidad centrada, enlaces de 40 px de alto y franja inferior centrada.
+- Verificado a 1280, 820 y 375 px sin desbordamiento horizontal.
+
+## 11. Recursos gráficos
 
 ### Título compuesto
 
@@ -457,7 +490,7 @@ Cuando `pf4` defina su composición visual, debe importarlos desde esta carpeta 
 - `src/assets/images/palomitasdiseño.png`: esquina inferior derecha.
 - `src/assets/icons/logogoogle.svg` y `src/assets/icons/logogithub.svg`: iconos de los botones de acceso.
 
-## 11. Estilos y responsive
+## 12. Estilos y responsive
 
 - Fondo a pantalla completa: degradado vertical de `#0470F6` a `#0000B0`.
 - La página usa `100svh`, evita barras de desplazamiento y controla los niveles mediante contextos de apilamiento.
@@ -468,7 +501,7 @@ Cuando `pf4` defina su composición visual, debe importarlos desde esta carpeta 
 - Todos los controles interactivos conservan foco visible para navegación con teclado.
 - `prefers-reduced-motion: reduce` desactiva animaciones y muestra todas las capas del título directamente.
 
-## 12. Animaciones
+## 13. Animaciones
 
 - `build-center-wave`: efecto introductorio de expansión elástica controlada de la onda central.
 - `build-top-left-wave` y `build-bottom-right-wave`: trasladan y expanden las ondas exteriores hasta sus esquinas definitivas.
@@ -479,7 +512,7 @@ Cuando `pf4` defina su composición visual, debe importarlos desde esta carpeta 
 - `float`: flotación sutil, asíncrona y permanente de las cuatro decoraciones cinematográficas, con duraciones distintas.
 - Los botones incluyen transiciones discretas para `hover`, `focus-visible` y `active`.
 
-## 13. Accesibilidad
+## 14. Accesibilidad
 
 - El documento usa `lang="es"`.
 - El título visual compuesto por SVG cuenta con un `h1` oculto visualmente para lectores de pantalla.
@@ -487,7 +520,7 @@ Cuando `pf4` defina su composición visual, debe importarlos desde esta carpeta 
 - Los botones usan elementos `<button>` reales porque inician una acción; anuncian el estado de carga y se deshabilitan para evitar solicitudes duplicadas.
 - Los estados de foco son visibles y las animaciones respetan la preferencia de movimiento reducido.
 
-## 14. Autenticación y entorno
+## 15. Autenticación y entorno
 
 - Dependencia oficial: `@supabase/supabase-js`.
 - Proyecto Supabase: `fxumhujdmabgxjqmzoxs`.
@@ -510,7 +543,7 @@ Cuando `pf4` defina su composición visual, debe importarlos desde esta carpeta 
 - El certificado y la herramienta temporal permanecen fuera del directorio del repositorio; las credenciales solo se mantienen en el archivo local `backend/.env`, ignorado por Git y fuera del contenido versionado. No se publican contraseñas ni cadenas de conexión.
 - El backend utiliza PostgreSQL mediante Prisma para guardar ánimos y favoritos. La configuración inicial de `pf6_Supabase` se conserva como antecedente de conexión; los modelos, migraciones y CRUD vigentes están documentados en `pf7_Prisma`.
 
-## 15. Funcionalidades pendientes
+## 16. Funcionalidades pendientes
 
 - Definir la pantalla o ruta a mostrar después de una autenticación exitosa.
 - Añadir cierre de sesión y una interfaz que represente al usuario autenticado.
@@ -524,7 +557,14 @@ Cuando `pf4` defina su composición visual, debe importarlos desde esta carpeta 
 - Sustituir el favicon provisional de Vite por el recurso oficial de Butaca cuando se proporcione.
 - Incorporar pruebas automatizadas cuando se definan los flujos funcionales.
 
-## 16. Historial
+## 17. Historial
+
+### 2026-10-29 — Pie de página (`pf11_Pie`)
+
+- Se creó el componente reutilizable `src/components/Footer/` con identidad de Butaca, menú, descripción del proyecto y franja legal.
+- Los enlaces del menú usan las rutas por hash existentes; Mis recomendaciones reutiliza el aviso temporal de la galería y los enlaces legales quedan no interactivos hasta que existan sus páginas.
+- Se integró una sola vez en `GaleriaPrincipal`; `Main` y `Rostro` no se modificaron.
+- Diseño responsive en tres, dos y una columna. Verificado con `npm run lint`, `npm run build` y revisión visual a 1280, 820 y 375 px. No se agregaron dependencias.
 
 ### 2026-10-29 — Galería principal (`pf10_GaleriaPrincipal`)
 
