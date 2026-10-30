@@ -354,11 +354,60 @@ Para desarrollar un servicio sin Docker: `cd microservicios/<servicio>`, copiar 
 - `x-powered-by` está deshabilitado.
 - `server.js` atiende `SIGTERM` (la señal de `docker compose down`) y cierra conexiones antes de salir.
 
+### Middleware de autenticación (`pf12_MSAutenticacion`)
+
+- `auth-service/src/middlewares/requireAuth.js` exporta `requireAuth` y la fábrica `createRequireAuth` para inyectar un cliente simulado en pruebas. Verifica `Authorization: Bearer <token>` con el cliente Supabase reutilizable y `auth.getUser(token)`; solo asigna a `req.user` el `id` y el `email` devueltos por Supabase.
+- Responde JSON con `401` si falta el token, el formato es incorrecto o la sesión es rechazada; `500` si falta configuración y `503` ante fallos de infraestructura, red o límites de solicitudes. No expone tokens ni detalles internos.
+- `auth-service/test/requireAuth.test.js` cubre éxito, encabezados incorrectos, rechazo del token, usuario ausente, falta de configuración y fallos de Supabase mediante clientes simulados, sin credenciales reales ni conexiones externas. El usuario confirmó el resultado final de la suite de `auth-service`: **44/44 pruebas automatizadas aprobadas**.
+- El middleware protege `GET /api/sesiones`, `POST /api/usuarios` y `GET /api/usuarios`; `/health` permanece público. La configuración de Prisma y los contratos de usuarios se describen abajo.
+
+### Consulta de sesión (`pf12_MSAutenticacion`)
+
+- `auth-service/src/app.js` monta `sesionesRouter` en `/api/sesiones`. `src/routes/sesiones.routes.js` declara `GET /` con `requireAuth` y el controlador `obtenerSesion` de `src/controllers/sesiones.controller.js`.
+- Contrato: `GET /api/sesiones` exige `Authorization: Bearer <token>` y devuelve `200` con `{ "id": "<id de Supabase>", "email": "<email de Supabase>" }`, obtenido exclusivamente de `req.user`. No acepta identificadores del cliente para elegir la identidad ni consulta la base de datos.
+- Sin token, con formato incorrecto o token rechazado reutiliza el `401` JSON de `requireAuth`. La falta de configuración y los fallos de infraestructura conservan sus respuestas `500` y `503` respectivamente. No se agregan operaciones POST en `/api/sesiones`.
+- `auth-service/test/sesiones.test.js` prueba el endpoint HTTP local con `supabase.auth.getUser` simulado: éxito, rechazo, token ausente, formato incorrecto, `/health` público y POST inexistente. No usa credenciales reales ni conecta con Supabase y forma parte de las 44 pruebas aprobadas. En la integración real confirmada por el usuario, la autenticación con Supabase funcionó: `GET /api/sesiones` con token válido respondió `HTTP 200` mediante el Gateway y las solicitudes sin token fueron rechazadas con `HTTP 401`.
+
+### Preparación de Prisma en auth-service (`pf12_MSAutenticacion`)
+
+- `auth-service` declara `@prisma/client` como dependencia de producción y `prisma` como dependencia de desarrollo, ambos fijados en `6.19.3`, con script `prisma:generate` (`prisma generate`). Instalación y generación local: `npm.cmd ci` y `npm.cmd run prisma:generate` dentro de `microservicios/auth-service/`.
+- `auth-service/prisma/schema.prisma` conserva el esquema completo de `backend/prisma/schema.prisma`: `Usuario`, `Animo` y `Favorito`, con sus nombres, relaciones e índices existentes. Describe las mismas tablas; generar el cliente no crea tablas ni modifica datos. No se copia ninguna carpeta de migraciones.
+- Las migraciones siguen siendo responsabilidad del esquema principal en `backend/prisma/`. Este microservicio no ejecuta `migrate`, `db push` ni `db pull`; su copia debe mantenerse compatible cuando cambie el esquema principal.
+- `src/config/env.js` centraliza `DATABASE_URL` y `DIRECT_URL` como `env.databaseUrl` y `env.directUrl`; `.env.example` documenta ambas sin valores. La configuración privada debe apuntar a la misma base y esquema del backend y se suministra localmente o en el entorno de ejecución, sin incorporarla al repositorio ni a la imagen.
+- `src/lib/prisma.js` carga la configuración centralizada y exporta una única instancia de `PrismaClient` por proceso, siguiendo el patrón del backend. No llama a `$connect` ni ejecuta consultas al importarse; solo el servicio de usuarios lo usa para consultar o sincronizar. `/health` y `/api/sesiones` no consultan PostgreSQL.
+- El Dockerfile de `auth-service` instala OpenSSL, instala dependencias de desarrollo para generar el cliente y luego las elimina con `npm prune --omit=dev`. La generación usa URLs ficticias limitadas al comando de construcción; las URLs reales solo se inyectan al ejecutar Docker/Render. Mantiene el usuario `node`, el puerto configurable y el health check existente. Para Render sin Docker: instalar incluyendo dependencias de desarrollo y generar durante el build; iniciar con `npm start`.
+- El usuario confirmó la instalación, generación del cliente y pruebas reales de persistencia mediante Prisma en PostgreSQL, sin ejecutar migraciones desde este microservicio. La construcción y prueba básica de Docker fueron completadas con variables ficticias; los resultados y las alertas de seguridad pendientes se detallan abajo.
+
+### Usuarios autenticados (`pf12_MSAutenticacion`)
+
+- Arquitectura: `src/routes/usuarios.routes.js` aplica `requireAuth`, llama a `src/controllers/usuarios.controller.js` y este delega en `src/services/usuarios.service.js`, que usa la instancia reutilizable de Prisma. `src/app.js` monta el router en `/api/usuarios`.
+- `POST /api/usuarios`: sin body obligatorio. Ejecuta `prisma.usuario.upsert` con `where: { id: req.user.id }`; crea usando el id y correo verificados o actualiza únicamente el correo. El correo ausente se normaliza a `null`. Ignora identidades y correos del body, query y headers personalizados. No modifica `creadoEn`, ánimos ni favoritos y repetir la operación no duplica registros. Devuelve `200` con `{ id, email, creadoEn }`.
+- `GET /api/usuarios`: ejecuta `prisma.usuario.findUnique` usando exclusivamente `req.user.id` y selecciona `id`, `email` y `creadoEn`. Devuelve `200` con esos campos o `404 { error: 'El usuario autenticado no tiene un registro local.' }`. No crea ni modifica registros y no permite elegir otro usuario.
+- Ambos endpoints requieren `Authorization: Bearer <token>` y conservan las respuestas del middleware: `401` por autenticación ausente o rechazada, `500` si Supabase no está configurado y `503` ante fallos de Supabase. Los fallos de persistencia responden `500` con un mensaje genérico de guardado o consulta; no se envía ni se imprime el error original de Prisma.
+- `src/services/usuarios.service.js` usa una selección explícita de los tres campos públicos; no devuelve relaciones ni utiliza el correo como clave de identidad. Las fechas se serializan como cadenas ISO en JSON.
+- `test/usuarios.test.js` simula `supabase.auth.getUser`, `prisma.usuario.upsert` y `prisma.usuario.findUnique` antes de utilizar la aplicación HTTP local. Cubre creación, sincronización repetida, correo ausente, conservación de fecha y relaciones, aislamiento entre usuarios, `404`, `401`, errores de persistencia y continuidad de `/health` y `/api/sesiones`, sin conexiones externas. Forma parte de la suite confirmada por el usuario con **44/44 pruebas aprobadas**.
+- Integración real confirmada por el usuario: `POST /api/usuarios` directamente a `auth-service` respondió `HTTP 200` y registró al usuario en PostgreSQL mediante Prisma. `GET /api/usuarios` respondió `HTTP 200` tanto directamente como mediante el Gateway, con respuestas coincidentes.
+- Dos `POST /api/usuarios` consecutivos mediante el Gateway y un `GET /api/usuarios` final respondieron `HTTP 200`, conservando la identidad y la fecha de creación. El proceso de `auth-service` permaneció estable durante las pruebas de diagnóstico.
+- Inicialmente se observó un `HTTP 502` con `ECONNRESET` en un POST mediante el Gateway. El problema no volvió a reproducirse en las pruebas posteriores y su causa original no fue identificada; no se atribuye a una corrección específica.
+
+### Verificación de Docker de auth-service (`pf12_MSAutenticacion`)
+
+- El usuario confirmó que la imagen `butaca-auth-service:pf12` se construyó correctamente: Docker Build finalizó con **14/14 pasos**. El contenedor arrancó y apareció como `healthy`.
+- `GET http://localhost:3022/health` respondió `HTTP 200` con `{ status: "ok", service: "butaca-service" }` en el contenedor de prueba. El contenedor se detuvo correctamente al finalizar.
+- Se utilizaron variables ficticias: esta prueba confirma la construcción, el arranque y el health check, pero no conexiones reales a Supabase ni a PostgreSQL desde Docker.
+
+### Auditoría de seguridad de auth-service (`pf12_MSAutenticacion`)
+
+- El usuario confirmó que `npm audit` y `npm audit --omit=dev` reportaron las mismas **tres vulnerabilidades altas**, correspondientes a la cadena `prisma@6.19.3` → `@prisma/config@6.19.3` → `deepmerge-ts@7.1.5`. El aviso es `GHSA-ggr8-5vv4-36mx`.
+- Se comprobó con `npm ls` dentro de la imagen Docker que los paquetes vulnerables permanecen instalados después de la instalación y poda de dependencias. La construcción exitosa y el health check no implican que la vulnerabilidad esté corregida.
+- No se identificó una ruta de explotación desde los endpoints actuales, pero esto no garantiza ausencia de riesgo. **La vulnerabilidad sigue sin corregirse**.
+- No se aplicó `npm audit fix --force`, porque propone migrar a Prisma `7.10.1`, un cambio mayor. Se recomienda evaluar una corrección compatible con Prisma 6 y dar seguimiento antes de fusionar el PR.
+
 ### Dockerfile
 
 - Base `node:22-alpine`, igual que el gateway.
 - Copia `package.json` y `package-lock.json` antes que `src/` para aprovechar la caché de capas: cambiar código no reinstala dependencias.
-- `npm ci --omit=dev`: instalación exacta del lockfile, sin dependencias de desarrollo.
+- `npm ci --omit=dev`: instalación exacta del lockfile, sin dependencias de desarrollo en los esqueletos; `auth-service` instala también las de desarrollo para generar Prisma y luego las elimina, como se describe arriba.
 - `ARG PORT` → `ENV PORT`: el mismo `Dockerfile` sirve para los cinco servicios.
 - `USER node`: el proceso no se ejecuta como root.
 - `HEALTHCHECK` con `node` + `fetch` contra `/health` (Alpine no incluye `curl`).
