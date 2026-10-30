@@ -1,10 +1,20 @@
 FROM node:22-alpine
 
+RUN apk add --no-cache openssl
+
 WORKDIR /app
 
 # Primero solo los manifiestos: si no cambian, Docker reutiliza la capa de npm ci.
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+RUN PRISMA_SKIP_POSTINSTALL_GENERATE=true npm ci --include=dev
+
+COPY prisma ./prisma
+# generate no conecta a PostgreSQL: estas URLs ficticias solo existen en este paso.
+# Las conexiones reales se inyectan al ejecutar el contenedor, nunca en la imagen.
+RUN DATABASE_URL=postgresql://build:build@localhost:5432/build \
+    DIRECT_URL=postgresql://build:build@localhost:5432/build \
+    npm run prisma:generate \
+    && npm prune --omit=dev
 
 COPY src ./src
 
