@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import './GaleriaPrincipal.css'
+import Footer from '../../components/Footer/Footer.jsx'
 import CuadriculaContenido from './components/CuadriculaContenido.jsx'
 import DetalleContenido from './components/DetalleContenido.jsx'
 import EncabezadoGaleria from './components/EncabezadoGaleria.jsx'
@@ -61,6 +62,7 @@ function GaleriaPrincipal() {
         )}
         {estado === 'ready' && filtrados.length === 0 && <EstadoGaleria estado="empty" />}
       </main>
+      <Footer onRecommendations={handleRecommendations} />
 
       <p className={`gallery-notice${notice ? ' gallery-notice--visible' : ''}`} role="status" aria-live="polite">
         {notice}
