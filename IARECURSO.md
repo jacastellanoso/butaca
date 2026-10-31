@@ -13,6 +13,7 @@
 - Rama del API Gateway: `pf8_APIGateway`, basada en `dev`. Gateway Express independiente en `apigateway/`, puerto `3000`, preparado para conectar cinco microservicios mediante Docker.
 - Rama de contenedores: `pf9_Docker`, basada en `dev`. Esqueletos de los cinco microservicios en `microservicios/`, cada uno con su `Dockerfile`, y `compose.yaml` que levanta los seis contenedores con health checks.
 - Rama del pie de página: `pf11_Pie`, basada en `dev` (con la galería de `pf10_GaleriaPrincipal` ya integrada). Componente reutilizable `Footer` integrado en la galería.
+- Rama del microservicio de emociones: `pf13_MSEmociones`, basada en `dev` (con `pf12_MSAutenticacion` integrada). `emotions-service` recibe, guarda y consulta resultados emocionales autorizados en `/api/animos` (sección 8). Requiere aplicar la migración aditiva `20261030120000_animo_consentimiento_historial`, preparada pero **no ejecutada** en producción hasta verificar un respaldo y contar con autorización.
 - Pantallas implementadas: `Main`, destinada visualmente a visitantes sin sesión, y `Rostro`, con cámara, consentimiento e interfaz de detección de emociones (accesible temporalmente desde `/#rostro`).
 - Alcance actual: presentación visual, animaciones e inicio de sesión OAuth 2.0 con Google o GitHub mediante Supabase. El cliente conserva y renueva la sesión; todavía no existen rutas protegidas ni una pantalla posterior al acceso.
 - Tipografía oficial de toda la aplicación: **Montserrat**. Está instalada localmente mediante `@fontsource/montserrat` y se cargan solamente los subconjuntos latinos de los pesos 400, 600, 700 y 800 desde `src/main.jsx`.
@@ -112,7 +113,7 @@ apigateway/                    # Entrada única para los microservicios (Express
 
 microservicios/                # Cinco microservicios Express independientes (pf9_Docker).
 ├── auth-service/              # 3021 · /api/sesiones, /api/usuarios
-├── emotions-service/          # 3022 · /api/animos
+├── emotions-service/          # 3022 · /api/animos (pf13: POST, GET historial, GET /:id)
 ├── catalog-service/           # 3023 · /api/catalogo
 ├── recommendations-service/   # 3024 · /api/recomendaciones
 └── library-service/           # 3025 · /api/favoritos, /api/historial
@@ -403,6 +404,132 @@ Para desarrollar un servicio sin Docker: `cd microservicios/<servicio>`, copiar 
 - No se identificó una ruta de explotación desde los endpoints actuales, pero esto no garantiza ausencia de riesgo. **La vulnerabilidad sigue sin corregirse**.
 - No se aplicó `npm audit fix --force`, porque propone migrar a Prisma `7.10.1`, un cambio mayor. Se recomienda evaluar una corrección compatible con Prisma 6 y dar seguimiento antes de fusionar el PR.
 
+### Microservicio de emociones (`pf13_MSEmociones`)
+
+#### Arquitectura
+
+```text
+microservicios/emotions-service/
+├── prisma/schema.prisma            # Copia del esquema principal (backend/prisma). Solo genera el cliente.
+├── src/
+│   ├── app.js                      # express.json({ limit: '10kb' }), /health y /api/animos.
+│   ├── config/env.js               # Única lectura de process.env (igual que auth-service).
+│   ├── constants/emociones.js      # EMOCIONES, ORIGENES, versión del consentimiento y límites de paginación.
+│   ├── lib/supabase.js, prisma.js  # Copias de auth-service: cliente Supabase sin sesión propia e instancia única de Prisma.
+│   ├── middlewares/requireAuth.js  # Copia exacta del middleware de auth-service.
+│   ├── middlewares/errorHandler.js # 400 JSON inválido, 413 body excesivo (sin log) y 500 genérico.
+│   ├── validators/animos.validator.js # Validación con if del body, query e id.
+│   ├── routes/animos.routes.js     # requireAuth para todo el router.
+│   ├── controllers/animos.controller.js
+│   └── services/animos.service.js  # Único acceso a Prisma.
+└── test/
+    ├── health.test.js              # Esqueleto pf9 (3 pruebas).
+    └── animos.test.js              # 28 pruebas del contrato /api/animos.
+```
+
+- Una petición recorre: **ruta** → `requireAuth` → **controlador** (valida y elige el código HTTP) → **service** (Prisma) → respuesta.
+- `requireAuth`, `lib/supabase.js`, `lib/prisma.js` y `config/env.js` se **copiaron sin cambios** desde `auth-service`, por la regla 12 (los servicios no importan código entre sí). Si `auth-service` corrige su middleware, la copia debe actualizarse. Verificar el token localmente evita una llamada HTTP extra a `GET /api/sesiones` por cada petición.
+- Zod no está instalado en el proyecto: se mantuvo la convención vigente de validaciones con `if`, agrupadas en `validators/` para poder reemplazarlas por esquemas sin tocar controladores ni services.
+
+#### Modelo de datos
+
+Se amplió `Animo` en el esquema principal `backend/prisma/schema.prisma` de forma **aditiva** (no se renombró ni eliminó nada):
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `id` | `String` uuid | Identificador generado por Prisma. |
+| `usuarioId` | `String` | `req.user.id` del token. Clave foránea a `Usuario.id` con cascada (relación existente). |
+| `emocion` | `String` | Una de `neutral`, `happy`, `sad`, `angry`, `fearful`, `disgusted`, `surprised`. |
+| `confianza` | `Float?` | **Ahora opcional**: obligatoria para `origen = 'deteccion'`, opcional para `'confirmada'`. |
+| `origen` | `String` (`'deteccion'` por defecto) | `deteccion` (face-api.js) o `confirmada` (elegida o corregida por el usuario). |
+| `consentimientoHistorial` | `Boolean` (`false` por defecto) | Evidencia de la autorización explícita para conservar el registro. |
+| `consentimientoVersion` | `String?` | Versión del texto aceptado (`CONSENTIMIENTO_HISTORIAL_VERSION = 'historial-v1'`). |
+| `consentimientoEn` | `DateTime?` | Fecha y hora del servidor en que se registró la autorización. |
+| `creadoEn` | `DateTime` | Fecha y hora del registro. |
+
+- Índice nuevo `@@index([usuarioId, creadoEn])` para el historial paginado.
+- No se guardan fotografías, fotogramas ni videos: el service solo copia los campos validados y el body está limitado a 10 kB.
+- Los ánimos anteriores a pf13 (guardados por `backend/`) quedan con `consentimientoHistorial = false`, `origen = 'deteccion'` y sin versión/fecha de consentimiento; **no se muestran** en el historial porque no tienen evidencia de autorización. No se borran.
+- Migración: `backend/prisma/migrations/20261030120000_animo_consentimiento_historial/migration.sql`. Estado real y requisitos en «Estado de la migración».
+- `backend/src/services/animos.service.js` sigue siendo compatible: inserta sin las columnas nuevas (toman su valor por defecto) y selecciona solo campos previos; solo verá `confianza: null` en registros `confirmada` creados por este servicio. La copia del esquema de `auth-service` no se modificó; sigue funcionando porque solo consulta `Usuario`, pero quedó desactualizada en `Animo` y conviene sincronizarla en su rama.
+
+#### Estado de la migración (2026-10-30): preparada, NO aplicada
+
+- **Revisión del SQL**: `prisma migrate diff` (6.19.3) entre el esquema de `dev` y el de esta rama genera exactamente las mismas sentencias que el archivo: un `ALTER COLUMN "confianza" DROP NOT NULL`, cuatro `ADD COLUMN` (dos con `DEFAULT`, dos nulos) y un `CREATE INDEX`. No contiene `DROP`, `DELETE`, `TRUNCATE`, renombres ni cambios de tipo: es **aditiva** y no elimina información.
+- **Compatibilidad**: `auth-service` solo consulta `Usuario`; `backend/` sigue funcionando (ver arriba); `catalog`, `recommendations` y `library` no usan Prisma. Los clientes Prisma generados con el esquema anterior seleccionan columnas explícitas, por lo que las columnas nuevas no los afectan.
+- **Estado en la base (consulta de solo lectura)**: `_prisma_migrations` solo registra `20261027140640_init_butaca_models`; `"Animo"` conserva sus 5 columnas originales (`confianza` NOT NULL) y tiene 0 filas.
+- **Bloqueo**: la base de Supabase está marcada como producción y desde el entorno de desarrollo no fue posible **verificar un respaldo recuperable** (no hay acceso al panel ni a la API de administración de Supabase). Por regla del proyecto, la migración queda preparada y sin ejecutar hasta que el responsable de la base confirme el respaldo y autorice expresamente el cambio.
+- **Cómo aplicarla, una vez autorizada**: confirmar el respaldo en *Database → Backups* del panel de Supabase; luego, desde `backend/` con su `.env`, ejecutar `npx prisma migrate status` y `npx prisma migrate deploy`. No usar `db push` ni `migrate reset`. Reversión, si hiciera falta: `DROP INDEX "Animo_usuarioId_creadoEn_idx"`, eliminar las cuatro columnas nuevas y restablecer `NOT NULL` en `confianza` (solo posible si no hay filas con `confianza` nula).
+- **Mientras no se aplique**, `emotions-service` contra la base real responde `500` en `POST` y `GET` con token válido, porque las columnas no existen. `/health` y el rechazo de solicitudes no autenticadas funcionan igualmente.
+
+#### Relación con Usuario
+
+`emotions-service` **no crea usuarios**; esa responsabilidad es de `POST /api/usuarios` en `auth-service`. Si el usuario autenticado no tiene registro local, Prisma rechaza la clave foránea (`P2003`) y el servicio responde `409`. El front debe llamar a `POST /api/usuarios` después del inicio de sesión y antes de guardar emociones.
+
+#### Endpoints
+
+Todos exigen `Authorization: Bearer <access_token de Supabase>` y se acceden mediante el gateway (`http://localhost:3000`).
+
+| Método | Ruta | Body / query | Respuestas |
+|---|---|---|---|
+| GET | `/health` | — | `200 { status: 'ok', service }` (público) |
+| POST | `/api/animos` | `{ emocion, confianza, origen?, consentimientoHistorial: true }` | `201` registro · `400` · `401` · `403` sin consentimiento · `409` sin usuario local · `413` · `500` · `503` |
+| GET | `/api/animos` | `?pagina=1&limite=20&emocion=&origen=&desde=&hasta=&orden=desc` | `200 { resultados, paginacion }` · `400` · `401` · `500` · `503` |
+| GET | `/api/animos/:id` | — | `200` registro · `404` si no existe, no es propio o no tiene consentimiento · `401` · `500` |
+
+```js
+// Registro (POST 201, cada elemento de resultados y GET /:id)
+{ id, emocion, confianza, origen, consentimientoHistorial, consentimientoVersion, consentimientoEn, creadoEn }
+
+// GET /api/animos
+{ resultados: [ /* registros */ ], paginacion: { pagina, limite, total, totalPaginas } }
+```
+
+- **Cambio de contrato respecto a `backend/`**: `GET /api/animos` ya no devuelve un arreglo plano sino `{ resultados, paginacion }`, y `POST` exige `consentimientoHistorial`.
+- Orden: `creadoEn` y luego `id`, descendente por defecto (`orden=asc` opcional). `limite` entre 1 y 100 (20 por defecto); `pagina` entre 1 y 10000. `desde`/`hasta` son fechas ISO 8601 inclusivas.
+
+#### Validaciones
+
+- Body: debe ser un objeto JSON. `consentimientoHistorial` debe ser exactamente `true`; ausencia, `false`, `"true"`, `1`, `consentimientoCamara: true` o `consent: true` responden `403` y no guardan nada. **El permiso de cámara no equivale a autorizar el historial.**
+- `emocion` de la lista; `origen` `deteccion` o `confirmada`; `confianza` número finito entre 0 y 1 (obligatoria para `deteccion`, opcional o `null` para `confirmada`).
+- Se ignoran `usuarioId`, `id`, `creadoEn`, `consentimientoVersion`, imágenes y cualquier otro campo del body, query o headers personalizados.
+- Query: parámetros repetidos (`?pagina=1&pagina=2`), enteros fuera de rango, emociones u orígenes desconocidos, fechas inválidas o `desde > hasta` responden `400`. `:id` que no es UUID responde `404`.
+
+#### Seguridad
+
+- El usuario sale siempre de `req.user.id`; cada consulta filtra por `usuarioId` y `consentimientoHistorial: true`. Un registro ajeno responde `404`, igual que uno inexistente, para no revelar su existencia.
+- Errores de Prisma: respuesta genérica `500` (o `409` para `P2003`). En el log solo se imprime el código de Prisma (por ejemplo `P1001`), nunca el mensaje, que puede contener la cadena de conexión.
+- `errorHandler` no registra el body de errores `400`/`413` porque puede contener datos emocionales.
+- Sin secretos en el código: `.env.example` documenta `SERVICE_NAME`, `PORT`, `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `DATABASE_URL` y `DIRECT_URL` sin valores. Los reales van en `microservicios/emotions-service/.env` (ignorado por Git y `.dockerignore`) o en el entorno de ejecución.
+- `npm audit` y `npm audit --omit=dev` reportan las mismas **tres vulnerabilidades altas** que `auth-service` (`prisma@6.19.3` → `@prisma/config` → `deepmerge-ts`, `GHSA-ggr8-5vv4-36mx`). No se aplicó `npm audit fix --force` (Prisma 7, cambio mayor). `@prisma/client` y `prisma` quedaron fijados en `6.19.3`, igual que en `auth-service`.
+
+#### Gateway y Docker
+
+- El gateway ya enrutaba `/api/animos` hacia `emotions-service:3022` desde `pf8`; no se modificó su código. Se agregó una prueba en `apigateway/test/gateway.test.js` que confirma que `/api/animos/:id?query` llega sin cambios.
+- `Dockerfile` igual al de `auth-service`: OpenSSL, `npm ci --include=dev`, `prisma generate` con URLs ficticias, `npm prune --omit=dev`, usuario `node` y `HEALTHCHECK` contra `/health`. `compose.yaml` no se modificó: ya declara `env_file` opcional, `SERVICE_NAME`, `PORT` y la red interna sin `ports:`.
+- Desarrollo local: `cd microservicios/emotions-service`, `npm.cmd ci`, copiar `.env.example` como `.env` con los valores, `npm.cmd run prisma:generate` y `npm.cmd run dev`.
+
+#### Pruebas realizadas (2026-10-30)
+
+- `npm test` en `emotions-service`: **31/31 aprobadas** (3 de health + 28 de `animos.test.js`). Supabase (`auth.getUser`) y el delegado `prisma.animo` se simulan en memoria; no hay conexiones externas ni credenciales reales. Cubren: sin token, formato incorrecto, token inválido, Supabase caído (`503`), registro autorizado con usuario del token, emoción confirmada sin confianza, rechazo sin consentimiento (`403`), datos inválidos y JSON mal formado (`400`), body excesivo (`413`), usuario sin registro local (`409`), historial ordenado, paginación y filtros, parámetros inválidos, `GET /:id`, aislamiento entre usuarios, fallos de base de datos (`500` sin filtrar detalles), `/health` público y métodos no implementados.
+- `npm test` en `apigateway`: **5/5 aprobadas**.
+- `npx prisma validate` y `prisma generate` (6.19.3) correctos; `docker compose config` válido.
+- Prueba manual con `node src/server.js` y variables ficticias: `/health` `200`, `GET /api/animos` sin token `401`.
+- **Configuración real** (`microservicios/emotions-service/.env`, ignorado por Git y Docker): clave `sb_publishable_` del proyecto `fxumhujdmabgxjqmzoxs`; `DATABASE_URL` en el Transaction Pooler (`aws-0-us-east-1.pooler.supabase.com:6543`, `?pgbouncer=true`) y `DIRECT_URL` en el Session Pooler (mismo host, `5432`), ambos con usuario `postgres.fxumhujdmabgxjqmzoxs`. Se usó Session Pooler porque `db.fxumhujdmabgxjqmzoxs.supabase.co` solo resuelve a IPv6 y el equipo de desarrollo no tiene IPv6.
+- **Conectividad real de solo lectura**: `SELECT 1` correcto por ambos poolers (PostgreSQL 17.11) y `GET /auth/v1/settings` de Supabase `200` con la clave publicable (proveedores GitHub, Google y email).
+- **Docker real**: `docker compose build emotions-service` construyó la imagen; un contenedor temporal (`docker run --rm` con `--env-file .env`) arrancó, alcanzó `healthy`, `/health` respondió `200`, `GET`/`POST /api/animos` sin token `401` y con token inválido `401` (rechazado por Supabase real). La imagen no contiene `.env` ni `test/` y corre como `node`. `docker stop` lo detuvo en menos de un segundo y `--rm` lo eliminó. `SELECT count(*) FROM "Animo"` = 0 antes y después: no hubo escrituras.
+- **No realizado (bloqueado por la migración)**: flujo completo con un token real de una cuenta de prueba (`POST /api/usuarios` → `POST /api/animos` → `GET /api/animos`), rechazo sin consentimiento y acceso a datos ajenos contra la base real, y `docker compose up` de los seis contenedores con escrituras. Estos casos solo están cubiertos por las pruebas automatizadas con simulaciones.
+
+#### Limitaciones y pendientes
+
+- Confirmar el respaldo, obtener autorización y aplicar la migración (ver «Estado de la migración»).
+- Después, con una cuenta de prueba autorizada y mediante el gateway (`docker compose up --build -d`): `POST /api/usuarios`, `POST /api/animos` con consentimiento, `GET /api/animos`, `POST` sin consentimiento (`403`) y `GET /api/animos/:id` de un registro de otra cuenta de prueba (`404`). Estas pruebas insertan filas en producción y requieren autorización específica.
+- La imagen pesa ~860 MB por los motores de Prisma; puede optimizarse con una construcción multietapa.
+- El front todavía no envía resultados: falta la casilla de consentimiento de historial (separada de la de cámara) con el texto de la versión `historial-v1` y la llamada a `POST /api/usuarios` antes de guardar.
+- No existe eliminación ni retiro del consentimiento (`DELETE`); queda para una rama posterior si se decide.
+- Sincronizar la copia de `schema.prisma` de `auth-service` y reemplazar las validaciones `if` por Zod cuando se integre.
+- Vulnerabilidad de `deepmerge-ts` sin corregir (ver arriba).
+
 ### Dockerfile
 
 - Base `node:22-alpine`, igual que el gateway.
@@ -600,13 +727,24 @@ Cuando `pf4` defina su composición visual, debe importarlos desde esta carpeta 
 - Integrar face-api.js en `Rostro` mediante `onVideoReady` y `detection` (`pf10_FaceAPI`).
 - Conectar el front con el backend enviando `Authorization: Bearer <access_token>` en cada petición protegida.
 - Cambiar la URL del frontend para consumir el API Gateway en el puerto `3000` en lugar de conocer cada microservicio.
-- Implementar la lógica de los cinco microservicios dentro de sus esqueletos de `microservicios/` (`pf12` a `pf16`).
+- Implementar la lógica de los cinco microservicios dentro de sus esqueletos de `microservicios/` (`pf12` a `pf16`). `auth-service` y `emotions-service` ya están implementados.
+- Aplicar, con autorización, la migración `20261030120000_animo_consentimiento_historial` y verificar `emotions-service` con Supabase, PostgreSQL y Docker reales.
+- Agregar en `Rostro` el consentimiento separado para conservar el historial y enviar los resultados a `POST /api/animos`.
 - Reemplazar las recomendaciones de ejemplo por TMDB (`pf11_TMDB`).
 - Habilitar CORS con lista blanca, helmet y rate limit en el backend (`pf16_Seguridad`); hasta entonces el navegador bloquea las peticiones desde `localhost:5173`.
 - Sustituir el favicon provisional de Vite por el recurso oficial de Butaca cuando se proporcione.
 - Incorporar pruebas automatizadas cuando se definan los flujos funcionales.
 
 ## 17. Historial
+
+### 2026-10-30 — Microservicio de emociones (`pf13_MSEmociones`)
+
+- Se implementó `emotions-service` con `POST /api/animos`, `GET /api/animos` (paginación y filtros) y `GET /api/animos/:id`, protegidos con la copia de `requireAuth` de `auth-service`.
+- Se exige `consentimientoHistorial: true` explícito, distinto del permiso de cámara, y se guarda la evidencia (versión y fecha) en cada registro.
+- Se amplió `Animo` de forma aditiva y se escribió la migración `20261030120000_animo_consentimiento_historial`, sin ejecutarla.
+- Dockerfile con Prisma 6.19.3 igual al de `auth-service`; gateway y `compose.yaml` sin cambios funcionales.
+- 31/31 pruebas en `emotions-service` y 5/5 en `apigateway`. Imagen Docker `healthy` y conexiones reales de solo lectura a PostgreSQL y Supabase Auth verificadas, sin escrituras.
+- Migración revisada (equivalente a `prisma migrate diff`, aditiva) pero **no aplicada**: falta verificar un respaldo de la base de producción y autorización expresa. El flujo de punta a punta con escrituras queda pendiente.
 
 ### 2026-10-29 — Pie de página (`pf11_Pie`)
 

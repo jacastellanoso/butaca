@@ -1,0 +1,49 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Usuario {
+  id        String     @id
+  email     String?
+  creadoEn  DateTime   @default(now())
+  animos    Animo[]
+  favoritos Favorito[]
+}
+
+model Animo {
+  id                      String    @id @default(uuid())
+  usuarioId               String
+  emocion                 String
+  // Opcional desde pf13: una emoción confirmada manualmente no tiene confianza.
+  confianza               Float?
+  // 'deteccion' (face-api.js) o 'confirmada' (elegida por el usuario).
+  origen                  String    @default("deteccion")
+  // Evidencia del consentimiento para conservar el historial (pf13_MSEmociones).
+  // Es distinto del permiso de cámara. Los registros previos quedan en false/null.
+  consentimientoHistorial Boolean   @default(false)
+  consentimientoVersion   String?
+  consentimientoEn        DateTime?
+  creadoEn                DateTime  @default(now())
+  usuario                 Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId, creadoEn])
+}
+
+model Favorito {
+  id        String   @id @default(uuid())
+  usuarioId String
+  tmdbId    Int
+  tipo      String
+  titulo    String
+  poster    String?
+  creadoEn  DateTime @default(now())
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@unique([usuarioId, tmdbId, tipo])
+}
