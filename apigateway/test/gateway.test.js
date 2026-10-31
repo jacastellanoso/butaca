@@ -103,3 +103,18 @@ test('el proxy conserva método, ruta, query, body y autorización', async () =>
     body: JSON.stringify(payload),
   })
 })
+
+test('las subrutas del historial emocional llegan a emotions-service sin cambios', async () => {
+  const response = await fetch(
+    `${baseUrl}/api/animos/00000000-0000-4000-8000-000000000001?pagina=2&limite=5`,
+    { headers: { Authorization: 'Bearer token-de-prueba' } },
+  )
+
+  assert.equal(response.status, 200)
+  assert.deepEqual(receivedRequest, {
+    method: 'GET',
+    url: '/api/animos/00000000-0000-4000-8000-000000000001?pagina=2&limite=5',
+    authorization: 'Bearer token-de-prueba',
+    body: '',
+  })
+})
