@@ -521,11 +521,36 @@ Todos exigen `Authorization: Bearer <access_token de Supabase>` y se acceden med
 - **Conectividad real de solo lectura**: `SELECT 1` correcto por ambos poolers (PostgreSQL 17.11) y `GET /auth/v1/settings` de Supabase `200` con la clave publicable (proveedores GitHub, Google y email).
 - **Docker real**: `docker compose build emotions-service` construyó la imagen; un contenedor temporal (`docker run --rm` con `--env-file .env`) arrancó, alcanzó `healthy`, `/health` respondió `200`, `GET`/`POST /api/animos` sin token `401` y con token inválido `401` (rechazado por Supabase real). La imagen no contiene `.env` ni `test/` y corre como `node`. `docker stop` lo detuvo en menos de un segundo y `--rm` lo eliminó. `SELECT count(*) FROM "Animo"` = 0 antes y después: no hubo escrituras.
 - **Docker Compose completo** (después de la migración): `docker compose up --build -d` levantó los seis contenedores, todos `healthy`. Como `auth-service` no tiene `.env` propio, se le inyectaron las mismas variables con un override local fuera del repositorio, sin modificar `compose.yaml`. Mediante el gateway: `/health` `200`; `GET /api/animos` y `GET /api/usuarios` sin token `401`; token inválido `401`.
-- **Pendiente: pruebas reales con usuarios autenticados** (`POST /api/usuarios` → `POST /api/animos` → `GET /api/animos`, rechazos `403` y aislamiento entre dos cuentas) contra la base real. **No se realizaron porque no se cuenta con dos sesiones de prueba válidas** (`access_token` de Supabase de dos cuentas autorizadas); el inicio de sesión OAuth en `localhost` presentó problemas y quedó fuera del alcance de esta rama. La rama se entrega formalmente con este pendiente, por decisión del responsable del proyecto. Estos casos están cubiertos únicamente por las pruebas automatizadas con simulaciones. Por eso, contra la base real no se ha ejecutado ninguna escritura en `Animo` (0 filas).
+- **Pruebas reales de punta a punta con usuarios autenticados (2026-10-30): 19/19 aprobadas.** Las realizó el asistente con autorización del responsable del proyecto, mediante el API Gateway (`http://localhost:3000`), con los seis contenedores de Docker Compose y contra PostgreSQL y Supabase Auth reales.
+  - **Cuentas**: se crearon dos cuentas de prueba nuevas con la API oficial de administración de Supabase Auth (`auth.admin.createUser` con `email_confirm: true`, sin envío de correos) y se obtuvieron sus sesiones con `signInWithPassword` y la clave publicable. No se usaron ni modificaron usuarios existentes. La clave secreta y las contraseñas aleatorias solo se usaron localmente, fuera del repositorio, y no se imprimieron.
+  - **Resultados HTTP**:
+
+    | Prueba | HTTP |
+    |---|---|
+    | `GET /api/sesiones` cuenta A y cuenta B | `200` · `200` |
+    | `POST /api/usuarios` cuenta A y cuenta B | `200` · `200` |
+    | `POST /api/animos` A (`happy`, 0.89, con consentimiento, enviando además `usuarioId` de B) | `201`; guardó versión `historial-v1` y fecha de consentimiento |
+    | `POST /api/animos` B (`sad`, `origen: confirmada`, sin confianza) | `201`, `confianza: null` |
+    | `POST` sin consentimiento · `consentimientoHistorial: false` · solo `consentimientoCamara` | `403` · `403` · `403` |
+    | `POST` con datos inválidos | `400` |
+    | `GET /api/animos` A (enviando `?usuarioId` de B) · B | `200` (solo su registro, total 1) · `200` (solo su registro, total 1) |
+    | `GET /api/animos/:id` de A con el token de B | `404` |
+    | `GET /api/animos/:id` propio | `200` |
+    | `GET /api/animos?limite=1&pagina=1&emocion=happy&orden=desc` | `200` |
+    | `GET /api/animos` sin token | `401` |
+
+  - **Verificación directa en PostgreSQL (solo lectura)**: cada fila de `Animo` tiene el `usuarioId` del token que la creó (el `usuarioId` de B enviado en el body por A fue ignorado), `consentimientoHistorial = true`, `consentimientoVersion = 'historial-v1'` y `consentimientoEn`; la de B tiene `confianza` `NULL` y `origen = 'confirmada'`. Ambos usuarios de prueba tienen registro local y un ánimo cada uno. La huella SHA-256 de todas las filas ajenas a las pruebas (`Usuario` preexistente, `Animo` y `Favorito`) fue idéntica antes y después: **no se modificaron registros ajenos**. Conteos: antes `Usuario=1, Animo=0, Favorito=0`; después `Usuario=3, Animo=2, Favorito=0`. El log de `emotions-service` no registró errores.
+  - Con esto quedan verificados en real el motor de Prisma dentro del contenedor Alpine, las escrituras por el Transaction Pooler con `pgbouncer=true`, la validación de tokens válidos y la integración con `POST /api/usuarios` de `auth-service`.
+- **Datos de prueba conservados (pendientes de limpieza autorizada)**:
+  - Cuenta A: usuario `15f2572c-f18a-427b-989a-2661adbc27a8` (`butaca-pf13-test-a-20261031013802@example.com`), ánimo `4a5707ff-2f5d-45cc-91e0-bf7628434117`.
+  - Cuenta B: usuario `1bfeeba3-8e9f-47dd-a886-39dd3a31033d` (`butaca-pf13-test-b-20261031013802@example.com`), ánimo `e132a8d1-5771-4295-8d7a-bc55679095a2`.
+  - Limpieza preparada, sin ejecutar: borrar esas dos filas de `Usuario` (sus `Animo` se eliminan en cascada) y las dos cuentas con `auth.admin.deleteUser`. Solo con autorización.
 
 #### Limitaciones y pendientes
 
-- Integración definitiva: obtener dos sesiones de prueba válidas (fuera de esta rama; el problema de OAuth en `localhost` corresponde a la autenticación del front) y luego, mediante el gateway: `POST /api/usuarios`, `POST /api/animos` con consentimiento, `GET /api/animos`, `POST` sin consentimiento (`403`) y `GET /api/animos/:id` de un registro de la otra cuenta (`404`). Registrar los ids creados para su limpieza autorizada.
+- Eliminar, con autorización, las dos cuentas y los dos ánimos de prueba listados arriba.
+- Rotar la clave secreta de Supabase y la contraseña de PostgreSQL: se compartieron en la conversación con el asistente durante las pruebas.
+- El gateway no tiene CORS (previsto para `pf16_Seguridad`): el front no puede consumir `/api/animos` desde el navegador hasta entonces. El inicio de sesión OAuth en `localhost` también debe resolverse en el front.
 - `auth-service` no tiene `.env` propio: para `docker compose up` sin override, su responsable debe crearlo a partir de su `.env.example`.
 - La imagen pesa ~860 MB por los motores de Prisma; puede optimizarse con una construcción multietapa.
 - El front todavía no envía resultados: falta la casilla de consentimiento de historial (separada de la de cámara) con el texto de la versión `historial-v1` y la llamada a `POST /api/usuarios` antes de guardar.
@@ -747,7 +772,7 @@ Cuando `pf4` defina su composición visual, debe importarlos desde esta carpeta 
 - Se amplió `Animo` de forma aditiva y se escribió la migración `20261030120000_animo_consentimiento_historial`, sin ejecutarla.
 - Dockerfile con Prisma 6.19.3 igual al de `auth-service`; gateway y `compose.yaml` sin cambios funcionales.
 - 31/31 pruebas en `emotions-service` y 5/5 en `apigateway`. Imagen Docker `healthy` y conexiones reales de solo lectura a PostgreSQL y Supabase Auth verificadas, sin escrituras.
-- Migración revisada (equivalente a `prisma migrate diff`, aditiva) y **aplicada** con autorización, después de verificar un respaldo propio restaurándolo en un PostgreSQL local. Seis contenedores `healthy` mediante el gateway. Las pruebas de `POST` y `GET` con usuarios reales autenticados quedan **pendientes** porque no se cuenta con dos sesiones de prueba válidas; la rama se entrega formalmente con las pruebas aprobadas.
+- Migración revisada (equivalente a `prisma migrate diff`, aditiva) y **aplicada** con autorización, después de verificar un respaldo propio restaurándolo en un PostgreSQL local. Seis contenedores `healthy` mediante el gateway. Pruebas reales de punta a punta con dos cuentas de prueba creadas por la API de administración de Supabase: **19/19 aprobadas** (guardado, consulta, `GET /:id`, `400`, `403`, aislamiento `404`, `401`), verificadas en PostgreSQL sin cambios en registros ajenos. Los datos de prueba se conservan hasta su limpieza autorizada.
 
 ### 2026-10-29 — Pie de página (`pf11_Pie`)
 
