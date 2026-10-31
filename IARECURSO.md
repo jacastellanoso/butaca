@@ -533,6 +533,61 @@ Todos exigen `Authorization: Bearer <access_token de Supabase>` y se acceden med
 - Sincronizar la copia de `schema.prisma` de `auth-service` y reemplazar las validaciones `if` por Zod cuando se integre.
 - Vulnerabilidad de `deepmerge-ts` sin corregir (ver arriba).
 
+### Microservicio de catálogo (`pf14_MSCatalogo`)
+
+#### Arquitectura
+
+```text
+microservicios/catalog-service/
+├── package.json                        # Express 5, dotenv y pruebas con node:test.
+├── .env.example                        # SERVICE_NAME, PORT, TMDB_API_KEY, TMDB_BASE_URL, TMDB_IMAGE_BASE_URL y TMDB_TIMEOUT_MS.
+├── src/
+│   ├── app.js                          # CORS con lista blanca, express.json(), /health y /api/catalogo.
+│   ├── config/env.js                   # Única lectura de process.env.
+│   ├── constants/catalogo.js           # TIPOS_CATALOGO, CATEGORIAS_GALERIA, PAGINACION_CATALOGO y mapeo de géneros TMDB.
+│   ├── validators/catalogo.validator.js # Validación defensiva con if de query y parámetros de ruta.
+│   ├── routes/catalogo.routes.js       # GET / y GET /:tipo/:tmdbId.
+│   ├── controllers/catalogo.controller.js # Valida entrada, llama al service y elige el código HTTP.
+│   └── services/catalogo.service.js    # Consulta TMDB con fetch + AbortSignal.timeout y normaliza al español.
+└── test/
+    ├── health.test.js                  # Esqueleto pf9 (3 pruebas).
+    └── catalogo.test.js                # 16 pruebas del contrato /api/catalogo y /api/catalogo/:tipo/:tmdbId.
+```
+
+#### Endpoints
+
+| Método | Ruta | Query / Parámetros | Respuestas |
+|---|---|---|---|
+| GET | `/health` | — | `200 { status: 'ok', service }` |
+| GET | `/api/catalogo` | `?tipo=all\|movie\|tv&categoria=Todos&busqueda=&pagina=1` | `200 { fuente: 'tmdb', filtros, resultados, paginacion }` · `400` · `500` sin API key · `502` fallo TMDB · `503` timeout |
+| GET | `/api/catalogo/:tipo/:tmdbId` | `:tipo` (`movie` o `tv`), `:tmdbId` (entero positivo) | `200` detalle normalizado · `400` · `404` si no existe en TMDB · `500` · `502` · `503` |
+
+```js
+// Elemento en resultados (GET /api/catalogo)
+{
+  id: 'movie-550',
+  tmdbId: 550,
+  titulo: 'El club de la pelea',
+  tipo: 'Película',          // 'Película' | 'Serie' (para TarjetaContenido y DetalleContenido)
+  tipoTmdb: 'movie',         // 'movie' | 'tv' (para rutas de detalle, recomendaciones y favoritos)
+  anio: 1999,
+  fecha: '1999-10-15',
+  generos: ['Drama', 'Acción'],
+  calificacion: 8.4,
+  sinopsis: '...',
+  descripcion: '...',
+  portada: 'https://image.tmdb.org/t/p/w500/pelea.jpg',
+  poster: 'https://image.tmdb.org/t/p/w500/pelea.jpg',
+  esDemostracion: false
+}
+```
+
+#### Seguridad y pruebas
+- `TMDB_API_KEY` vive únicamente en `microservicios/catalog-service/.env` (ignorado por Git y `.dockerignore`) y soporta tanto API Key v3 como Read Access Token v4. En caso de fallo de TMDB, el log registra solo el código interno sin exponer la clave.
+- `src/pages/Galeria/services/catalogo.js` consume `GET /api/catalogo` a través del API Gateway en el puerto `3000` (con respaldo a datos de demostración si el gateway está apagado en desarrollo local).
+- Pruebas automatizadas: **19/19 aprobadas** en `catalog-service` (`health.test.js` + `catalogo.test.js`) y **6/6 aprobadas** en `apigateway`.
+
+
 ### Dockerfile
 
 - Base `node:22-alpine`, igual que el gateway.
@@ -739,6 +794,14 @@ Cuando `pf4` defina su composición visual, debe importarlos desde esta carpeta 
 - Incorporar pruebas automatizadas cuando se definan los flujos funcionales.
 
 ## 17. Historial
+
+### 2026-10-31 — Microservicio de catálogo (`pf14_MSCatalogo`)
+
+- Se implementó `catalog-service` con `GET /api/catalogo` (tendencias, descubrimiento por tipo y categoría, búsqueda por texto y paginación) y `GET /api/catalogo/:tipo/:tmdbId` (detalle enriquecido de película o serie).
+- Se normalizaron los campos de TMDB al español y se tradujeron los identificadores de géneros a las siete categorías de la galería (`Acción`, `Comedia`, `Drama`, `Terror`, `Romance`, `Ciencia ficción`, `Animación`), manteniendo compatibilidad con `pf10`, `pf15` y `pf16`.
+- Se conectó `src/pages/Galeria/services/catalogo.js` y `GaleriaPrincipal.jsx` con `/api/catalogo` mediante el API Gateway (`puerto 3000`).
+- 19/19 pruebas aprobadas en `catalog-service` y 6/6 en `apigateway`, verificadas junto con `npm run lint` y `npm run build`.
+
 
 ### 2026-10-30 — Microservicio de emociones (`pf13_MSEmociones`)
 
