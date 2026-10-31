@@ -37,6 +37,11 @@ function GaleriaPrincipal() {
     return contenidos.filter((contenido) => contenido.generos.includes(categoria))
   }, [categoria, contenidos])
 
+  const mostrandoDemostracion = useMemo(
+    () => contenidos.length > 0 && contenidos.every((contenido) => contenido.esDemostracion === true),
+    [contenidos],
+  )
+
   const handleRecommendations = () => {
     setNotice('Mis Recomendaciones estará disponible cuando se integre pf15.')
     window.setTimeout(() => setNotice(''), 3500)
@@ -53,7 +58,9 @@ function GaleriaPrincipal() {
       <main className="gallery-main">
         <h1 className="visually-hidden">Galería principal de Butaca</h1>
         <FiltrosGaleria categorias={categoriasGaleria} activa={categoria} onChange={setCategoria} />
-        <p className="gallery-demo-note">Vista de demostración mientras se integra el catálogo real.</p>
+        {mostrandoDemostracion && (
+          <p className="gallery-demo-note">Vista de demostración mientras se integra el catálogo real.</p>
+        )}
 
         {estado === 'loading' && <EstadoGaleria estado="loading" />}
         {estado === 'error' && <EstadoGaleria estado="error" onRetry={recargarCatalogo} />}
