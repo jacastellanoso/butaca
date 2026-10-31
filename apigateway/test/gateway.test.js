@@ -118,3 +118,27 @@ test('las subrutas del historial emocional llegan a emotions-service sin cambios
     body: '',
   })
 })
+
+test('las rutas y subrutas del catálogo llegan a catalog-service sin cambios', async () => {
+  const listResponse = await fetch(`${baseUrl}/api/catalogo`)
+
+  assert.equal(listResponse.status, 200)
+  assert.deepEqual(receivedRequest, {
+    method: 'GET',
+    url: '/api/catalogo',
+    authorization: undefined,
+    body: '',
+  })
+
+  const detailResponse = await fetch(
+    `${baseUrl}/api/catalogo/movie/550?categoria=${encodeURIComponent('Acción')}`,
+  )
+
+  assert.equal(detailResponse.status, 200)
+  assert.equal(receivedRequest.method, 'GET')
+  assert.equal(
+    decodeURIComponent(receivedRequest.url),
+    '/api/catalogo/movie/550?categoria=Acción',
+  )
+  assert.equal(receivedRequest.body, '')
+})
