@@ -1,8 +1,11 @@
 import { env } from '../config/env.js'
+import { DependencyError } from '../clients/servicios.client.js'
 
-// El detalle queda en el log del contenedor; al cliente, un mensaje genérico.
+// No registrar excepciones de red: pueden incluir URLs o credenciales.
 export function errorHandler(error, req, res, next) {
-  console.error(`[${env.serviceName}] Error no controlado:`, error)
+  if (res.writableEnded || res.destroyed) return
+  if (error instanceof DependencyError) return res.status(error.status).json({ error: error.message })
+  console.error(`[${env.serviceName}] Error interno no controlado.`)
 
   if (res.headersSent) {
     next(error)
