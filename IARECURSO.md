@@ -852,13 +852,104 @@ Cuando `pf4` defina su composición visual, debe importarlos desde esta carpeta 
 - Integrar face-api.js en `Rostro` mediante `onVideoReady` y `detection` (`pf10_FaceAPI`).
 - Conectar el front con el backend enviando `Authorization: Bearer <access_token>` en cada petición protegida.
 - Cambiar la URL del frontend para consumir el API Gateway en el puerto `3000` en lugar de conocer cada microservicio.
-- Implementar la lógica de los cinco microservicios dentro de sus esqueletos de `microservicios/` (`pf12` a `pf16`). `auth-service` y `emotions-service` ya están implementados.
+- Completar `library-service` (`pf16`). Auth, emociones y catálogo ya están implementados en dev; recomendaciones está implementado en la rama `pf15_MSRecomendaciones` y pendiente de integración.
 - Aplicar, con autorización, la migración `20261030120000_animo_consentimiento_historial` y verificar `emotions-service` con Supabase, PostgreSQL y Docker reales.
 - Agregar en `Rostro` el consentimiento separado para conservar el historial y enviar los resultados a `POST /api/animos`.
-- Reemplazar las recomendaciones de ejemplo por TMDB (`pf11_TMDB`).
+- Integrar el frontend con `/api/recomendaciones` del gateway: pf15 ya obtiene contenido real mediante catálogo; el backend previo conserva sus ejemplos y no fue modificado.
 - Habilitar CORS con lista blanca, helmet y rate limit en el backend (`pf16_Seguridad`); hasta entonces el navegador bloquea las peticiones desde `localhost:5173`.
 - Sustituir el favicon provisional de Vite por el recurso oficial de Butaca cuando se proporcione.
 - Incorporar pruebas automatizadas cuando se definan los flujos funcionales.
+
+## Microservicio de recomendaciones (`pf15_MSRecomendaciones`)
+
+### Alcance y arquitectura
+
+Implementado en `microservicios/recommendations-service/`, puerto interno 3024, desde dev `87a29a4`. No modifica frontend, otros microservicios, gateway ni Compose. No incorpora dependencias nuevas, Prisma, SDK de Supabase, credenciales TMDB ni acceso a tablas. El Dockerfile existente sigue usando Node 22 Alpine, usuario node y health check.
+
+Flujo: router → autenticación HTTP → controlador/validación → servicio de recomendaciones → clientes HTTP internos. `src/app.js` conserva la exportación `app` y añade `crearApp` con configuración y fetch inyectables para las pruebas.
+
+- Auth: `GET /api/sesiones` con el Bearer original; la identidad verificada queda en `req.user`. No sincroniza usuarios ni escribe datos.
+- Emociones: `GET /api/animos/:id` con el mismo Bearer. El servicio propietario aplica el aislamiento por usuario. Se comprueba el id devuelto, la emoción y `consentimientoHistorial === true`; un registro sin consentimiento se trata como inexistente. No se selecciona automáticamente un ánimo anterior.
+- Catálogo: dos consultas paralelas a `GET /api/catalogo?tipo=...&categoria=...&pagina=1`, sin enviar el Bearer. Catálogo conserva toda la integración TMDB. Se exige `fuente: 'tmdb'`, contenido no demostrativo y campos compatibles; `calificacion: null` es válido según el normalizador existente.
+
+### Contrato HTTP
+
+| Método | Ruta | Sesión | Resultado |
+|---|---|---|---|
+| GET | `/health` | No | `200 { status: 'ok', service: 'recommendations-service' }` |
+| GET | `/api/recomendaciones?emocion=happy&tipo=movie` | Bearer | Recomendaciones por emoción explícita, sin guardar historial |
+| GET | `/api/recomendaciones?animoId=<uuid>&tipo=tv` | Bearer | Recomendaciones por un ánimo propio autorizado |
+
+Se exige exactamente uno de `emocion` o `animoId`. `tipo` es `movie` por defecto o `tv`. Se rechazan parámetros desconocidos, repetidos, vacíos o incompatibles. La autenticación precede a la validación. No hay endpoints de escritura.
+
+Respuesta de ejemplo estructural (no es una consulta real a TMDB):
+
+```json
+{"emocion":"happy","tipo":"movie","fuente":"tmdb","resultados":[]}
+```
+
+Cada resultado conserva `{ tmdbId, titulo, descripcion, poster, fecha, calificacion, tipo }`, donde `tipo` es `movie` o `tv`. Se devuelve como máximo 20, deduplicados por tipo e id. Orden: prioridad editorial de categoría, calificación descendente (sin calificación al final) e id ascendente. Solo se consulta la primera página de cada categoría; no se promete cubrir todo el catálogo. Las respuestas protegidas usan `Cache-Control: no-store`.
+
+Errores siempre `{ error: 'mensaje' }`: `400` entrada inválida, `401` sesión ausente/rechazada, `404` ánimo inexistente/ajeno/sin consentimiento, `502` respuesta o estructura inválida de dependencias, `503` indisponibilidad o timeout. Los estados 429 y 5xx de dependencias se consideran indisponibilidad. Un 404 de auth se considera respuesta inválida (`502`). Los fallos parciales producen error, sin resultados incompletos ni ejemplos de respaldo. Errores internos inesperados: `500` genérico. No se imprimen tokens, URLs de peticiones ni excepciones externas.
+
+### Preferencias editoriales
+
+Las siete categorías reales son Acción, Comedia, Drama, Terror, Romance, Ciencia ficción y Animación (además del filtro Todos). Se adaptó la propuesta: Aventura → Acción, Familiar → Animación, Fantasía → Ciencia ficción y Misterio → Terror, conforme a la agrupación de géneros del catálogo. No se inventaron filtros ni se atribuyen efectos terapéuticos.
+
+| Emoción | Categorías en orden de prioridad |
+|---|---|
+| happy | Comedia, Acción |
+| sad | Comedia, Animación |
+| angry | Acción, Comedia |
+| fearful | Comedia, Animación |
+| disgusted | Acción, Ciencia ficción |
+| surprised | Ciencia ficción, Terror |
+| neutral | Drama, Acción |
+
+### Configuración y archivos
+
+`src/config/env.js` es la única lectura de variables de entorno. `.env.example` documenta valores de desarrollo sin secretos:
+
+| Variable | Valor predeterminado |
+|---|---|
+| SERVICE_NAME | recommendations-service |
+| PORT | 3024 |
+| AUTH_SERVICE_URL | http://auth-service:3021 |
+| EMOTIONS_SERVICE_URL | http://emotions-service:3022 |
+| CATALOG_SERVICE_URL | http://catalog-service:3023 |
+| REQUEST_TIMEOUT_MS | 4000 |
+| UPSTREAM_TIMEOUT_MS | 2500 |
+
+En Docker se usan los nombres DNS existentes; al ejecutar cada servicio localmente, configurar las URLs a localhost con su puerto. Las URLs solo aceptan orígenes HTTP/HTTPS sin credenciales, rutas ni query. Ambos timeouts aceptan enteros de 1 a 4000 ms. Todas las llamadas comparten el plazo total de 4000 ms, inferior a los 5000 ms del gateway; incluye lectura de bodies. Se cancelan al finalizar/cerrar la respuesta y no se siguen redirecciones con credenciales. El cumplimiento temporal depende también de la disponibilidad del event loop.
+
+Modificados: `.env.example`, `src/app.js`, `src/config/env.js`, `src/middlewares/errorHandler.js`. Creados: `src/clients/servicios.client.js`, `src/constants/recomendaciones.js`, `src/controllers/recomendaciones.controller.js`, `src/middlewares/requireAuth.js`, `src/routes/recomendaciones.routes.js`, `src/services/recomendaciones.service.js`, `src/validators/recomendaciones.validator.js` y `test/recomendaciones.test.js`. Todos dentro del servicio. Documentación: esta guía.
+
+### Verificación inicial de entrega — 2026-10-31
+
+- `npm.cmd ci --ignore-scripts --no-audit --no-fund --prefix microservicios/recommendations-service`: dependencias existentes instaladas, sin cambiar manifiestos ni lockfile.
+- `npm.cmd test --prefix microservicios/recommendations-service`: **56/56 aprobadas**, 0 fallos, cancelaciones u omisiones. Las primeras 53 se ampliaron con calificación null, rechazo de demostraciones e id emocional inconsistente.
+- Cobertura: health público, 404, X-Powered-By ausente, autenticación, siete emociones, movie/TV, ánimo autorizado, reenvío del Bearer, rechazo de registro ajeno/sin consentimiento, validaciones, orden y deduplicación, máximo veinte, vacío, fallo parcial, errores/red/JSON/HTML y estructuras inválidas de las tres dependencias.
+- Auth, emociones y catálogo se **simulan** en las pruebas de contrato; aislamiento real entre cuentas y consentimiento en la base no se verificaron. Los timeouts de cabeceras, body incompleto y plazo global se prueban con servidores HTTP locales reales que no completan respuestas; no son pruebas contra Supabase ni TMDB.
+- API Gateway: **6/6 aprobadas**, con upstreams locales de prueba. No se modificó su suite ni se comprobó un despliegue completo por el gateway.
+- `npm.cmd run lint`: aprobado. `npm.cmd run build -- --outDir <temporal>/butaca-pf15-final-build --emptyOutDir false`: aprobado; 101 módulos, salida fuera del repositorio, sin editar dist.
+- `git diff --check`: aprobado. Sin cambios en otros microservicios ni frontend; no se agregaron archivos .env privados ni credenciales. No se realizaron commits, push, merges, rebases o migraciones.
+- Docker: CLI presente, pero motor inaccesible (pipe docker_engine inexistente); además reporta acceso denegado a su configuración. Construcción, arranque y estado healthy de contenedores **no verificados**.
+- Pendiente: prueba integral con sesiones reales y catálogo TMDB configurado cuando el entorno esté disponible, validación Docker y futura integración de frontend/CORS. No se ejecutaron escrituras en bases reales ni revisión visual en móviles/escritorio, pues esta entrega solo cambia un API y documentación.
+
+### Verificación adicional antes de publicar — 2026-10-31
+
+Esta verificación sustituye el bloqueo Docker anterior. Docker Desktop estaba iniciado; el motor 29.9.2 respondió al ejecutar fuera del entorno restringido con una configuración Docker temporal vacía, sin utilizar credenciales del usuario.
+
+- Imagen `butaca-pf15-review:local` construida con el Dockerfile existente y `--build-arg PORT=3024`. Construcción aprobada; el `npm ci --omit=dev` de la imagen reportó 0 vulnerabilidades en ese momento. Docker avisó que el builder clásico está deprecado; no impidió la construcción.
+- Contenedor temporal `butaca-pf15-review`, publicado exclusivamente en `127.0.0.1:39096`, ejecutado con usuario `node`, sin volúmenes, archivos .env ni credenciales reales. Dependencias dirigidas a `http://host.docker.internal:39095`; timeouts ficticios de prueba: global 3500 ms, por llamada 1200 ms.
+- Estado inspeccionado: **running healthy**. `GET /health` desde dentro del contenedor y desde el host: **200** con `{ "status": "ok", "service": "recommendations-service" }`.
+- Nuevo `microservicios/recommendations-service/test/http.test.js`: servidores HTTP simulados locales para auth, emociones y catálogo, utilizando el cliente fetch real. Puede ejecutarse normalmente con `npm test`, sin Docker, con puertos aleatorios y loopback. En modo contenedor, `PF15_TEST_CONTAINER_URL=http://127.0.0.1:39096` selecciona el contenedor y el simulador escucha en el puerto 39095 accesible desde Docker. Esta variable solo pertenece a pruebas, no al servicio productivo. No requiere cambios en Dockerfile ni dependencias.
+- Prueba del contenedor: **18/18 aprobadas** (17 subcasos y su prueba contenedora, tal como los cuenta node:test): health, emoción/movie, ánimo/TV, reenvío del Bearer ficticio solo a auth/emociones, falta de sesión, parámetros repetidos, sesión inválida, indisponibilidad de auth/catálogo, ánimo ajeno, falta de consentimiento, JSON y estructura inválidos, fallo parcial, rechazo de redirecciones, timeouts de auth y body del catálogo, y resultados vacíos. Verificados estados 200/400/401/404/502/503 y JSON.
+- Suite completa local de recomendaciones: **74/74 aprobadas**, 0 fallos, cancelaciones u omisiones (56 previas + 18 nuevas). Gateway: **6/6 aprobadas** con upstreams locales simulados.
+- Lint aprobado. Build general aprobado (101 módulos; salida en directorio temporal `butaca-pf15-docker-review-build`, fuera del repositorio). `git diff --check` aprobado.
+- No hay archivos adicionales de Docker/build para incluir o excluir del commit; imagen y contenedor viven en Docker, configuración y build en el directorio temporal del sistema. El contenedor temporal se retira al finalizar. Se conserva la imagen local para repetir las pruebas. No se alteraron otros microservicios, frontend, gateway, Compose ni lockfiles.
+- Estas son pruebas de red y contenedor reales **con dependencias simuladas**. No validan el funcionamiento conjunto de auth/emociones/catálogo reales, Supabase, PostgreSQL o TMDB.
+- Pendiente real: recorrido completo por el gateway con los tres servicios existentes configurados. Auth necesitaría su configuración privada de Supabase y una sesión válida de prueba; comprobar aislamiento entre personas requeriría dos sesiones de cuentas autorizadas. Emociones necesitaría su conexión PostgreSQL y registros propios ya existentes con consentimiento (esta revisión no crea registros). Catálogo necesitaría su credencial TMDB configurada de forma privada en ese servicio. Recomendaciones no necesita SDK ni credenciales de esas plataformas. No se solicitaron ni leyeron estos datos, ni se realizaron migraciones o escrituras reales.
 
 ## 17. Historial
 
@@ -870,6 +961,10 @@ Cuando `pf4` defina su composición visual, debe importarlos desde esta carpeta 
 - Se garantizó el aislamiento por `req.user.id`, el manejo de `P2003` con respuesta `409` cuando el usuario autenticado no tiene registro local en `Usuario`, la ocultación de detalles internos de Prisma en errores `500` y el ajuste del `Dockerfile` con OpenSSL y generación del cliente Prisma (`6.19.3`).
 - Se agregaron 22 pruebas automatizadas en `microservicios/library-service/test/biblioteca.test.js` y la prueba de enrutamiento para `/api/favoritos` y `/api/historial` en `apigateway/test/gateway.test.js`.
 
+### 2026-10-31 — Microservicio de recomendaciones (`pf15_MSRecomendaciones`)
+
+- Implementado GET protegido por auth-service, selección por emoción explícita o ánimo autorizado y consulta HTTP a catálogo, sin persistencia propia ni integración TMDB duplicada.
+- Contrato, mapeo editorial, configuración, errores y resultados de pruebas detallados en la sección de recomendaciones anterior. Rama de trabajo pendiente de revisión e integración; Docker e integración real pendientes.
 
 ### 2026-10-31 — Microservicio de catálogo (`pf14_MSCatalogo`)
 
