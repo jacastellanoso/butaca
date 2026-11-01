@@ -1203,3 +1203,90 @@ Esta verificación sustituye el bloqueo Docker anterior. Docker Desktop estaba i
 - Se crearon ondas animadas, entrada secuencial del título y botones visuales sin autenticación.
 - Se implementó adaptación para escritorio, móvil y movimiento reducido.
 - Se estableció Montserrat como tipografía oficial local del proyecto.
+
+## Integración frontend de recomendaciones — pf18_TMDB
+
+Implementada sobre `9361e5522f5a7b425daac03058fa64e1351c1558`, con pf17 integrado. Su objetivo es preparar el consumo autenticado de recomendaciones TMDB para pf20, sin implementar pantalla, dashboard ni navegación y sin modificar la cámara, la detección facial, los microservicios o el Gateway.
+
+### Servicio y parámetros
+
+`src/services/recomendaciones.js` exporta `obtenerRecomendaciones(parametros)`. Usa directamente `solicitarApi` de `src/lib/api.js`: obtiene la sesión existente de Supabase y envía el Bearer al API Gateway. No recibe tokens como parámetros, no registra datos privados, no persiste resultados y no llama directamente a TMDB. Las peticiones son GET, sin body.
+
+| Parámetro | Valores y validación |
+|---|---|
+| `emocion` | `neutral`, `happy`, `sad`, `angry`, `fearful`, `disgusted`, `surprised` |
+| `animoId` | UUID de un registro propio autorizado; el backend verifica propiedad y consentimiento |
+| `tipo` | `movie` por defecto o `tv` |
+
+Se exige exactamente uno entre `emocion` y `animoId`. Se rechazan valores vacíos, tipos incorrectos, arreglos y propiedades desconocidas antes de consultar sesión o red. Las propiedades opcionales deben omitirse, no enviarse con `undefined`. No se elige automáticamente un ánimo anterior ni se guarda uno para obtener recomendaciones.
+
+### Respuesta y adaptación
+
+La promesa devuelve `{ emocion, tipo, fuente: 'tmdb', resultados }`. El `tipo` exterior conserva `movie` o `tv`; cada elemento interior usa el formato de Galería:
+
+| Campo de salida | Origen |
+|---|---|
+| `id` | `${tipo}-${tmdbId}`: estable y distinto para película/serie con el mismo id numérico |
+| `tmdbId` | Identificador numérico real de TMDB, sin reemplazarlo por el compuesto |
+| `tipoTmdb` | `tipo` del backend (`movie` o `tv`) |
+| `tipo` | Etiqueta visual `Película` o `Serie` |
+| `titulo` | Se conserva |
+| `descripcion`, `sinopsis` | `descripcion` del backend |
+| `poster`, `portada` | `poster` del backend; conserva `null` |
+| `fecha` | Se conserva, incluido `null` |
+| `anio` | Derivado de una fecha con formato `YYYY-MM-DD`; `null` si no está disponible en ese formato |
+| `generos` | `[]`: el contrato no proporciona géneros; no representa una clasificación |
+| `calificacion` | Se conserva, incluido `null` |
+| `esDemostracion` | `false`, después de exigir `fuente: 'tmdb'` |
+
+Se valida la estructura, la emoción y el tipo recibidos y los campos necesarios para React. Se rechazan identificadores duplicados y respuestas incompatibles completas, sin presentar resultados parciales. Se conserva el orden editorial del backend. Una lista vacía válida permanece vacía; no hay datos de respaldo ni simulaciones en producción. No se hacen consultas adicionales por elemento para inventar o completar géneros.
+
+### Ejemplos destinados a pf20
+
+```js
+import { obtenerRecomendaciones } from './services/recomendaciones.js'
+
+// Resultado actual, sin guardar historial emocional.
+const peliculas = await obtenerRecomendaciones({ emocion: 'happy' })
+const series = await obtenerRecomendaciones({ emocion: 'neutral', tipo: 'tv' })
+
+// registroAutorizado proviene del historial propio o de un guardado consentido.
+const anteriores = await obtenerRecomendaciones({
+  animoId: registroAutorizado.id,
+  tipo: 'movie',
+})
+
+// Dentro del componente de pf20:
+// <CuadriculaContenido contenidos={peliculas.resultados} onSelect={setSeleccionado} />
+// <DetalleContenido contenido={seleccionado} onClose={cerrarDetalle} />
+```
+
+La ruta del import debe ajustarse a la ubicación del consumidor. pf20 debe mantener estados de carga, éxito, vacío y error, presentar `error.message` de forma accesible, permitir reintentos y descartar resultados anteriores al cambiar consulta, análisis o usuario. No debe usar el filtro por géneros como si `generos: []` contuviera esa información. La navegación desde Rostro y la transferencia del resultado quedan a cargo de pf20.
+
+### Errores
+
+Los errores son `ApiError` con `codigo`, `message` seguro y `status` cuando existe estado HTTP. No se muestran cuerpos de error ni excepciones externas. Ajustes compatibles en el cliente compartido: mensajes de sesión generales, estados 400/404/503, sanitización de fallos de sesión y JSON inválido; se mantienen 403/409 y el guardado existente.
+
+| Caso | Código |
+|---|---|
+| Parámetros locales inválidos / HTTP 400 | `parametros-invalidos` |
+| Sesión ausente | `sin-sesion` |
+| Error al obtener la sesión | `sesion-no-disponible` |
+| HTTP 401 | `sesion-expirada` |
+| HTTP 404 | `registro-no-encontrado` |
+| HTTP 502/503 | `servicio-no-disponible` |
+| Fallo de red | `sin-conexion` |
+| JSON o contrato incompatible | `respuesta-invalida` |
+
+Para JSON inválido se conserva el estado HTTP recibido; para estructura incompatible del contrato se usa 502. Los fallos locales de sesión/red no tienen estado HTTP. No se exige consentimiento de historial para consultar por emoción explícita, pero ambas modalidades requieren sesión.
+
+### Verificación y pendientes — 2026-11-01
+
+- `npm.cmd test`: **67/67 aprobadas**, 0 fallos, cancelaciones u omisiones: 56 nuevas y 11 existentes. Se cubren las siete emociones, ánimo autorizado, movie/TV, validación previa, adaptación, ids, vacíos, HTTP 400/401/404/502/503, sesión, red, JSON inválido y estructuras incompatibles. Se ejecuta el cliente HTTP real, sustituyendo únicamente Supabase y fetch con datos ficticios de prueba. Las excepciones y respuestas maliciosas simuladas no exponen la credencial ficticia.
+- Compatibilidad React comprobada renderizando los componentes existentes de cuadrícula, tarjeta y detalle con películas y series adaptadas y campos `null`. El JSX se transforma en memoria mediante Vite, sin editar componentes ni generar archivos en el repositorio. Los hooks de módulos usados por las pruebas requieren una versión de Node con `node:module.registerHooks` (ejecutado con Node 24.19.0).
+- `npm.cmd run lint`: aprobado.
+- `npm.cmd run build -- --outDir <carpeta temporal>`: aprobado; salida fuera de `dist`. Advertencias: destino fuera de la raíz y bloque FaceAPI mayor a 500 kB. No se modifica la lógica facial para resolver esa advertencia.
+- Dependencias declaradas restauradas con `npm.cmd ci --ignore-scripts --no-audit --no-fund`, sin cambiar `package.json` ni el lock. El primer intento restringido falló con EACCES; el reintento autorizado completó la instalación.
+- `git diff --check`: aprobado. La implementación inicial se verificó antes de commit/push; la revisión final repitió las 67 pruebas, lint y build satisfactoriamente para autorizar la publicación de pf18. No se ejecutaron migraciones, escrituras en bases, lecturas de archivos privados ni activación de cámara.
+- Pendiente: recorrido real con Supabase, Gateway, servicios y TMDB configurados, incluido aislamiento entre cuentas para `animoId`. Estas pruebas automatizadas no acreditan disponibilidad de esos servicios ni autenticación real.
+- Pendiente para pf20: conexión visual, estados y navegación; verificación en navegador de teclado, foco y distintos anchos de escritorio/móviles. pf18 no cambia HTML/CSS ni implementa una pantalla para esa revisión visual.
