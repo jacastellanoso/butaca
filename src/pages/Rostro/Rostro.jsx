@@ -55,13 +55,15 @@ function CameraError({ reason, onRetry }) {
 /**
  * Pantalla de cámara, consentimiento y estado de detección de emociones.
  *
- * Puntos de integración para `pf10_FaceAPI`:
+ * Puntos de integración (face-api.js se conecta en `pf17_FaceAPI`, ver RostroDeteccion):
  * - onVideoReady(video): recibe el <video> en vivo cuando hay imagen y
  *   `null` cuando la cámara se apaga. Ese elemento es la entrada de face-api.js.
  * - detection: { status, emotion, confidence, message } con el resultado a
  *   mostrar en EmotionStatus. Sin este valor, la pantalla muestra "Cámara lista".
+ * - children: acciones opcionales que se muestran debajo del panel mientras
+ *   la cámara está activa (por ejemplo, analizar de nuevo o guardar).
  */
-function Rostro({ detection, onVideoReady }) {
+function Rostro({ detection, onVideoReady, children }) {
   const { videoRef, status, error, start, stop } = useCamera()
   const [consent, setConsent] = useState('pending')
 
@@ -163,6 +165,8 @@ function Rostro({ detection, onVideoReady }) {
               </button>
             </div>
           )}
+
+          {isActive && children}
 
           <a className="rostro-button rostro-button--gallery" href="#galeria">
             Explorar la galería

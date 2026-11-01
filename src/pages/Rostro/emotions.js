@@ -1,5 +1,5 @@
 // Etiquetas en español para las siete expresiones que entrega face-api.js
-// (`detection.expressions`). La detección real se integra en `pf10_FaceAPI`.
+// (`detection.expressions`). La detección real se integró en `pf17_FaceAPI`.
 export const EMOTIONS = {
   neutral: { label: 'Calma', description: 'Tu expresión se ve tranquila.' },
   happy: { label: 'Alegría', description: 'Se nota que hoy estás de buen humor.' },
