@@ -7,15 +7,18 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --test \"src/**/*.test.js\""
   },
   "dependencies": {
     "@fontsource/montserrat": "^5.3.0",
     "@supabase/supabase-js": "^2.118.0",
+    "@vladmandic/face-api": "^1.7.15",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },
   "devDependencies": {
+    "@tensorflow/tfjs-backend-wasm": "4.22.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",

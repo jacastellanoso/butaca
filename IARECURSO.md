@@ -14,6 +14,7 @@
 - Rama de contenedores: `pf9_Docker`, basada en `dev`. Esqueletos de los cinco microservicios en `microservicios/`, cada uno con su `Dockerfile`, y `compose.yaml` que levanta los seis contenedores con health checks.
 - Rama del pie de página: `pf11_Pie`, basada en `dev` (con la galería de `pf10_GaleriaPrincipal` ya integrada). Componente reutilizable `Footer` integrado en la galería.
 - Rama del microservicio de emociones: `pf13_MSEmociones`, basada en `dev` (con `pf12_MSAutenticacion` integrada). `emotions-service` recibe, guarda y consulta resultados emocionales autorizados en `/api/animos` (sección 8). La migración aditiva `20261030120000_animo_consentimiento_historial` está **aplicada** en la base de Supabase.
+- Rama de detección de emociones: `pf17_FaceAPI`, basada en `dev`. `Rostro` detecta la expresión con face-api.js en el navegador y, con autorización explícita, guarda el resultado en `emotions-service` (sección 5).
 - Pantallas implementadas: `Main`, destinada visualmente a visitantes sin sesión, y `Rostro`, con cámara, consentimiento e interfaz de detección de emociones (accesible temporalmente desde `/#rostro`).
 - Alcance actual: presentación visual, animaciones e inicio de sesión OAuth 2.0 con Google o GitHub mediante Supabase. El cliente conserva y renueva la sesión; todavía no existen rutas protegidas ni una pantalla posterior al acceso.
 - Tipografía oficial de toda la aplicación: **Montserrat**. Está instalada localmente mediante `@fontsource/montserrat` y se cargan solamente los subconjuntos latinos de los pesos 400, 600, 700 y 800 desde `src/main.jsx`.
@@ -36,6 +37,8 @@ Antes de implementar un cambio:
 12. Cada microservicio es un proyecto npm independiente en `microservicios/<servicio>/`. No importa código de otro servicio ni de `backend/`: si necesita algo, lo copia o lo pide por HTTP a través de su contrato.
 13. Los secretos de un microservicio viven en `microservicios/<servicio>/.env` (ignorado por Git y por `.dockerignore`) y se documentan sin valores en su `.env.example`. Nunca se escriben en el `Dockerfile` ni en `compose.yaml`.
 14. Solo `api-gateway` publica un puerto en `compose.yaml`. Los microservicios no deben agregar `ports:`.
+15. El frontend llama al backend solo mediante `src/lib/api.js` (`solicitarApi`), que agrega el token de Supabase y traduce errores. No se arma `fetch` con `Authorization` dentro de componentes.
+16. face-api.js se analiza solo en el navegador. Ningún fotograma, imagen ni video se envía, se guarda ni se dibuja fuera del `<video>`: al backend viajan únicamente la emoción y su confianza, y solo con la casilla de autorización marcada.
 
 Después de implementar un cambio:
 
@@ -46,6 +49,7 @@ Después de implementar un cambio:
 5. Si se modificó el backend, levantarlo con `npm run dev` dentro de `backend/` y comprobar que `GET /api/health` responde `200`.
 6. Si se modificó el gateway, ejecutar `npm test` dentro de `apigateway/`, comprobar `GET /health` y validar `docker compose config` cuando Docker esté disponible.
 7. Si se modificó un microservicio, ejecutar `npm test` dentro de su carpeta y `docker compose up --build -d` desde la raíz; `docker compose ps` debe mostrar los seis contenedores `healthy`.
+8. Si se modificó el frontend con lógica pura (sin React ni navegador), agregar o actualizar su `*.test.js` y ejecutar `npm test` en la raíz.
 
 ## 3. Arquitectura actual
 
@@ -63,7 +67,8 @@ src/
 ├── components/
 │   └── Footer/              # Pie de página reutilizable (pf11_Pie).
 ├── lib/
-│   └── supabase.js          # Cliente único de Supabase y entrada a OAuth.
+│   ├── supabase.js          # Cliente único de Supabase y entrada a OAuth.
+│   └── api.js               # solicitarApi: fetch al gateway con token y errores traducidos (pf17).
 └── pages/
     ├── Main/
     │   ├── Main.jsx         # Estructura semántica de la pantalla inicial.
@@ -74,7 +79,20 @@ src/
         ├── CameraConsent.jsx  # Solicitud de consentimiento y variante de rechazo.
         ├── EmotionStatus.jsx  # Presentación de los estados de detección.
         ├── emotions.js        # Etiquetas en español de las expresiones de face-api.js.
-        └── useCamera.js       # Ciclo de vida de getUserMedia y errores de cámara.
+        ├── useCamera.js       # Ciclo de vida de getUserMedia y errores de cámara.
+        ├── RostroDeteccion.jsx    # Une Rostro con face-api.js (pf17); es lo que muestra App en /#rostro.
+        ├── AccionesResultado.jsx  # "Analizar de nuevo" y guardado con autorización explícita.
+        ├── services/
+        │   └── animos.js          # Sincroniza el usuario y llama a POST /api/animos.
+        └── deteccion/
+            ├── cargarFaceApi.js           # Import dinámico de face-api.js y carga de modelos.
+            ├── useFaceDetection.js        # Ventana de observación y estado `detection`.
+            ├── analizarExpresiones.js     # Lógica pura: normalizar, promediar y decidir.
+            └── analizarExpresiones.test.js
+
+public/models/                 # Modelos de face-api.js servidos por la propia app (pf17):
+                               # tiny_face_detector y face_expression (~520 KB).
+public/wasm/                   # Motor WebAssembly de TensorFlow.js 4.22.0 (pf17), respaldo sin WebGL.
 ```
 
 ```text
@@ -194,6 +212,99 @@ Diseño de la pantalla de cámara, consentimiento e interfaz de detección. **No
 - Hasta `1100px` se ocultan lentes y ticket; hasta `820px` las decoraciones bajan al 55 % de opacidad y el panel de estado pasa a columna; hasta `480px` los botones ocupan todo el ancho; con altura de hasta `640px` en escritorio se compacta el contenido.
 - Animaciones: `rostro-rise` (entrada del encabezado, recuadro y panel), `face-scan` (barrido al analizar) y `status-pulse` (indicador de análisis). Todas se desactivan con `prefers-reduced-motion`.
 - Accesibilidad: `EmotionStatus` usa `role="status"` con `aria-live="polite"`, los errores de cámara usan `role="alert"`, la confianza se expone como `role="meter"` y todos los botones conservan foco visible.
+
+### Detección con face-api.js (`pf17_FaceAPI`)
+
+#### Alcance
+
+Integra `@vladmandic/face-api` (fork mantenido sugerido por el brief) en `Rostro` mediante el contrato de pf4, sin rediseñar la pantalla. También guarda el resultado en `emotions-service` (`POST /api/animos`) cuando el usuario lo autoriza. **No** incluye la pantalla de recomendaciones ni el tablero (`pf20_RecomDashboard`) ni CORS de producción (`pf23_Seguridad`).
+
+#### Flujo
+
+1. El usuario acepta el consentimiento de cámara (pf4). Cuando el `<video>` tiene imagen, `onVideoReady` dispara el análisis automáticamente.
+2. **Preparando** (`analyzing` con mensaje): la primera vez se descarga face-api.js con sus modelos y se hace una inferencia de calentamiento (WebGL compila sus shaders; puede tardar varios segundos en equipos sin GPU).
+3. **Analizando** (`analyzing`): se observa el video unos 3 s, unas 5 veces por segundo. De cada fotograma con rostro se guardan en memoria **solo las siete probabilidades**.
+4. **Resultado**: se promedian las probabilidades y se elige la expresión dominante.
+   - `detected` si hubo al menos 5 fotogramas con rostro y la confianza promedio es ≥ 0.5.
+   - `inconclusive` si no se vio el rostro lo suficiente o la expresión fue ambigua, con un mensaje que indica cómo mejorar.
+   - `error` si no se pudo cargar el analizador.
+5. **Acciones** (`AccionesResultado`, debajo del panel):
+   - **Analizar de nuevo** repite el análisis.
+   - Con `detected`, se muestra la casilla *"Autorizo guardar esta emoción en mi historial…"*, desmarcada por defecto, y **Guardar resultado**, deshabilitado hasta marcarla. La casilla se reinicia en cada análisis.
+6. **Apagar cámara** cancela cualquier análisis en curso y vuelve a `ready`.
+
+#### Parámetros (`CONFIG_ANALISIS` en `analizarExpresiones.js`)
+
+| Parámetro | Valor | Motivo |
+|---|---:|---|
+| `duracionMs` | 3000 | "Que me mire a la cara un segundo", con margen para promediar. |
+| `duracionMaximaMs` | 8000 | En equipos lentos (~1 s por fotograma) se sigue observando hasta juntar el mínimo de muestras, con un tope. |
+| `intervaloMs` | 200 | ~5 fotogramas por segundo: suficiente para promediar sin saturar la CPU. |
+| `minimoMuestras` | 5 | Menos fotogramas con rostro no son representativos. |
+| `umbralConfianza` | 0.5 | Por debajo, ninguna expresión domina con claridad. |
+
+- Detector: `TinyFaceDetector` con `inputSize: 224` y `scoreThreshold: 0.5` (el más liviano; adecuado para un rostro frontal cercano a la cámara).
+- Promediar evita que un parpadeo o un gesto de un solo fotograma decida el resultado.
+- `debeTerminar`: la ventana cierra a los 3 s si ya hay 5 muestras, o a los 8 s en cualquier caso.
+
+#### Motor de TensorFlow.js
+
+`cargarFaceApi.js` prueba los motores en orden y usa el primero disponible. El elegido se informa en consola: `[face-api] Motor de TensorFlow.js: <motor>`.
+
+| Motor | Cuándo se usa | Tiempo por fotograma medido |
+|---|---|---|
+| `webgl` | El navegador ofrece WebGL (GPU). | ~20–50 ms con GPU real. |
+| `wasm` | WebGL no disponible: Brave con protección anti-fingerprinting, aceleración por hardware apagada o equipos sin GPU. | ~60 ms. |
+| `cpu` | Respaldo final si fallan los dos anteriores. | ~1000 ms. |
+
+- Los binarios `tfjs-backend-wasm.wasm` y `tfjs-backend-wasm-simd.wasm` están en `public/wasm/`. Se copiaron de `@tensorflow/tfjs-backend-wasm` **4.22.0**, instalado como `devDependency` con versión exacta (`-E`) porque debe coincidir con el TensorFlow.js que trae face-api 1.7.15. Si se actualiza face-api, hay que revisar su versión de TensorFlow.js y volver a copiar los binarios de la misma versión.
+- `setWasmPaths('/wasm/')` es obligatorio. Sin esa ruta, el motor busca los `.wasm` junto al bundle, Vite responde `index.html` y la consola muestra `expected magic word 00 61 73 6d, found 3c 21 64 6f`.
+- No se copió `tfjs-backend-wasm-threaded-simd.wasm`: requiere `crossOriginIsolated` (encabezados COOP/COEP), que la app no usa.
+- Con WASM o CPU, la consola muestra igualmente avisos `Could not get context for WebGL` e `Initialization of backend webgl failed`: son el intento fallido de WebGL y son esperados.
+
+#### Privacidad y rendimiento
+
+- face-api.js se carga con `import()` dinámico: queda en un archivo aparte (~330 KB gzip, TensorFlow.js incluido) que solo se descarga al abrir `Rostro`. El aviso de Vite *"Some chunks are larger than 500 kB"* se refiere a ese archivo y es esperado.
+- Los modelos están en `public/models/` y se sirven desde la propia app. No se usa CDN y ninguna imagen sale del navegador.
+- `normalizarMuestra` copia únicamente las siete probabilidades conocidas; no se conservan cajas, puntos faciales, fotogramas ni canvas.
+- El análisis se pausa mientras la pestaña está oculta y se cancela al apagar la cámara o salir de la pantalla.
+
+#### Guardado en `emotions-service`
+
+- `services/animos.js` → `guardarAnimo({ emocion, confianza })`:
+  1. `POST /api/usuarios` (auth-service) una vez por sesión de la página, porque emotions-service responde `409` si el usuario no existe en la tabla `Usuario`. El upsert es idempotente.
+  2. `POST /api/animos` con `{ emocion, confianza, origen: 'deteccion', consentimientoHistorial: true }`.
+- `src/lib/api.js` → `solicitarApi(ruta, { method, body })` obtiene el `access_token` de la sesión de Supabase y lo envía como `Authorization: Bearer`. Traduce errores a mensajes para el usuario: sin sesión, `401`, `403`, `409`, `502` y sin conexión.
+- Sin sesión iniciada, no se hace ninguna petición: se muestra *"Iniciá sesión con Google o GitHub…"* con enlace a la bienvenida.
+
+#### Conexión con el gateway en desarrollo (proxy de Vite)
+
+- `vite.config.js` reenvía `/api/*` de `localhost:5173` al gateway en `localhost:3000`. Para el navegador es el mismo origen, así que **no aplica CORS** en desarrollo.
+- `solicitarApi` usa `VITE_API_GATEWAY_URL`; si está vacía o no existe, llama a rutas relativas (`/api/...`) que toma el proxy.
+- En producción se define `VITE_API_GATEWAY_URL` con la URL HTTPS pública del gateway, y el gateway debe aplicar CORS con lista blanca (`pf23_Seguridad`).
+- `services/catalogo.js` (pf14) conserva su propia lectura de la variable. Si `VITE_API_GATEWAY_URL` existe vacía en `.env.local`, también pasa por el proxy.
+
+#### Problema de configuración encontrado al probar
+
+Al reemplazar `[YOUR-PASSWORD]` en las cadenas que entrega **Connect → ORMs → Prisma**, quedó un corchete en `DATABASE_URL` y no en `DIRECT_URL`. Prisma reportó `P1001: Can't reach database server`, aunque la red respondía. Con el cliente `pg`, el servidor devolvió `28P01 password authentication failed` solo para `DATABASE_URL`. Hay que borrar **ambos corchetes**. Después de editar un `.env` de microservicio, se recrea el contenedor con `docker compose up -d --force-recreate <servicio>`, porque `env_file` solo se lee al crearlo.
+
+#### Verificación realizada
+
+- `npm test` (raíz): 11/11 pruebas de `analizarExpresiones` (normalización, promedio, umbrales y ventana de observación).
+- `npm run lint`: 0 errores. `npm run build`: compila; face-api.js queda en un chunk separado.
+- Navegador real (Chromium, cámara simulada con un rostro sonriente, gateway simulado):
+  - Antes de activar la cámara no se descarga face-api.js.
+  - Resultado `detected` → **Alegría** (100 %).
+  - "Guardar resultado" está deshabilitado sin la casilla. Con la casilla marcada se enviaron `POST /api/usuarios` y `POST /api/animos` con `Authorization: Bearer` y solo los cuatro campos del contrato.
+  - "Analizar de nuevo" reinicia la casilla.
+  - "Apagar cámara" libera el video.
+  - Sin sesión se muestra el aviso y no se envía ninguna petición.
+  - Diseño revisado en escritorio (1280 px) y celular (390 px).
+- Navegador sin WebGL (Brave y simulación en Chromium): el motor queda en `wasm`, sin errores de carga de `.wasm`, y la detección funciona (~60 ms por fotograma frente a ~1000 ms con `cpu`).
+- **Prueba real de punta a punta** con la cámara del desarrollador, sesión de Google en Supabase y `docker compose` con los seis contenedores `healthy`:
+  - `POST /api/usuarios` → `200`.
+  - `POST /api/animos` → `201`, con un Payload de solo cuatro campos.
+  - La fila aparece en la tabla `Animo` de Supabase con `origen = deteccion` y `consentimientoHistorial = true`.
 
 ## 6. Backend Express (`pf5_Express`)
 
@@ -828,6 +939,7 @@ Cuando `pf4` defina su composición visual, debe importarlos desde esta carpeta 
 - Proveedores habilitados en Supabase: Google y GitHub.
 - `src/lib/supabase.js` crea una única instancia con persistencia, renovación automática y detección de sesión en la URL.
 - Variables requeridas: `VITE_SUPABASE_URL` y `VITE_SUPABASE_PUBLISHABLE_KEY`.
+- `VITE_API_GATEWAY_URL`: vacía en desarrollo (el proxy de Vite reenvía `/api` al gateway en `:3000`); en producción, la URL HTTPS pública del gateway.
 - `.env.example` documenta los nombres sin publicar credenciales. `.env.local` contiene la configuración local y Git lo ignora.
 - La URL de retorno enviada a Supabase es `window.location.origin`. Cada origen usado en desarrollo o producción debe incluirse en **Authentication > URL Configuration > Redirect URLs** del panel de Supabase.
 - Backend: `backend/.env` (ignorado por Git) con `PORT`, `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` y `DATABASE_URL`. `SUPABASE_URL` y `SUPABASE_PUBLISHABLE_KEY` corresponden a las variables `VITE_` del front; el backend los usa solo para verificar tokens. Si faltan, `server.js` muestra un aviso y las rutas protegidas responden `500`.
@@ -849,14 +961,14 @@ Cuando `pf4` defina su composición visual, debe importarlos desde esta carpeta 
 - Definir la pantalla o ruta a mostrar después de una autenticación exitosa.
 - Añadir cierre de sesión y una interfaz que represente al usuario autenticado.
 - Añadir navegación y rutas cuando existan más pantallas, reemplazando el acceso temporal `/#rostro`.
-- Integrar face-api.js en `Rostro` mediante `onVideoReady` y `detection` (`pf10_FaceAPI`).
 - Conectar el front con el backend enviando `Authorization: Bearer <access_token>` en cada petición protegida.
 - Cambiar la URL del frontend para consumir el API Gateway en el puerto `3000` en lugar de conocer cada microservicio.
 - Completar `library-service` (`pf16`). Auth, emociones y catálogo ya están implementados en dev; recomendaciones está implementado en la rama `pf15_MSRecomendaciones` y pendiente de integración.
 - Aplicar, con autorización, la migración `20261030120000_animo_consentimiento_historial` y verificar `emotions-service` con Supabase, PostgreSQL y Docker reales.
-- Agregar en `Rostro` el consentimiento separado para conservar el historial y enviar los resultados a `POST /api/animos`.
+- Llevar al usuario desde el resultado de `Rostro` a sus recomendaciones (`GET /api/recomendaciones?emocion=...`) en `pf20_RecomDashboard`. `src/lib/api.js` ya está disponible para llamar al gateway con el token.
+- Sincronizar el usuario (`POST /api/usuarios`) justo después del inicio de sesión. Hoy `Rostro` lo hace antes de guardar el primer resultado.
 - Integrar el frontend con `/api/recomendaciones` del gateway: pf15 ya obtiene contenido real mediante catálogo; el backend previo conserva sus ejemplos y no fue modificado.
-- Habilitar CORS con lista blanca, helmet y rate limit en el backend (`pf16_Seguridad`); hasta entonces el navegador bloquea las peticiones desde `localhost:5173`.
+- Habilitar CORS con lista blanca, helmet y rate limit en el API Gateway (`pf23_Seguridad`). En desarrollo, el proxy de Vite evita CORS; en producción el gateway debe permitir el dominio del front.
 - Sustituir el favicon provisional de Vite por el recurso oficial de Butaca cuando se proporcione.
 - Incorporar pruebas automatizadas cuando se definan los flujos funcionales.
 
@@ -952,6 +1064,18 @@ Esta verificación sustituye el bloqueo Docker anterior. Docker Desktop estaba i
 - Pendiente real: recorrido completo por el gateway con los tres servicios existentes configurados. Auth necesitaría su configuración privada de Supabase y una sesión válida de prueba; comprobar aislamiento entre personas requeriría dos sesiones de cuentas autorizadas. Emociones necesitaría su conexión PostgreSQL y registros propios ya existentes con consentimiento (esta revisión no crea registros). Catálogo necesitaría su credencial TMDB configurada de forma privada en ese servicio. Recomendaciones no necesita SDK ni credenciales de esas plataformas. No se solicitaron ni leyeron estos datos, ni se realizaron migraciones o escrituras reales.
 
 ## 17. Historial
+
+### 2026-11-01 — Detección de emociones con face-api.js (`pf17_FaceAPI`)
+
+- Se instaló `@vladmandic/face-api` 1.7.15 y se agregaron a `public/models/` los modelos `tiny_face_detector` y `face_expression`.
+- Selección explícita del motor de TensorFlow.js (`webgl` → `wasm` → `cpu`), con los binarios WASM 4.22.0 en `public/wasm/` (`@tensorflow/tfjs-backend-wasm` como devDependency exacta).
+- `RostroDeteccion` conecta `Rostro` con `useFaceDetection` mediante el contrato de pf4 (`onVideoReady`, `detection`). `App.jsx` muestra `RostroDeteccion` en `/#rostro`.
+- Análisis de ~3 s con calentamiento de WebGL, promedio de probabilidades, umbrales de muestras y confianza, y tope de 8 s para equipos lentos.
+- `Rostro` acepta `children` para mostrar acciones debajo del panel. Se agregó `AccionesResultado` (analizar de nuevo y guardar con casilla de autorización), con estilos en `Rostro.css`.
+- `src/lib/api.js` centraliza las llamadas al gateway con el token de Supabase. `services/animos.js` sincroniza el usuario y guarda en `POST /api/animos`.
+- Proxy de Vite para `/api` en desarrollo. Se documentó `VITE_API_GATEWAY_URL` en `.env.example`.
+- Script `npm test` en la raíz, con 11 pruebas unitarias de la lógica de análisis.
+- Verificado de punta a punta con Docker, Supabase Auth y PostgreSQL reales: el resultado se guarda en `Animo`.
 
 
 ### 2026-10-31 — Microservicio de biblioteca (`pf16_MSBiblioteca`)

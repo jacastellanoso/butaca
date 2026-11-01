@@ -24,7 +24,7 @@ const STATUS_CONTENT = {
 
 /**
  * Presenta el estado de la detección. No detecta emociones por sí mismo:
- * recibe el resultado desde afuera (face-api.js en `pf10_FaceAPI`).
+ * recibe el resultado desde afuera (face-api.js, integrado en `pf17_FaceAPI`).
  *
  * status: 'ready' | 'analyzing' | 'detected' | 'inconclusive' | 'error'
  * emotion: clave de EMOTIONS (expresión dominante de face-api.js).

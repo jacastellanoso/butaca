@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import Main from './pages/Main/Main.jsx'
-import Rostro from './pages/Rostro/Rostro.jsx'
+import RostroDeteccion from './pages/Rostro/RostroDeteccion.jsx'
 import GaleriaPrincipal from './pages/Galeria/GaleriaPrincipal.jsx'
 import './App.css'
 
@@ -24,7 +24,7 @@ function App() {
     return () => window.removeEventListener('hashchange', handleHashChange)
   }, [])
 
-  if (currentScreen === 'rostro') return <Rostro />
+    if (currentScreen === 'rostro') return <RostroDeteccion />
   if (currentScreen === 'galeria') return <GaleriaPrincipal />
   return <Main />
 }
