@@ -588,6 +588,73 @@ microservicios/catalog-service/
 - Pruebas automatizadas: **19/19 aprobadas** en `catalog-service` (`health.test.js` + `catalogo.test.js`) y **6/6 aprobadas** en `apigateway`.
 
 
+
+### Microservicio de biblioteca (`pf16_MSBiblioteca`)
+
+#### Arquitectura
+
+```text
+microservicios/library-service/
+├── Dockerfile                               # Base node:22-alpine con OpenSSL, generación de Prisma y poda de devDependencies.
+├── package.json                             # Express 5, @supabase/supabase-js, @prisma/client 6.19.3, dotenv y pruebas con node:test.
+├── .env.example                             # SERVICE_NAME, PORT, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, DATABASE_URL y DIRECT_URL.
+├── prisma/schema.prisma                     # Copia sincronizada del esquema principal (Usuario, Animo, Favorito e HistorialRecomendacion).
+├── src/
+│   ├── app.js                               # express.json({ limit: '10kb' }), /health, /api/favoritos y /api/historial.
+│   ├── config/env.js                        # Única lectura centralizada de process.env.
+│   ├── constants/biblioteca.js              # EMOCIONES, TIPOS_CONTENIDO ('movie', 'tv'), PAGINACION y LIMITES_TEXTO.
+│   ├── lib/supabase.js, prisma.js           # Cliente Supabase sin sesión persistente e instancia única de PrismaClient.
+│   ├── middlewares/requireAuth.js           # Verificación del token Bearer contra Supabase y fábrica createRequireAuth.
+│   ├── middlewares/errorHandler.js          # 400 JSON inválido, 413 cuerpo excesivo y 500 genérico sin filtrar detalles internos.
+│   ├── validators/biblioteca.validator.js   # Validación defensiva con if de cuerpo, query e id UUID para favoritos e historial.
+│   ├── routes/favoritos.routes.js           # GET /, POST / y DELETE /:id protegidos con requireAuth.
+│   ├── routes/historial.routes.js           # GET /, POST / y DELETE /:id protegidos con requireAuth.
+│   ├── controllers/favoritos.controller.js  # Orquesta validación, servicio y códigos HTTP (200, 201, 204, 400, 404, 409, 500).
+│   ├── controllers/historial.controller.js  # Orquesta validación, servicio y códigos HTTP (200, 201, 204, 400, 404, 409, 500).
+│   ├── services/favoritos.service.js        # Operaciones en Prisma sobre Favorito aisladas por usuarioId.
+│   └── services/historial.service.js        # Operaciones en Prisma sobre HistorialRecomendacion aisladas por usuarioId.
+└── test/
+    ├── health.test.js                       # Esqueleto pf9 (3 pruebas).
+    └── biblioteca.test.js                   # 22 pruebas del contrato /api/favoritos y /api/historial con Supabase y Prisma simulados.
+```
+
+- Cada petición autenticada recorre el flujo: **ruta** → `requireAuth` → **controlador** (valida la entrada y define el código HTTP) → **servicio** (consulta o escribe en Prisma) → **respuesta JSON**.
+- Cumpliendo la regla de aislamiento entre microservicios, `library-service` mantiene su propia copia de `requireAuth.js`, `lib/supabase.js`, `lib/prisma.js`, `config/env.js` y `prisma/schema.prisma`, sin importar archivos desde otros microservicios ni desde `backend/`.
+
+#### Modelo de datos
+
+El microservicio opera sobre `Favorito` (definido en `pf7_Prisma`) e incorpora de forma **aditiva** el modelo `HistorialRecomendacion` en `backend/prisma/schema.prisma`:
+
+| Tabla | Campos principales | Índices y restricciones |
+|---|---|---|
+| `Favorito` | `id` (UUID), `usuarioId`, `tmdbId` (Int), `tipo` (`'movie'` \| `'tv'`), `titulo`, `poster?`, `creadoEn` | `@@unique([usuarioId, tmdbId, tipo])` y `@@index([usuarioId, creadoEn])` |
+| `HistorialRecomendacion` | `id` (UUID), `usuarioId`, `emocion`, `tmdbId` (Int), `tipo` (`'movie'` \| `'tv'`), `titulo`, `poster?`, `calificacion?` (Float), `creadoEn` | `@@index([usuarioId, creadoEn])` y clave foránea hacia `Usuario.id` (`onDelete: Cascade`) |
+
+- **Migración aditiva**: `backend/prisma/migrations/20261031180000_historial_recomendaciones/migration.sql`. Solo agrega la tabla `HistorialRecomendacion`, su clave foránea hacia `Usuario` y los índices compuestos `(usuarioId, creadoEn)`, sin eliminar ni alterar columnas existentes.
+
+#### Endpoints
+
+Todas las rutas de negocio exigen `Authorization: Bearer <access_token de Supabase>` y se consumen a través del API Gateway (`http://localhost:3000`).
+
+| Método | Ruta | Body / Query | Respuestas |
+|---|---|---|---|
+| GET | `/health` | — | `200 { status: 'ok', service }` (público) |
+| GET | `/api/favoritos` | `?pagina=1&limite=20&tipo=&orden=desc` | `200 { resultados, paginacion }` · `400` · `401` · `500` · `503` |
+| POST | `/api/favoritos` | `{ tmdbId, tipo, titulo, poster? }` | `201` creado · `200` si ya existía (idempotente) · `400` · `401` · `409` sin usuario local · `413` · `500` · `503` |
+| DELETE | `/api/favoritos/:id` | `:id` (UUID) | `204` sin contenido · `401` · `404` si no existe o es de otro usuario · `500` · `503` |
+| GET | `/api/historial` | `?pagina=1&limite=20&emocion=&tipo=&desde=&hasta=&orden=desc` | `200 { resultados, paginacion }` · `400` · `401` · `500` · `503` |
+| POST | `/api/historial` | `{ emocion, tmdbId, tipo, titulo, poster?, calificacion? }` | `201` registro creado · `400` · `401` · `409` sin usuario local · `413` · `500` · `503` |
+| DELETE | `/api/historial/:id` | `:id` (UUID) | `204` sin contenido · `401` · `404` si no existe o es de otro usuario · `500` · `503` |
+
+#### Validaciones, Seguridad y Pruebas
+
+- **Aislamiento por usuario (`req.user.id`)**: se ignora cualquier `usuarioId`, `id` o `creadoEn` enviado por el cliente. Las consultas y eliminaciones filtran siempre por `usuarioId: req.user.id`; intentar borrar un registro ajeno o un ID que no es UUID responde `404`.
+- **Idempotencia en favoritos**: `POST /api/favoritos` verifica la clave compuesta `(usuarioId, tmdbId, tipo)`. Si ya existe, devuelve `200` con el favorito registrado sin duplicarlo; si es nuevo, lo crea y devuelve `201`.
+- **Relación con `Usuario` (`P2003` → `409`) y privacidad en `500`**: `library-service` no crea registros en `Usuario`; si falta el usuario local, responde `409`. Ante fallos de Prisma, registra solo el código de error (`P1001`, etc.) y responde `500` sin exponer cadenas de conexión.
+- **Pruebas realizadas**: `npm test` en `microservicios/library-service` (**25/25 pruebas aprobadas**: 3 en `health.test.js` y 22 en `biblioteca.test.js`), `npm test` en `apigateway` (**7/7 pruebas aprobadas**), `npm run lint` y `npm run build`.
+
+
+
 ### Dockerfile
 
 - Base `node:22-alpine`, igual que el gateway.
@@ -794,6 +861,15 @@ Cuando `pf4` defina su composición visual, debe importarlos desde esta carpeta 
 - Incorporar pruebas automatizadas cuando se definan los flujos funcionales.
 
 ## 17. Historial
+
+
+### 2026-10-31 — Microservicio de biblioteca (`pf16_MSBiblioteca`)
+
+- Se implementó `library-service` con los endpoints protegidos `GET /api/favoritos`, `POST /api/favoritos` (idempotente: `201` al crear y `200` si ya existía), `DELETE /api/favoritos/:id`, `GET /api/historial` (con paginación y filtros por emoción, tipo y fechas), `POST /api/historial` y `DELETE /api/historial/:id`.
+- Se añadió de forma aditiva el modelo `HistorialRecomendacion` en `backend/prisma/schema.prisma`, se sincronizó `microservicios/library-service/prisma/schema.prisma` y se creó la migración `20261031180000_historial_recomendaciones`, conservando `Favorito` compatible con `pf7_Prisma`.
+- Se garantizó el aislamiento por `req.user.id`, el manejo de `P2003` con respuesta `409` cuando el usuario autenticado no tiene registro local en `Usuario`, la ocultación de detalles internos de Prisma en errores `500` y el ajuste del `Dockerfile` con OpenSSL y generación del cliente Prisma (`6.19.3`).
+- Se agregaron 22 pruebas automatizadas en `microservicios/library-service/test/biblioteca.test.js` y la prueba de enrutamiento para `/api/favoritos` y `/api/historial` en `apigateway/test/gateway.test.js`.
+
 
 ### 2026-10-31 — Microservicio de catálogo (`pf14_MSCatalogo`)
 
