@@ -142,3 +142,40 @@ test('las rutas y subrutas del catálogo llegan a catalog-service sin cambios', 
   )
   assert.equal(receivedRequest.body, '')
 })
+
+test('las rutas de favoritos e historial llegan a library-service con su autorización', async () => {
+  const favoritoPayload = { tmdbId: 550, tipo: 'movie', titulo: 'El club de la pelea' }
+  const favResponse = await fetch(`${baseUrl}/api/favoritos?tipo=movie&pagina=1`, {
+    method: 'POST',
+    headers: {
+      Authorization: 'Bearer token-de-prueba',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(favoritoPayload),
+  })
+
+  assert.equal(favResponse.status, 200)
+  assert.deepEqual(await favResponse.json(), { proxied: true })
+  assert.deepEqual(receivedRequest, {
+    method: 'POST',
+    url: '/api/favoritos?tipo=movie&pagina=1',
+    authorization: 'Bearer token-de-prueba',
+    body: JSON.stringify(favoritoPayload),
+  })
+
+  const histResponse = await fetch(
+    `${baseUrl}/api/historial/00000000-0000-4000-8000-000000000001?emocion=happy`,
+    {
+      method: 'DELETE',
+      headers: { Authorization: 'Bearer token-de-prueba' },
+    },
+  )
+
+  assert.equal(histResponse.status, 200)
+  assert.deepEqual(receivedRequest, {
+    method: 'DELETE',
+    url: '/api/historial/00000000-0000-4000-8000-000000000001?emocion=happy',
+    authorization: 'Bearer token-de-prueba',
+    body: '',
+  })
+})
