@@ -9,11 +9,12 @@ datasource db {
 }
 
 model Usuario {
-  id        String     @id
-  email     String?
-  creadoEn  DateTime   @default(now())
-  animos    Animo[]
-  favoritos Favorito[]
+  id              String                   @id
+  email           String?
+  creadoEn        DateTime                 @default(now())
+  animos          Animo[]
+  favoritos       Favorito[]
+  recomendaciones HistorialRecomendacion[]
 }
 
 model Animo {
@@ -46,4 +47,20 @@ model Favorito {
   usuario   Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
 
   @@unique([usuarioId, tmdbId, tipo])
+  @@index([usuarioId, creadoEn])
+}
+
+model HistorialRecomendacion {
+  id           String   @id @default(uuid())
+  usuarioId    String
+  emocion      String
+  tmdbId       Int
+  tipo         String
+  titulo       String
+  poster       String?
+  calificacion Float?
+  creadoEn     DateTime @default(now())
+  usuario      Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId, creadoEn])
 }
