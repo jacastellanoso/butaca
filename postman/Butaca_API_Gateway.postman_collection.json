@@ -1,0 +1,1917 @@
+{
+  "info": {
+    "_postman_id": "a1b2c3d4-e5f6-4789-8012-3456789abcde",
+    "name": "Butaca — API Gateway y Microservicios",
+    "description": "Colección oficial de pruebas de integración para el API Gateway (http://localhost:3000) y los cinco microservicios de la plataforma Butaca (auth-service, emotions-service, catalog-service, recommendations-service y library-service).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "gatewayUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "accessTokenSecundario",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "usuarioId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "animoId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "favoritoId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "historialId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "tmdbIdPelicula",
+      "value": "550",
+      "type": "string"
+    },
+    {
+      "key": "tmdbIdSerie",
+      "value": "1399",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. API Gateway y Salud",
+      "description": "Verificación del estado general del punto de entrada principal y del manejo de rutas inexistentes.",
+      "item": [
+        {
+          "name": "1.1 Estado de salud del API Gateway (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde con código 200 OK', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Indica estado activo y lista los 5 microservicios registrados', function () {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.status).to.equal('ok');",
+                  "  pm.expect(json.service).to.equal('butaca-api-gateway');",
+                  "  pm.expect(json.routes).to.be.an('array').with.lengthOf(5);",
+                  "  const nombres = json.routes.map(function (r) { return r.name; });",
+                  "  pm.expect(nombres).to.include.members([",
+                  "    'auth-service',",
+                  "    'emotions-service',",
+                  "    'catalog-service',",
+                  "    'recommendations-service',",
+                  "    'library-service'",
+                  "  ]);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/health",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            },
+            "description": "Comprueba que el API Gateway esté en ejecución y devuelva la tabla de rutas hacia los cinco microservicios."
+          },
+          "response": []
+        },
+        {
+          "name": "1.2 Ruta inexistente en el API Gateway (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde con código 404 Not Found', function () {",
+                  "  pm.response.to.have.status(404);",
+                  "});",
+                  "",
+                  "pm.test('Devuelve el mensaje de ruta no encontrada y la ruta solicitada', function () {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.error).to.equal('Ruta no encontrada en el API Gateway.');",
+                  "  pm.expect(json.path).to.equal('/api/no-existe');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/no-existe",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "no-existe"
+              ]
+            },
+            "description": "Verifica que cualquier dirección no registrada en el API Gateway devuelva una respuesta controlada con estado 404."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "2. Autenticación y Usuarios (auth-service)",
+      "description": "Validación de tokens de sesión de Supabase y sincronización del perfil del usuario en la base de datos local.",
+      "item": [
+        {
+          "name": "2.1 Consultar sesión sin token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Rechaza la petición sin token con código 401', function () {",
+                  "  pm.response.to.have.status(401);",
+                  "});",
+                  "",
+                  "pm.test('Explica que falta el token de sesión o su formato es incorrecto', function () {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.error).to.equal('Falta el token de sesión o su formato es incorrecto.');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/sesiones",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "sesiones"
+              ]
+            },
+            "description": "Confirma que el middleware de autenticación bloquee las solicitudes que no incluyen el encabezado Authorization Bearer."
+          },
+          "response": []
+        },
+        {
+          "name": "2.2 Consultar sesión activa con token válido (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde con código 200 OK', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Devuelve el identificador y correo electrónico de la sesión', function () {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.id).to.be.a('string').and.not.be.empty;",
+                  "  pm.expect(json).to.have.property('email');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/sesiones",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "sesiones"
+              ]
+            },
+            "description": "Verifica el token contra Supabase y devuelve los datos básicos de identidad del usuario autenticado."
+          },
+          "response": []
+        },
+        {
+          "name": "2.3 Sincronizar usuario autenticado en base local (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde con código 200 OK', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Devuelve el registro local del usuario y guarda usuarioId', function () {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.id).to.be.a('string').and.not.be.empty;",
+                  "  pm.expect(json).to.have.property('email');",
+                  "  pm.expect(json.creadoEn).to.be.a('string').and.not.be.empty;",
+                  "  pm.environment.set('usuarioId', json.id);",
+                  "  pm.collectionVariables.set('usuarioId', json.id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/usuarios",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "usuarios"
+              ]
+            },
+            "description": "Crea o actualiza el registro del usuario autenticado en PostgreSQL y almacena su identificador en las variables del entorno y de la colección."
+          },
+          "response": []
+        },
+        {
+          "name": "2.4 Obtener perfil local del usuario autenticado (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde con código 200 OK', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('El identificador del perfil coincide con usuarioId sincronizado', function () {",
+                  "  const json = pm.response.json();",
+                  "  const esperado = pm.environment.get('usuarioId') || pm.collectionVariables.get('usuarioId');",
+                  "  pm.expect(json.id).to.equal(esperado);",
+                  "  pm.expect(json).to.have.property('email');",
+                  "  pm.expect(json.creadoEn).to.be.a('string').and.not.be.empty;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/usuarios",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "usuarios"
+              ]
+            },
+            "description": "Consulta el perfil almacenado en la base de datos local y comprueba que corresponda al usuario previamente sincronizado."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "3. Emociones y Consentimiento (emotions-service)",
+      "description": "Registro y consulta del historial emocional bajo consentimiento explícito del usuario.",
+      "item": [
+        {
+          "name": "3.1 Rechazar registro de ánimo sin consentimiento explícito (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde con código 403 Forbidden cuando no hay consentimiento', function () {",
+                  "  pm.response.to.have.status(403);",
+                  "});",
+                  "",
+                  "pm.test('Exige autorización explícita para conservar el historial emocional', function () {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.error).to.equal('No se guarda el resultado sin autorización explícita para conservar el historial emocional.');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"emocion\": \"happy\",\n  \"confianza\": 0.92,\n  \"origen\": \"deteccion\",\n  \"consentimientoHistorial\": false\n}"
+            },
+            "url": {
+              "raw": "{{gatewayUrl}}/api/animos",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "animos"
+              ]
+            },
+            "description": "Verifica que el sistema no persista ningún resultado emocional cuando consentimientoHistorial no tiene el valor booleano true."
+          },
+          "response": []
+        },
+        {
+          "name": "3.2 Rechazar registro de ánimo con confianza fuera de rango (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde con código 400 Bad Request ante confianza inválida', function () {",
+                  "  pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "pm.test('Devuelve mensaje descriptivo de error de validación', function () {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.error).to.be.a('string').and.not.be.empty;",
+                  "  pm.expect(json.error).to.equal('La confianza debe ser un número entre 0 y 1.');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"emocion\": \"happy\",\n  \"confianza\": 2,\n  \"origen\": \"deteccion\",\n  \"consentimientoHistorial\": true\n}"
+            },
+            "url": {
+              "raw": "{{gatewayUrl}}/api/animos",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "animos"
+              ]
+            },
+            "description": "Comprueba que el validador rechace valores de confianza mayores a 1 o menores a 0."
+          },
+          "response": []
+        },
+        {
+          "name": "3.3 Registrar estado de ánimo válido con consentimiento (201)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde con código 201 Created', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Devuelve el ánimo guardado con metadatos de consentimiento y guarda animoId', function () {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.id).to.be.a('string').and.not.be.empty;",
+                  "  pm.expect(json.emocion).to.equal('happy');",
+                  "  pm.expect(json.confianza).to.equal(0.92);",
+                  "  pm.expect(json.origen).to.equal('deteccion');",
+                  "  pm.expect(json.consentimientoHistorial).to.equal(true);",
+                  "  pm.expect(json.consentimientoVersion).to.be.a('string').and.not.be.empty;",
+                  "  pm.expect(json.consentimientoEn).to.be.a('string').and.not.be.empty;",
+                  "  pm.expect(json.creadoEn).to.be.a('string').and.not.be.empty;",
+                  "  pm.environment.set('animoId', json.id);",
+                  "  pm.collectionVariables.set('animoId', json.id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"emocion\": \"happy\",\n  \"confianza\": 0.92,\n  \"origen\": \"deteccion\",\n  \"consentimientoHistorial\": true\n}"
+            },
+            "url": {
+              "raw": "{{gatewayUrl}}/api/animos",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "animos"
+              ]
+            },
+            "description": "Guarda un estado de ánimo autorizado por el usuario y conserva su identificador en animoId para las consultas posteriores."
+          },
+          "response": []
+        },
+        {
+          "name": "3.4 Listar historial emocional filtrado y paginado (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde con código 200 OK', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Devuelve el arreglo de resultados y los metadatos de paginación', function () {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.resultados).to.be.an('array');",
+                  "  pm.expect(json.paginacion).to.be.an('object');",
+                  "  pm.expect(json.paginacion.pagina).to.equal(1);",
+                  "  pm.expect(json.paginacion.limite).to.equal(20);",
+                  "  pm.expect(json.paginacion.total).to.be.a('number');",
+                  "  pm.expect(json.paginacion.totalPaginas).to.be.a('number');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/animos?pagina=1&limite=20&emocion=happy&orden=desc",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "animos"
+              ],
+              "query": [
+                {
+                  "key": "pagina",
+                  "value": "1"
+                },
+                {
+                  "key": "limite",
+                  "value": "20"
+                },
+                {
+                  "key": "emocion",
+                  "value": "happy"
+                },
+                {
+                  "key": "orden",
+                  "value": "desc"
+                }
+              ]
+            },
+            "description": "Recupera la primera página del historial emocional autorizado filtrando por la emoción happy en orden descendente."
+          },
+          "response": []
+        },
+        {
+          "name": "3.5 Consultar detalle de un registro emocional propio (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde con código 200 OK', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('El identificador devuelto coincide con animoId', function () {",
+                  "  const json = pm.response.json();",
+                  "  const esperado = pm.environment.get('animoId') || pm.collectionVariables.get('animoId');",
+                  "  pm.expect(json.id).to.equal(esperado);",
+                  "  pm.expect(json.emocion).to.equal('happy');",
+                  "  pm.expect(json.consentimientoHistorial).to.equal(true);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/animos/{{animoId}}",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "animos",
+                "{{animoId}}"
+              ]
+            },
+            "description": "Obtiene por identificador el registro emocional recién creado por el usuario autenticado."
+          },
+          "response": []
+        },
+        {
+          "name": "3.6 Consultar registro emocional inexistente o ajeno (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde con código 404 Not Found', function () {",
+                  "  pm.response.to.have.status(404);",
+                  "});",
+                  "",
+                  "pm.test('Indica que el registro emocional no existe', function () {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.error).to.equal('El registro emocional no existe.');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/animos/00000000-0000-4000-8000-000000000999",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "animos",
+                "00000000-0000-4000-8000-000000000999"
+              ]
+            },
+            "description": "Verifica que al solicitar un UUID que no existe o pertenece a otro usuario se responda con 404 sin revelar información ajena."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "4. Catálogo TMDB (catalog-service)",
+      "description": "Pruebas de exploración del catálogo audiovisual conectado a TMDB: listado general, filtros por tipo y categoría, búsqueda por texto, detalle enriquecido y manejo de errores 400 y 404.",
+      "item": [
+        {
+          "name": "4.1 Listar catálogo general (tipo=all, categoria=Todos)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado HTTP es 200 OK', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "",
+                  "pm.test('La fuente del catálogo es tmdb y devuelve filtros válidos', function () {",
+                  "  pm.expect(json.fuente).to.eql('tmdb');",
+                  "  pm.expect(json.filtros).to.be.an('object');",
+                  "  pm.expect(json.filtros.tipo).to.eql('all');",
+                  "  pm.expect(json.filtros.categoria).to.eql('Todos');",
+                  "  pm.expect(json.filtros.pagina).to.eql(1);",
+                  "});",
+                  "",
+                  "pm.test('Devuelve un arreglo de resultados no vacío y metadatos de paginación', function () {",
+                  "  pm.expect(json.resultados).to.be.an('array').that.is.not.empty;",
+                  "  pm.expect(json.paginacion).to.be.an('object');",
+                  "  pm.expect(json.paginacion.pagina).to.eql(1);",
+                  "  pm.expect(json.paginacion.totalPaginas).to.be.a('number').and.to.be.at.least(1);",
+                  "  pm.expect(json.paginacion.totalResultados).to.be.a('number').and.to.be.at.least(1);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/catalogo?tipo=all&categoria=Todos&pagina=1",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "catalogo"
+              ],
+              "query": [
+                {
+                  "key": "tipo",
+                  "value": "all"
+                },
+                {
+                  "key": "categoria",
+                  "value": "Todos"
+                },
+                {
+                  "key": "pagina",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "Consulta la portada general del catálogo combinando películas y series en tendencia."
+          },
+          "response": []
+        },
+        {
+          "name": "4.2 Filtrar catálogo por películas de Acción",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado HTTP es 200 OK', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "",
+                  "pm.test('Verifica filtros aplicados para tipo movie y categoría Acción', function () {",
+                  "  pm.expect(json.fuente).to.eql('tmdb');",
+                  "  pm.expect(json.filtros).to.be.an('object');",
+                  "  pm.expect(json.filtros.tipo).to.eql('movie');",
+                  "  pm.expect(json.filtros.categoria).to.eql('Acción');",
+                  "  pm.expect(json.resultados).to.be.an('array').that.is.not.empty;",
+                  "});",
+                  "",
+                  "const primeraPelicula = json.resultados.find(function (item) {",
+                  "  return item && item.tipoTmdb === 'movie' && Number.isInteger(item.tmdbId);",
+                  "});",
+                  "if (primeraPelicula && !pm.environment.get('tmdbIdPelicula') && !pm.collectionVariables.get('tmdbIdPelicula')) {",
+                  "  pm.environment.set('tmdbIdPelicula', String(primeraPelicula.tmdbId));",
+                  "  pm.collectionVariables.set('tmdbIdPelicula', String(primeraPelicula.tmdbId));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/catalogo?tipo=movie&categoria=Acción&pagina=1",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "catalogo"
+              ],
+              "query": [
+                {
+                  "key": "tipo",
+                  "value": "movie"
+                },
+                {
+                  "key": "categoria",
+                  "value": "Acción"
+                },
+                {
+                  "key": "pagina",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "Filtra el catálogo solicitando únicamente películas pertenecientes a la categoría Acción."
+          },
+          "response": []
+        },
+        {
+          "name": "4.3 Buscar contenido por texto (busqueda=Matrix)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado HTTP es 200 OK', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "",
+                  "pm.test('Refleja el término buscado Matrix en filtros y entrega resultados', function () {",
+                  "  pm.expect(json.fuente).to.eql('tmdb');",
+                  "  pm.expect(json.filtros).to.be.an('object');",
+                  "  pm.expect(json.filtros.busqueda).to.eql('Matrix');",
+                  "  pm.expect(json.resultados).to.be.an('array').that.is.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/catalogo?busqueda=Matrix&pagina=1",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "catalogo"
+              ],
+              "query": [
+                {
+                  "key": "busqueda",
+                  "value": "Matrix"
+                },
+                {
+                  "key": "pagina",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "Ejecuta una búsqueda por texto libre en el catálogo audiovisual de TMDB."
+          },
+          "response": []
+        },
+        {
+          "name": "4.4 Obtener detalle enriquecido de película",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('tmdbIdPelicula') && !pm.collectionVariables.get('tmdbIdPelicula')) {",
+                  "  pm.environment.set('tmdbIdPelicula', '550');",
+                  "  pm.collectionVariables.set('tmdbIdPelicula', '550');",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado HTTP es 200 OK', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "const idEsperado = Number(pm.environment.get('tmdbIdPelicula') || pm.collectionVariables.get('tmdbIdPelicula') || 550);",
+                  "",
+                  "pm.test('Contiene los campos enriquecidos de la película (tmdbId, titulo, tipoTmdb, sinopsis, generos)', function () {",
+                  "  pm.expect(json.tmdbId).to.eql(idEsperado);",
+                  "  pm.expect(json.titulo).to.be.a('string').and.not.empty;",
+                  "  pm.expect(json.tipoTmdb).to.eql('movie');",
+                  "  pm.expect(json.sinopsis).to.be.a('string').and.not.empty;",
+                  "  pm.expect(json.generos).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/catalogo/movie/{{tmdbIdPelicula}}",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "catalogo",
+                "movie",
+                "{{tmdbIdPelicula}}"
+              ]
+            },
+            "description": "Recupera la ficha técnica completa de una película específica mediante su identificador en TMDB."
+          },
+          "response": []
+        },
+        {
+          "name": "4.5 Detalle de contenido inexistente (404 Not Found)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado HTTP es 404 Not Found', function () {",
+                  "  pm.response.to.have.status(404);",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "",
+                  "pm.test('Devuelve el mensaje de error exacto para contenido inexistente', function () {",
+                  "  pm.expect(json).to.deep.equal({",
+                  "    error: 'El contenido solicitado no existe en el catálogo.'",
+                  "  });",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/catalogo/movie/999999999",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "catalogo",
+                "movie",
+                "999999999"
+              ]
+            },
+            "description": "Verifica que un identificador válido pero inexistente en TMDB responda con estado 404."
+          },
+          "response": []
+        },
+        {
+          "name": "4.6 Parámetro tipo inválido en catálogo (400 Bad Request)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado HTTP es 400 Bad Request', function () {",
+                  "  pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "",
+                  "pm.test('Devuelve el mensaje de validación para tipo inválido', function () {",
+                  "  pm.expect(json).to.deep.equal({",
+                  "    error: 'El parámetro tipo no es válido.'",
+                  "  });",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/catalogo?tipo=invalido",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "catalogo"
+              ],
+              "query": [
+                {
+                  "key": "tipo",
+                  "value": "invalido"
+                }
+              ]
+            },
+            "description": "Valida que el servicio rechace valores fuera de all, movie o tv en el parámetro tipo."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "5. Recomendaciones por Ánimo (recommendations-service)",
+      "description": "Pruebas del motor de recomendaciones emocionales: consulta directa por emoción, resolución de animoId con el servicio de emociones, validación de parámetros mutuamente excluyentes y protección por token JWT.",
+      "item": [
+        {
+          "name": "5.1 Obtener recomendaciones de películas por emoción (happy)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado HTTP es 200 OK', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "",
+                  "pm.test('Verifica metadatos de recomendación (emocion=happy, tipo=movie, fuente=tmdb)', function () {",
+                  "  pm.expect(json.emocion).to.eql('happy');",
+                  "  pm.expect(json.tipo).to.eql('movie');",
+                  "  pm.expect(json.fuente).to.eql('tmdb');",
+                  "});",
+                  "",
+                  "pm.test('Devuelve hasta 20 resultados únicos sin duplicados', function () {",
+                  "  pm.expect(json.resultados).to.be.an('array');",
+                  "  pm.expect(json.resultados.length).to.be.at.least(1);",
+                  "  pm.expect(json.resultados.length).to.be.at.most(20);",
+                  "  const claves = json.resultados.map(function (item) {",
+                  "    return item.tipo + ':' + item.tmdbId;",
+                  "  });",
+                  "  const clavesUnicas = new Set(claves);",
+                  "  pm.expect(clavesUnicas.size).to.eql(json.resultados.length);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/recomendaciones?emocion=happy&tipo=movie",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "recomendaciones"
+              ],
+              "query": [
+                {
+                  "key": "emocion",
+                  "value": "happy"
+                },
+                {
+                  "key": "tipo",
+                  "value": "movie"
+                }
+              ]
+            },
+            "description": "Solicita recomendaciones de películas enviando directamente la emoción happy."
+          },
+          "response": []
+        },
+        {
+          "name": "5.2 Obtener recomendaciones de series mediante animoId",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado HTTP es 200 OK', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "",
+                  "pm.test('Resuelve la emoción happy desde animoId y entrega series de TMDB', function () {",
+                  "  pm.expect(json.emocion).to.eql('happy');",
+                  "  pm.expect(json.tipo).to.eql('tv');",
+                  "  pm.expect(json.fuente).to.eql('tmdb');",
+                  "  pm.expect(json.resultados).to.be.an('array');",
+                  "  pm.expect(json.resultados.length).to.be.at.most(20);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/recomendaciones?animoId={{animoId}}&tipo=tv",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "recomendaciones"
+              ],
+              "query": [
+                {
+                  "key": "animoId",
+                  "value": "{{animoId}}"
+                },
+                {
+                  "key": "tipo",
+                  "value": "tv"
+                }
+              ]
+            },
+            "description": "Solicita recomendaciones de series usando el identificador del estado de ánimo guardado en la carpeta anterior."
+          },
+          "response": []
+        },
+        {
+          "name": "5.3 Rechazar envío simultáneo de emocion y animoId (400 Bad Request)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado HTTP es 400 Bad Request', function () {",
+                  "  pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "",
+                  "pm.test('Indica que se debe proporcionar exactamente uno de emocion o animoId', function () {",
+                  "  pm.expect(json).to.deep.equal({",
+                  "    error: 'Indicá exactamente uno de emocion o animoId.'",
+                  "  });",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/recomendaciones?emocion=happy&animoId={{animoId}}",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "recomendaciones"
+              ],
+              "query": [
+                {
+                  "key": "emocion",
+                  "value": "happy"
+                },
+                {
+                  "key": "animoId",
+                  "value": "{{animoId}}"
+                }
+              ]
+            },
+            "description": "Comprueba que la consulta falle con estado 400 cuando se envían ambos criterios simultáneamente."
+          },
+          "response": []
+        },
+        {
+          "name": "5.4 Rechazar consulta de recomendaciones sin token (401 Unauthorized)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado HTTP es 401 Unauthorized', function () {",
+                  "  pm.response.to.have.status(401);",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "",
+                  "pm.test('Devuelve propiedad error informando la falta de credenciales', function () {",
+                  "  pm.expect(json).to.be.an('object');",
+                  "  pm.expect(json.error).to.be.a('string').and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/recomendaciones?emocion=happy&tipo=movie",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "recomendaciones"
+              ],
+              "query": [
+                {
+                  "key": "emocion",
+                  "value": "happy"
+                },
+                {
+                  "key": "tipo",
+                  "value": "movie"
+                }
+              ]
+            },
+            "description": "Verifica que el servicio de recomendaciones bloquee solicitudes sin encabezado Authorization."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "6. Biblioteca: Favoritos e Historial (library-service)",
+      "description": "Pruebas del ciclo de vida completo en la biblioteca personal del usuario: alta idempotente de favoritos, consulta paginada, registro de historial de recomendaciones y eliminación verificada de ambos recursos.",
+      "item": [
+        {
+          "name": "6.1 Agregar película a favoritos (creación inicial)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado HTTP es 201 Created (o 200 si ya existía)', function () {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([201, 200]);",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "",
+                  "pm.test('Devuelve el favorito creado y almacena favoritoId', function () {",
+                  "  pm.expect(json.id).to.be.a('string').and.not.empty;",
+                  "  pm.expect(json.tmdbId).to.eql(550);",
+                  "  pm.expect(json.tipo).to.eql('movie');",
+                  "  pm.expect(json.titulo).to.eql('El club de la pelea');",
+                  "  pm.expect(json.poster).to.eql('https://image.tmdb.org/t/p/w500/pelea.jpg');",
+                  "  pm.environment.set('favoritoId', json.id);",
+                  "  pm.collectionVariables.set('favoritoId', json.id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tmdbId\": 550,\n  \"tipo\": \"movie\",\n  \"titulo\": \"El club de la pelea\",\n  \"poster\": \"https://image.tmdb.org/t/p/w500/pelea.jpg\"\n}"
+            },
+            "url": {
+              "raw": "{{gatewayUrl}}/api/favoritos",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "favoritos"
+              ]
+            },
+            "description": "Registra una película en la lista de favoritos del usuario autenticado y guarda su identificador."
+          },
+          "response": []
+        },
+        {
+          "name": "6.2 Repetir alta del mismo favorito (idempotencia 200 OK)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado HTTP es 200 OK en repetición idempotente', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "const favoritoIdEsperado = pm.environment.get('favoritoId') || pm.collectionVariables.get('favoritoId');",
+                  "",
+                  "pm.test('Devuelve exactamente el mismo favoritoId sin duplicar el registro', function () {",
+                  "  pm.expect(json.id).to.eql(favoritoIdEsperado);",
+                  "  pm.expect(json.tmdbId).to.eql(550);",
+                  "  pm.expect(json.tipo).to.eql('movie');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tmdbId\": 550,\n  \"tipo\": \"movie\",\n  \"titulo\": \"El club de la pelea\",\n  \"poster\": \"https://image.tmdb.org/t/p/w500/pelea.jpg\"\n}"
+            },
+            "url": {
+              "raw": "{{gatewayUrl}}/api/favoritos",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "favoritos"
+              ]
+            },
+            "description": "Verifica que enviar la misma combinación (tmdbId, tipo) responda 200 OK y conserve el registro original."
+          },
+          "response": []
+        },
+        {
+          "name": "6.3 Listar favoritos del usuario",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado HTTP es 200 OK', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "const favoritoIdEsperado = pm.environment.get('favoritoId') || pm.collectionVariables.get('favoritoId');",
+                  "",
+                  "pm.test('Incluye resultados paginados y contiene el favoritoId registrado una sola vez', function () {",
+                  "  pm.expect(json.resultados).to.be.an('array').that.is.not.empty;",
+                  "  pm.expect(json.paginacion).to.be.an('object');",
+                  "  pm.expect(json.paginacion.pagina).to.eql(1);",
+                  "  pm.expect(json.paginacion.limite).to.eql(20);",
+                  "  const coincidencias = json.resultados.filter(function (item) {",
+                  "    return item.id === favoritoIdEsperado;",
+                  "  });",
+                  "  pm.expect(coincidencias.length).to.eql(1);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/favoritos?pagina=1&limite=20&tipo=movie&orden=desc",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "favoritos"
+              ],
+              "query": [
+                {
+                  "key": "pagina",
+                  "value": "1"
+                },
+                {
+                  "key": "limite",
+                  "value": "20"
+                },
+                {
+                  "key": "tipo",
+                  "value": "movie"
+                },
+                {
+                  "key": "orden",
+                  "value": "desc"
+                }
+              ]
+            },
+            "description": "Recupera la lista paginada de películas favoritas del usuario autenticado."
+          },
+          "response": []
+        },
+        {
+          "name": "6.4 Registrar recomendación en el historial",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado HTTP es 201 Created', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "",
+                  "pm.test('Guarda el registro en el historial y almacena historialId', function () {",
+                  "  pm.expect(json.id).to.be.a('string').and.not.empty;",
+                  "  pm.expect(json.emocion).to.eql('happy');",
+                  "  pm.expect(json.tmdbId).to.eql(550);",
+                  "  pm.expect(json.tipo).to.eql('movie');",
+                  "  pm.expect(json.titulo).to.eql('El club de la pelea');",
+                  "  pm.expect(json.calificacion).to.eql(8.4);",
+                  "  pm.environment.set('historialId', json.id);",
+                  "  pm.collectionVariables.set('historialId', json.id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"emocion\": \"happy\",\n  \"tmdbId\": 550,\n  \"tipo\": \"movie\",\n  \"titulo\": \"El club de la pelea\",\n  \"calificacion\": 8.4\n}"
+            },
+            "url": {
+              "raw": "{{gatewayUrl}}/api/historial",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "historial"
+              ]
+            },
+            "description": "Guarda una película recomendada asociada al estado emocional happy dentro del historial del usuario."
+          },
+          "response": []
+        },
+        {
+          "name": "6.5 Consultar historial filtrado por emoción y tipo",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado HTTP es 200 OK', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "const historialIdEsperado = pm.environment.get('historialId') || pm.collectionVariables.get('historialId');",
+                  "",
+                  "pm.test('Devuelve resultados paginados e incluye el historialId recién creado', function () {",
+                  "  pm.expect(json.resultados).to.be.an('array').that.is.not.empty;",
+                  "  pm.expect(json.paginacion).to.be.an('object');",
+                  "  pm.expect(json.paginacion.pagina).to.eql(1);",
+                  "  pm.expect(json.paginacion.limite).to.eql(20);",
+                  "  const encontrado = json.resultados.some(function (item) {",
+                  "    return item.id === historialIdEsperado;",
+                  "  });",
+                  "  pm.expect(encontrado).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/historial?emocion=happy&tipo=movie&pagina=1&limite=20&orden=desc",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "historial"
+              ],
+              "query": [
+                {
+                  "key": "emocion",
+                  "value": "happy"
+                },
+                {
+                  "key": "tipo",
+                  "value": "movie"
+                },
+                {
+                  "key": "pagina",
+                  "value": "1"
+                },
+                {
+                  "key": "limite",
+                  "value": "20"
+                },
+                {
+                  "key": "orden",
+                  "value": "desc"
+                }
+              ]
+            },
+            "description": "Lista el historial de recomendaciones filtrando por emoción happy y tipo movie."
+          },
+          "response": []
+        },
+        {
+          "name": "6.6 Eliminar favorito existente (204 No Content)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado HTTP es 204 No Content y respuesta sin cuerpo', function () {",
+                  "  pm.response.to.have.status(204);",
+                  "  pm.expect(pm.response.text()).to.be.empty;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/favoritos/{{favoritoId}}",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "favoritos",
+                "{{favoritoId}}"
+              ]
+            },
+            "description": "Elimina el favorito previamente registrado verificando la respuesta 204 sin contenido."
+          },
+          "response": []
+        },
+        {
+          "name": "6.7 Segundo intento de eliminar favorito ya borrado (404 Not Found)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado HTTP es 404 Not Found', function () {",
+                  "  pm.response.to.have.status(404);",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "",
+                  "pm.test('Indica que el favorito ya no existe', function () {",
+                  "  pm.expect(json).to.deep.equal({",
+                  "    error: 'Ese favorito no existe.'",
+                  "  });",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/favoritos/{{favoritoId}}",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "favoritos",
+                "{{favoritoId}}"
+              ]
+            },
+            "description": "Confirma que intentar eliminar por segunda vez el mismo favorito devuelve 404."
+          },
+          "response": []
+        },
+        {
+          "name": "6.8 Eliminar registro de historial existente (204 No Content)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado HTTP es 204 No Content y respuesta sin cuerpo', function () {",
+                  "  pm.response.to.have.status(204);",
+                  "  pm.expect(pm.response.text()).to.be.empty;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/historial/{{historialId}}",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "historial",
+                "{{historialId}}"
+              ]
+            },
+            "description": "Elimina el registro de historial previamente creado y comprueba el código 204."
+          },
+          "response": []
+        },
+        {
+          "name": "6.9 Segundo intento de eliminar historial ya borrado (404 Not Found)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado HTTP es 404 Not Found', function () {",
+                  "  pm.response.to.have.status(404);",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "",
+                  "pm.test('Indica que el registro del historial ya no existe', function () {",
+                  "  pm.expect(json).to.deep.equal({",
+                  "    error: 'El registro del historial no existe.'",
+                  "  });",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/historial/{{historialId}}",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "historial",
+                "{{historialId}}"
+              ]
+            },
+            "description": "Confirma que intentar eliminar nuevamente el mismo registro del historial devuelve 404."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
