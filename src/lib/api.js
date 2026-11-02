@@ -5,7 +5,7 @@ import { supabase } from './supabase.js'
 //   mismo origen (localhost:5173) y el proxy de vite.config.js las reenvía al
 //   gateway en localhost:3000. Así el navegador no aplica CORS.
 // - En producción se define con la URL pública del gateway (HTTPS).
-const API_GATEWAY_URL = (import.meta.env.VITE_API_GATEWAY_URL ?? '').replace(/\/$/, '')
+const API_GATEWAY_URL = (import.meta.env?.VITE_API_GATEWAY_URL ?? '').replace(/\/$/, '')
 
 export class ApiError extends Error {
   constructor(codigo, mensaje, status) {
@@ -17,10 +17,13 @@ export class ApiError extends Error {
 }
 
 const MENSAJES_POR_STATUS = {
-  401: ['sesion-expirada', 'Tu sesión expiró. Volvé a iniciar sesión para guardar.'],
+  400: ['parametros-invalidos', 'Revisá los parámetros de la consulta.'],
+  401: ['sesion-expirada', 'Tu sesión expiró. Volvé a iniciar sesión para continuar.'],
+  404: ['registro-no-encontrado', 'El registro solicitado no está disponible.'],
   403: ['sin-consentimiento', 'Necesitamos tu autorización para guardar este resultado.'],
   409: ['usuario-sin-registro', 'Tu cuenta todavía no está lista. Intentá de nuevo en unos segundos.'],
   502: ['servicio-no-disponible', 'El servicio no está disponible en este momento. Intentá más tarde.'],
+  503: ['servicio-no-disponible', 'El servicio no está disponible en este momento. Intentá más tarde.'],
 }
 
 async function obtenerToken() {
@@ -28,11 +31,18 @@ async function obtenerToken() {
     throw new ApiError('sin-configuracion', 'Falta configurar la conexión con Supabase.')
   }
 
-  const { data } = await supabase.auth.getSession()
+  let data
+  try {
+    const resultado = await supabase.auth.getSession()
+    if (resultado.error) throw new Error()
+    data = resultado.data
+  } catch {
+    throw new ApiError('sesion-no-disponible', 'No pudimos obtener tu sesión. Volvé a iniciar sesión.')
+  }
   const token = data?.session?.access_token
 
   if (!token) {
-    throw new ApiError('sin-sesion', 'Iniciá sesión con Google o GitHub para guardar tu historial.')
+    throw new ApiError('sin-sesion', 'Iniciá sesión con Google o GitHub para continuar.')
   }
   return token
 }
@@ -64,5 +74,10 @@ export async function solicitarApi(ruta, { method = 'GET', body } = {}) {
     throw new ApiError(codigo, mensaje, respuesta.status)
   }
 
-  return respuesta.status === 204 ? null : respuesta.json()
+  if (respuesta.status === 204) return null
+  try {
+    return await respuesta.json()
+  } catch {
+    throw new ApiError('respuesta-invalida', 'El servicio devolvió una respuesta inválida.', respuesta.status)
+  }
 }
