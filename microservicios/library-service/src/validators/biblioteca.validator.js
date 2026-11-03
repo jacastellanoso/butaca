@@ -1,252 +1,76 @@
-import {
-  EMOCIONES,
-  LIMITES_TEXTO,
-  PAGINACION,
-  TIPOS_CONTENIDO,
-} from '../constants/biblioteca.js'
+import { z } from 'zod'
+import { EMOCIONES, LIMITES_TEXTO, PAGINACION, TIPOS_CONTENIDO } from '../constants/biblioteca.js'
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-const ENTERO = /^\d+$/
-
-const fallo = (error, status = 400) => ({ status, error })
-
-const esObjetoPlano = (valor) =>
-  typeof valor === 'object' && valor !== null && !Array.isArray(valor)
-
-export const esIdValido = (id) => typeof id === 'string' && UUID.test(id)
-
-function validarTmdbId(tmdbId) {
-  if (
-    !Number.isInteger(tmdbId) ||
-    tmdbId < 1 ||
-    tmdbId > LIMITES_TEXTO.tmdbIdMaximo
-  ) {
-    return `tmdbId debe ser un entero entre 1 y ${LIMITES_TEXTO.tmdbIdMaximo}.`
-  }
-  return null
+function validar(esquema, entrada) {
+  const resultado = esquema.safeParse(entrada)
+  return resultado.success ? { datos: resultado.data }
+    : { status: 400, error: resultado.error.issues[0].message }
 }
 
-function validarTitulo(titulo) {
-  if (typeof titulo !== 'string') {
-    return { error: 'El título es obligatorio.' }
-  }
-  const limpio = titulo.trim()
-  if (limpio.length === 0) {
-    return { error: 'El título es obligatorio.' }
-  }
-  if (limpio.length > LIMITES_TEXTO.tituloMaximo) {
-    return {
-      error: `El título no puede superar los ${LIMITES_TEXTO.tituloMaximo} caracteres.`,
-    }
-  }
-  return { valor: limpio }
+const esquemaId = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
+export const esIdValido = (id) => esquemaId.safeParse(id).success
+
+const mensajeTmdb = `tmdbId debe ser un entero entre 1 y ${LIMITES_TEXTO.tmdbIdMaximo}.`
+const camposContenido = {
+  tmdbId: z.number({ error: mensajeTmdb }).int(mensajeTmdb).min(1, mensajeTmdb)
+    .max(LIMITES_TEXTO.tmdbIdMaximo, mensajeTmdb),
+  tipo: z.enum(TIPOS_CONTENIDO, { error: 'El tipo debe ser "movie" o "tv".' }),
+  titulo: z.string({ error: 'El título es obligatorio.' }).trim().min(1, 'El título es obligatorio.')
+    .max(LIMITES_TEXTO.tituloMaximo, `El título no puede superar los ${LIMITES_TEXTO.tituloMaximo} caracteres.`),
+  poster: z.string({ error: 'El póster debe ser una cadena de texto o nulo.' }).trim()
+    .min(1, 'El póster no puede ser una cadena vacía.')
+    .max(LIMITES_TEXTO.posterMaximo, `El póster no puede superar los ${LIMITES_TEXTO.posterMaximo} caracteres.`)
+    .nullish().transform((valor) => valor ?? null),
 }
+const esquemaNuevoFavorito = z.object(camposContenido, { error: 'El cuerpo debe ser un objeto JSON.' })
+const mensajeCalificacion = 'La calificación debe ser un número entre 0 y 10.'
+const esquemaNuevoHistorial = z.object({
+  emocion: z.enum(EMOCIONES, { error: 'La emoción no es válida.' }),
+  ...camposContenido,
+  calificacion: z.number({ error: mensajeCalificacion }).min(0, mensajeCalificacion).max(10, mensajeCalificacion)
+    .nullish().transform((valor) => valor == null ? null : Math.round(valor * 10) / 10),
+}, { error: 'El cuerpo debe ser un objeto JSON.' })
 
-function validarPoster(poster) {
-  if (poster === undefined || poster === null) {
-    return { valor: null }
-  }
-  if (typeof poster !== 'string') {
-    return { error: 'El póster debe ser una cadena de texto o nulo.' }
-  }
-  const limpio = poster.trim()
-  if (limpio.length === 0) {
-    return { error: 'El póster no puede ser una cadena vacía.' }
-  }
-  if (limpio.length > LIMITES_TEXTO.posterMaximo) {
-    return {
-      error: `El póster no puede superar los ${LIMITES_TEXTO.posterMaximo} caracteres.`,
-    }
-  }
-  return { valor: limpio }
+const texto = (nombre) => z.string({ error: `El parámetro ${nombre} no es válido.` })
+const opcion = (nombre, opciones, porDefecto) => texto(nombre)
+  .pipe(z.enum(opciones, { error: `El parámetro ${nombre} no es válido.` }))
+  .optional().default(porDefecto)
+function entero(nombre, min, max, porDefecto) {
+  return texto(nombre)
+    .refine((valor) => /^\d+$/.test(valor) && Number(valor) >= min && Number(valor) <= max,
+      `El parámetro ${nombre} debe ser un entero entre ${min} y ${max}.`)
+    .transform(Number).optional().default(porDefecto)
 }
-
-function validarCalificacion(calificacion) {
-  if (calificacion === undefined || calificacion === null) {
-    return { valor: null }
-  }
-  if (
-    typeof calificacion !== 'number' ||
-    !Number.isFinite(calificacion) ||
-    calificacion < 0 ||
-    calificacion > 10
-  ) {
-    return { error: 'La calificación debe ser un número entre 0 y 10.' }
-  }
-  return { valor: Math.round(calificacion * 10) / 10 }
+const fecha = (nombre) => texto(nombre)
+  // Mantiene las fechas aceptadas por new Date, sin endurecer el contrato.
+  .refine((valor) => !Number.isNaN(new Date(valor).getTime()),
+    `El parámetro ${nombre} debe ser una fecha ISO 8601.`)
+  .transform((valor) => new Date(valor)).optional()
+function consulta(campos, conFechas = false) {
+  const esquema = z.object(campos).transform((datos) =>
+    Object.fromEntries(Object.keys(campos).map((nombre) => [nombre, datos[nombre]])))
+  return conFechas ? esquema.refine(({ desde, hasta }) => !desde || !hasta || desde <= hasta,
+    'El parámetro desde no puede ser posterior a hasta.') : esquema
 }
-
-// POST /api/favoritos
-export function validarNuevoFavorito(body) {
-  if (!esObjetoPlano(body)) {
-    return fallo('El cuerpo debe ser un objeto JSON.')
-  }
-
-  const { tmdbId, tipo, titulo, poster } = body
-
-  const errorTmdb = validarTmdbId(tmdbId)
-  if (errorTmdb) return fallo(errorTmdb)
-
-  if (!TIPOS_CONTENIDO.includes(tipo)) {
-    return fallo('El tipo debe ser "movie" o "tv".')
-  }
-
-  const tituloValidado = validarTitulo(titulo)
-  if (tituloValidado.error) return fallo(tituloValidado.error)
-
-  const posterValidado = validarPoster(poster)
-  if (posterValidado.error) return fallo(posterValidado.error)
-
-  return {
-    datos: {
-      tmdbId,
-      tipo,
-      titulo: tituloValidado.valor,
-      poster: posterValidado.valor,
-    },
-  }
+const camposPaginacion = {
+  pagina: entero('pagina', 1, PAGINACION.paginaMaxima, 1),
+  limite: entero('limite', 1, PAGINACION.limiteMaximo, PAGINACION.limitePorDefecto),
 }
+const esquemaConsultaFavoritos = consulta({
+  ...camposPaginacion,
+  tipo: opcion('tipo', TIPOS_CONTENIDO),
+  orden: opcion('orden', ['desc', 'asc'], 'desc'),
+})
+const esquemaConsultaHistorial = consulta({
+  ...camposPaginacion,
+  emocion: opcion('emocion', EMOCIONES),
+  tipo: opcion('tipo', TIPOS_CONTENIDO),
+  desde: fecha('desde'),
+  hasta: fecha('hasta'),
+  orden: opcion('orden', ['desc', 'asc'], 'desc'),
+}, true)
 
-// POST /api/historial
-export function validarNuevoHistorial(body) {
-  if (!esObjetoPlano(body)) {
-    return fallo('El cuerpo debe ser un objeto JSON.')
-  }
-
-  const { emocion, tmdbId, tipo, titulo, poster, calificacion } = body
-
-  if (!EMOCIONES.includes(emocion)) {
-    return fallo('La emoción no es válida.')
-  }
-
-  const errorTmdb = validarTmdbId(tmdbId)
-  if (errorTmdb) return fallo(errorTmdb)
-
-  if (!TIPOS_CONTENIDO.includes(tipo)) {
-    return fallo('El tipo debe ser "movie" o "tv".')
-  }
-
-  const tituloValidado = validarTitulo(titulo)
-  if (tituloValidado.error) return fallo(tituloValidado.error)
-
-  const posterValidado = validarPoster(poster)
-  if (posterValidado.error) return fallo(posterValidado.error)
-
-  const calificacionValidada = validarCalificacion(calificacion)
-  if (calificacionValidada.error) return fallo(calificacionValidada.error)
-
-  return {
-    datos: {
-      emocion,
-      tmdbId,
-      tipo,
-      titulo: tituloValidado.valor,
-      poster: posterValidado.valor,
-      calificacion: calificacionValidada.valor,
-    },
-  }
-}
-
-function leerTexto(query, nombre) {
-  const valor = query?.[nombre]
-  if (valor === undefined) return { valor: undefined }
-  if (typeof valor !== 'string') {
-    return { error: `El parámetro ${nombre} no es válido.` }
-  }
-  return { valor }
-}
-
-function leerEntero(query, nombre, { min, max, porDefecto }) {
-  const { valor, error } = leerTexto(query, nombre)
-  if (error) return { error }
-  if (valor === undefined) return { valor: porDefecto }
-
-  const numero = Number(valor)
-  if (!ENTERO.test(valor) || numero < min || numero > max) {
-    return {
-      error: `El parámetro ${nombre} debe ser un entero entre ${min} y ${max}.`,
-    }
-  }
-  return { valor: numero }
-}
-
-function leerFecha(query, nombre) {
-  const { valor, error } = leerTexto(query, nombre)
-  if (error || valor === undefined) return { error, valor }
-
-  const fecha = new Date(valor)
-  if (Number.isNaN(fecha.getTime())) {
-    return { error: `El parámetro ${nombre} debe ser una fecha ISO 8601.` }
-  }
-  return { valor: fecha }
-}
-
-function leerOpcion(query, nombre, opciones) {
-  const { valor, error } = leerTexto(query, nombre)
-  if (error || valor === undefined) return { error, valor }
-  if (!opciones.includes(valor)) {
-    return { error: `El parámetro ${nombre} no es válido.` }
-  }
-  return { valor }
-}
-
-// GET /api/favoritos?pagina&limite&tipo&orden
-export function validarConsultaFavoritos(query = {}) {
-  const campos = {
-    pagina: leerEntero(query, 'pagina', {
-      min: 1,
-      max: PAGINACION.paginaMaxima,
-      porDefecto: 1,
-    }),
-    limite: leerEntero(query, 'limite', {
-      min: 1,
-      max: PAGINACION.limiteMaximo,
-      porDefecto: PAGINACION.limitePorDefecto,
-    }),
-    tipo: leerOpcion(query, 'tipo', TIPOS_CONTENIDO),
-    orden: leerOpcion(query, 'orden', ['desc', 'asc']),
-  }
-
-  const datos = {}
-  for (const [nombre, { valor, error }] of Object.entries(campos)) {
-    if (error) return fallo(error)
-    datos[nombre] = valor
-  }
-
-  datos.orden ??= 'desc'
-  return { datos }
-}
-
-// GET /api/historial?pagina&limite&emocion&tipo&desde&hasta&orden
-export function validarConsultaHistorial(query = {}) {
-  const campos = {
-    pagina: leerEntero(query, 'pagina', {
-      min: 1,
-      max: PAGINACION.paginaMaxima,
-      porDefecto: 1,
-    }),
-    limite: leerEntero(query, 'limite', {
-      min: 1,
-      max: PAGINACION.limiteMaximo,
-      porDefecto: PAGINACION.limitePorDefecto,
-    }),
-    emocion: leerOpcion(query, 'emocion', EMOCIONES),
-    tipo: leerOpcion(query, 'tipo', TIPOS_CONTENIDO),
-    desde: leerFecha(query, 'desde'),
-    hasta: leerFecha(query, 'hasta'),
-    orden: leerOpcion(query, 'orden', ['desc', 'asc']),
-  }
-
-  const datos = {}
-  for (const [nombre, { valor, error }] of Object.entries(campos)) {
-    if (error) return fallo(error)
-    datos[nombre] = valor
-  }
-
-  if (datos.desde && datos.hasta && datos.desde > datos.hasta) {
-    return fallo('El parámetro desde no puede ser posterior a hasta.')
-  }
-
-  datos.orden ??= 'desc'
-  return { datos }
-}
+export const validarNuevoFavorito = (body) => validar(esquemaNuevoFavorito, body)
+export const validarNuevoHistorial = (body) => validar(esquemaNuevoHistorial, body)
+export const validarConsultaFavoritos = (query = {}) => validar(esquemaConsultaFavoritos, query)
+export const validarConsultaHistorial = (query = {}) => validar(esquemaConsultaHistorial, query)
