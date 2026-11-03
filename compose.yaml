@@ -18,6 +18,13 @@ services:
       CATALOG_SERVICE_URL: http://catalog-service:3023
       RECOMMENDATIONS_SERVICE_URL: http://recommendations-service:3024
       LIBRARY_SERVICE_URL: http://library-service:3025
+      # Seguridad (pf23): mismos valores por defecto que apigateway/.env.example.
+      CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
+      TRUST_PROXY: 0
+      RATE_LIMIT_WINDOW_MS: 60000
+      RATE_LIMIT_MAX: 300
+      RATE_LIMIT_WRITE_MAX: 60
+      MAX_BODY_BYTES: 32768
     depends_on:
       auth-service:
         condition: service_healthy

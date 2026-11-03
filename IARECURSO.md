@@ -168,6 +168,10 @@ Antes de implementar un cambio:
 14. Solo `api-gateway` publica un puerto en `compose.yaml`. Los microservicios no deben agregar `ports:`.
 15. El frontend llama al backend solo mediante `src/lib/api.js` (`solicitarApi`), que agrega el token de Supabase y traduce errores. No se arma `fetch` con `Authorization` dentro de componentes.
 16. face-api.js se analiza solo en el navegador. Ningún fotograma, imagen ni video se envía, se guarda ni se dibuja fuera del `<video>`: al backend viajan únicamente la emoción y su confianza, y solo con la casilla de autorización marcada.
+17. Seguridad HTTP centralizada en el gateway (`apigateway/src/middlewares/seguridad.js`): helmet, CORS con lista blanca, rate limit, tamaño máximo del body y token obligatorio. Los microservicios **no** agregan CORS propio (el gateway descarta esos encabezados) y no publican puertos.
+18. Toda ruta nueva del gateway es **privada por defecto**. Solo se marca `publico: true` en `services.js` si no devuelve datos de usuarios (hoy: solo el catálogo).
+19. `CORS_ORIGINS` nunca contiene `*` ni rutas: solo orígenes exactos (`https://dominio`). `env.js` rechaza al arrancar un valor inválido.
+20. Cada microservicio usa `express.json({ limit: '10kb' })` y su `errorHandler` responde `413` a `entity.too.large`. Ningún error devuelve el stack ni el body recibido.
 
 Después de implementar un cambio:
 
@@ -181,6 +185,7 @@ Después de implementar un cambio:
 8. Si se modificó el frontend con lógica pura (sin React ni navegador), agregar o actualizar su `*.test.js` y ejecutar `npm test` en la raíz.
 9. Antes de abrir un PR, ejecutar `npm run test:todo` (unitarias e integración de todos los paquetes) y `npm run e2e` (flujos de usuario con Playwright). Si un cambio altera textos, roles o nombres accesibles de la interfaz, actualizar las pruebas de `e2e/` en la misma rama.
 10. Si cambia el contrato de una ruta del gateway (forma del body o de la respuesta), actualizar también `e2e/support/backendFalso.js`, que lo imita.
+11. Antes de abrir un PR, ejecutar `npm run seguridad:secretos`: debe terminar en `✔ Sin secretos`. Si encuentra uno real, se quita del archivo **y se regenera la credencial** en su servicio (borrarla del archivo no la borra del historial de Git).
 
 ## 3. Arquitectura actual
 
@@ -1776,3 +1781,76 @@ Ninguno de estos pasos necesita secretos.
 - Windows (máquina del desarrollador): `npm run test:todo -- --instalar` → **301/301**. `npm run e2e` → **9/9** en ~27 s; la detección facial tarda ~8 s por prueba.
 - Linux sin GPU: 9/9 E2E. Las pruebas con cámara, repetidas 3 veces, dieron 6/6 (estables).
 - `npm run lint` 0 errores, `npm test` 93/93 y `npm run build` correcto.
+
+## Seguridad — pf23_Seguridad
+
+### Objetivo y alcance
+
+Cerrar la única puerta pública de Butaca, el API Gateway, con las capas de la Clase 19 (casco → portero → límite de golpes), proteger las rutas privadas y revisar el manejo de secretos. Rama `pf23_Seguridad`, basada en `dev` con pf22_Zod integrada.
+
+Estado encontrado al empezar: sin helmet, sin rate limit y sin CORS en el gateway (solo `catalog-service` tenía CORS propio, con `butaca.vercel.app`). `npm audit` marcaba 1 vulnerabilidad moderada en los 3 servicios con Prisma. No había archivos `.env` en el historial de Git.
+
+### Orden de las capas en el gateway (`apigateway/src/app.js`)
+
+```
+helmet → cors → [/health] → rate limit general → rate limit de escritura → tamaño del body → token → proxy → 404 / error
+```
+
+`/health` queda antes del rate limit y del token para que Docker y Render puedan consultarlo siempre.
+
+| Capa | Archivo / variable | Qué hace | Respuesta |
+|---|---|---|---|
+| Casco (helmet 8.3.0) | `casco` | `nosniff`, `X-Frame-Options`, HSTS, `Referrer-Policy: no-referrer` y CSP `default-src 'none'` (el gateway solo devuelve JSON). `crossOriginResourcePolicy: cross-origin` para que el front lea las respuestas. | encabezados |
+| Portero (cors 2.8.6) | `portero`, `CORS_ORIGINS` | Lista blanca exacta. A un origen ajeno no se le envía `Access-Control-Allow-Origin` y el navegador bloquea la respuesta. Métodos `GET, POST, DELETE, OPTIONS`; encabezados `Authorization, Content-Type`; `credentials: false` (el token viaja en `Authorization`, no en cookies). | preflight `204` |
+| Límite general (express-rate-limit 8.7.3) | `RATE_LIMIT_MAX` (300/min) | Por IP, todo `/api/*`. Amplio porque una pantalla del dashboard hace varias consultas. | `429` + `Retry-After` |
+| Límite de escritura | `RATE_LIMIT_WRITE_MAX` (60/min) | Solo `POST/PUT/PATCH/DELETE`. | `429` |
+| Tamaño del body | `MAX_BODY_BYTES` (32 KB) | Rechaza por `Content-Length` sin abrir conexión con el microservicio. | `413` |
+| Token | `exigirToken` | Las rutas privadas sin `Authorization: Bearer <token>` se rechazan sin llegar al microservicio. La verificación **real** del token la sigue haciendo cada servicio con Supabase (`requireAuth`). Una ruta inexistente sigue dando `404`, no `401`. | `401` |
+
+El preflight `OPTIONS` no cuenta para el rate limit ni exige token: lo dispara el navegador, no el usuario.
+
+### Decisiones
+
+- **Un solo responsable de CORS.** El proxy descarta los `access-control-*` y `x-powered-by` que agregue un microservicio (`proxyRes` en `gateway.routes.js`). Así el CORS propio de `catalog-service` no duplica encabezados (el navegador rechaza dos `Access-Control-Allow-Origin`).
+- **Privado por defecto.** `services.js` marca solo el catálogo con `publico: true`. Si alguien agrega un servicio nuevo y se olvida de pensar en la seguridad, queda protegido.
+- **`trust proxy`.** Render pone un proxy delante: con `TRUST_PROXY=1`, `req.ip` es la IP del usuario. Con `0` (local y Docker) es la IP de la conexión. Un valor demasiado alto permitiría falsificar la IP con `X-Forwarded-For` y saltarse el rate limit.
+- **Body en los microservicios.** `auth`, `catalog` y `recommendations` usaban el límite por defecto (100 KB) y un body grande terminaba en `500`. Ahora los 5 usan `10kb` y responden `413`.
+- **Vulnerabilidad de Prisma.** `prisma 6.19.3 → @prisma/config → deepmerge-ts 7.1.5` (GHSA-ggr8-5vv4-36mx, agotamiento de pila con objetos recursivos). La única solución de npm era Prisma 7 (versión mayor, cambia la configuración). Se usó `"overrides": { "deepmerge-ts": "8.0.2" }` en `auth`, `emotions` y `library`: `@prisma/config` solo usa la función `deepmerge`, que la versión 8 conserva. `npm audit --omit=dev` → 0 vulnerabilidades.
+- **`.gitattributes`.** `*.y4m`, `*.wasm`, `*.bin` e imágenes se marcan `binary` para que Git en Windows (`core.autocrlf`) no les cambie los finales de línea. El video falso de la cámara tiene bytes `0x0D` sueltos.
+
+### Manejo de secretos
+
+| Secreto | Dónde vive | Nunca en |
+|---|---|---|
+| `DATABASE_URL` / `DIRECT_URL` (contraseña de la base de Supabase) | `.env` de auth, emotions y library | front, Git, `compose.yaml`, capturas |
+| `TMDB_API_KEY` | `.env` de catalog-service | front, Git |
+| Clave publicable de Supabase | `.env.local` del front (`VITE_`) | — es pública por diseño; la protección real es RLS + verificación del token |
+| Clave secreta / `service_role` de Supabase | **no se usa** en Butaca | en ningún lado |
+
+`npm run seguridad:secretos` (`scripts/revisar-secretos.mjs`) revisa los archivos versionados y `dist/`; con `-- --historial` revisa además los commits. Busca solo los secretos que Butaca usa: `sb_secret_`, JWT con `role: service_role` o de TMDB, cadenas PostgreSQL con contraseña real, `TMDB_API_KEY=` con valor, llaves privadas y cualquier `.env` versionado. Nunca imprime el valor completo y termina con código 1 si encuentra algo (sirve para pf24). La lógica está en `scripts/seguridad/detectores.js` con pruebas en `detectores.test.js` (las corre `npm test` de la raíz).
+
+### Producción en Render
+
+```
+CORS_ORIGINS=https://<front>.onrender.com
+TRUST_PROXY=1
+```
+
+Render sirve HTTPS y helmet envía HSTS. Las demás variables pueden quedar con los valores por defecto de `apigateway/.env.example`. Si se agrega un dominio propio, se suma a `CORS_ORIGINS` separado por coma.
+
+### Pruebas
+
+- `apigateway/test/seguridad.test.js` (9): encabezados de helmet, origen permitido y ajeno, preflight sin llegar al servicio, limpieza de CORS del servicio, `401` en las 6 rutas privadas y con encabezado mal formado, proxy con token, catálogo público, `404` y `413`.
+- `apigateway/test/limite.test.js` (3): escrituras `200, 200, 429`; límite general con `RateLimit-Policy` y `Retry-After`; `/health` no cuenta.
+- `apigateway/test/apoyo.js`: microservicio falso que registra lo que recibe y responde con CORS `*` a propósito.
+- `gateway.test.js`: la prueba del `502` ahora envía token, porque sin token el gateway responde `401` antes.
+- `health.test.js` de auth, catalog y recommendations: body de 20 KB → `413`.
+- Navegador real (Chromium): desde `http://localhost:5173` el `POST` con `Authorization` responde `200`; desde `http://localhost:5999` queda **bloqueado** por CORS.
+
+### Verificación realizada
+
+- Windows (máquina del desarrollador): `npm run test:todo -- --instalar` → **389/389** (front 99, gateway 20, auth 45, emotions 51, catalog 36, recommendations 88, library 50). `npm run e2e` → 9/9. `npm run lint` 0 errores. `npm run seguridad:secretos -- --historial` → sin secretos en 280 archivos ni en 57 commits.
+- Docker: `docker compose up --build -d` construye las 6 imágenes; `npm ci` dentro de las imágenes con Prisma reporta 0 vulnerabilidades. `/health` devuelve CSP y HSTS sin `X-Powered-By`; `/api/favoritos` sin token → `401`; el catálogo sin token no da `401`.
+- Navegador (app real con Supabase): el dashboard carga ánimos y favoritos; en DevTools las respuestas de `/api/*` traen `Content-Security-Policy`, `RateLimit: "general"; r=298; t=60` y `RateLimit-Policy: "general"; q=300; w=60`.
+- El `20` del gateway incluye `test/apoyo.js`: `node --test` ejecuta todo `.js` dentro de `test/`, y ese archivo cuenta como 1 aunque solo exporta funciones (19 pruebas reales).
+- Linux: gateway 20/20, auth 45/45, emotions 51/51, catalog 36/36, recommendations 88/88, library 50/50, raíz 99/99. `npm run e2e` 9/9. `npm run lint` 0 errores. `npm run build` correcto. `npm run seguridad:secretos -- --historial` → sin secretos.

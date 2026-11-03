@@ -8,7 +8,7 @@ import { notFound } from './middlewares/notFound.js'
 export function crearApp({ config = env, fetchImpl = globalThis.fetch } = {}) {
   const app = express()
   app.disable('x-powered-by')
-  app.use(express.json())
+  app.use(express.json({ limit: '10kb' }))
   app.get('/health', (req, res) => res.json({ status: 'ok', service: config.serviceName }))
   app.use('/api/recomendaciones', (req, res, next) => {
     res.setHeader('Cache-Control', 'no-store')

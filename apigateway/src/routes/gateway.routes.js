@@ -39,6 +39,16 @@ export function registerGatewayRoutes(app) {
           proxyReq: (proxyReq) => {
             proxyReq.setHeader('x-butaca-gateway', 'pf8_APIGateway')
           },
+          // El gateway es la única autoridad de CORS (pf23): se descartan los
+          // encabezados CORS que un microservicio agregue por su cuenta, para
+          // no duplicarlos (el navegador rechaza dos Access-Control-Allow-Origin).
+          proxyRes: (proxyRes) => {
+            for (const encabezado of Object.keys(proxyRes.headers)) {
+              if (encabezado.startsWith('access-control-') || encabezado === 'x-powered-by') {
+                delete proxyRes.headers[encabezado]
+              }
+            }
+          },
         },
       }),
     )
