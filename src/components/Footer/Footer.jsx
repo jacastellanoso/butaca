@@ -1,16 +1,16 @@
 import logoButaca from '../../../logobutacaoficial.svg'
 import './Footer.css'
 
-// Rutas reales de la navegación por hash definida en App.jsx.
+// Rutas reales de la navegación por hash definida en App.jsx (src/lib/rutas.js).
 const menuLinks = [
-  { label: 'Inicio', href: '#' },
   { label: 'Explorar películas', href: '#galeria' },
   { label: 'Escanearme', href: '#rostro' },
+  { label: 'Mis recomendaciones', href: '#recomendaciones' },
+  { label: 'Dashboard', href: '#dashboard' },
+  { label: 'Favoritos', href: '#favoritos' },
 ]
 
-// Mis recomendaciones todavía no tiene pantalla (pf15). Si la pantalla anfitriona
-// recibe onRecommendations se muestra como botón; si no, queda como texto.
-function Footer({ onRecommendations }) {
+function Footer() {
   return (
     <footer className="site-footer">
       <div className="site-footer__inner">
@@ -27,15 +27,6 @@ function Footer({ onRecommendations }) {
                 <a className="site-footer__link" href={href}>{label}</a>
               </li>
             ))}
-            <li>
-              {onRecommendations ? (
-                <button className="site-footer__link" type="button" onClick={onRecommendations}>
-                  Mis recomendaciones
-                </button>
-              ) : (
-                <span className="site-footer__link site-footer__link--pending">Mis recomendaciones</span>
-              )}
-            </li>
           </ul>
         </nav>
 

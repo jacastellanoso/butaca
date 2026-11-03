@@ -16,6 +16,7 @@
 - Rama del microservicio de emociones: `pf13_MSEmociones`, basada en `dev` (con `pf12_MSAutenticacion` integrada). `emotions-service` recibe, guarda y consulta resultados emocionales autorizados en `/api/animos` (sección 8). La migración aditiva `20261030120000_animo_consentimiento_historial` está **aplicada** en la base de Supabase.
 - Rama de detección de emociones: `pf17_FaceAPI`, basada en `dev`. `Rostro` detecta la expresión con face-api.js en el navegador y, con autorización explícita, guarda el resultado en `emotions-service` (sección 5).
 - Rama de pruebas de API en Postman: `pf19_PruebasPostman`, basada en `dev`. Colección e instrucciones en `postman/` para validar de punta a punta los contratos HTTP del API Gateway (`http://localhost:3000`) y sus cinco microservicios sin versionar credenciales.
+- Rama del tablero y la navegación integrada: `pf20_RecomDashboard`, basada en `dev` (`d730fde`). Sesión validada con Supabase Auth, selección de perfil, encabezado global con cierre de sesión, dashboard de emociones, recomendaciones, historial y favoritos, y recomendaciones posteriores al escáner (sección "Dashboard y navegación integrada — pf20_RecomDashboard"). Con esta rama ya existen rutas protegidas y pantallas posteriores al acceso; las líneas de alcance siguientes describen el estado anterior a pf20.
 - Pantallas implementadas: `Main`, destinada visualmente a visitantes sin sesión, y `Rostro`, con cámara, consentimiento e interfaz de detección de emociones (accesible temporalmente desde `/#rostro`).
 - Alcance actual: presentación visual, animaciones e inicio de sesión OAuth 2.0 con Google o GitHub mediante Supabase. El cliente conserva y renueva la sesión; todavía no existen rutas protegidas ni una pantalla posterior al acceso.
 - Tipografía oficial de toda la aplicación: **Montserrat**. Está instalada localmente mediante `@fontsource/montserrat` y se cargan solamente los subconjuntos latinos de los pesos 400, 600, 700 y 800 desde `src/main.jsx`.
@@ -959,6 +960,8 @@ Cuando `pf4` defina su composición visual, debe importarlos desde esta carpeta 
 
 ## 16. Funcionalidades pendientes
 
+> **Actualización `pf20_RecomDashboard`:** quedan resueltos en esa rama la pantalla posterior a la autenticación, el cierre de sesión y el menú de usuario, la navegación con rutas protegidas, el paso de `Rostro` a recomendaciones, la sincronización de `POST /api/usuarios` tras el inicio de sesión y la integración del frontend con `/api/recomendaciones`. Se conservan los puntos originales como referencia. Siguen pendientes los perfiles múltiples (requieren backend), la verificación con servicios reales y los demás puntos.
+
 - Definir la pantalla o ruta a mostrar después de una autenticación exitosa.
 - Añadir cierre de sesión y una interfaz que represente al usuario autenticado.
 - Añadir navegación y rutas cuando existan más pantallas, reemplazando el acceso temporal `/#rostro`.
@@ -1065,6 +1068,14 @@ Esta verificación sustituye el bloqueo Docker anterior. Docker Desktop estaba i
 - Pendiente real: recorrido completo por el gateway con los tres servicios existentes configurados. Auth necesitaría su configuración privada de Supabase y una sesión válida de prueba; comprobar aislamiento entre personas requeriría dos sesiones de cuentas autorizadas. Emociones necesitaría su conexión PostgreSQL y registros propios ya existentes con consentimiento (esta revisión no crea registros). Catálogo necesitaría su credencial TMDB configurada de forma privada en ese servicio. Recomendaciones no necesita SDK ni credenciales de esas plataformas. No se solicitaron ni leyeron estos datos, ni se realizaron migraciones o escrituras reales.
 
 ## 17. Historial
+
+### 2026-11-02 — Dashboard de recomendaciones y navegación integrada (`pf20_RecomDashboard`)
+
+- Flujo completo: inicio de sesión → selección de perfil → galería → escáner → emoción detectada → recomendaciones. La sesión se valida con `supabase.auth.getUser()`, no solo con `localStorage`, y las rutas con datos personales están protegidas.
+- Encabezado global (`src/components/Encabezado/`) con Galería, Escanearme, Mis recomendaciones, Dashboard, Favoritos y menú de usuario con cambio de perfil y cierre de sesión.
+- Dashboard (`src/pages/Dashboard/`) con Mis emociones (`GET /api/animos`, gráficos SVG, filtros), Mis recomendaciones (`GET /api/recomendaciones`), Historial (`/api/animos` y `/api/historial`) y Mis favoritos (`/api/favoritos`).
+- Pantalla de perfiles con un único perfil real derivado de la cuenta; los perfiles múltiples quedan bloqueados porque no existe modelo `Perfil` en PostgreSQL (propuesta documentada, sin migraciones).
+- No se modificaron microservicios, Gateway, Prisma ni la base. Lint, build, 93 pruebas unitarias y 57 verificaciones de navegador con servicios simulados aprobadas; falta la prueba con servicios reales.
 
 ### 2026-11-02 — Pruebas de endpoints y contratos HTTP en Postman (`pf19_PruebasPostman`)
 
@@ -1348,3 +1359,198 @@ El archivo `Butaca_Local.postman_environment.json` define las siguientes variabl
 | `tmdbIdSerie` | `"1399"` | Identificador numérico de serie en TMDB disponible para pruebas de detalle de series. |
 
 De esta manera, al finalizar la corrida del Collection Runner, los registros de prueba creados en `Favorito` e `HistorialRecomendacion` se limpian automáticamente mediante sus respectivos endpoints `DELETE`, y el repositorio permanece libre de credenciales o tokens de sesión.
+
+## Dashboard y navegación integrada — pf20_RecomDashboard
+
+Rama `pf20_RecomDashboard`, creada desde `dev` en `d730fde` (pf14–pf19 integradas). Implementa el tablero de emociones, recomendaciones, historial y favoritos, y el flujo de navegación completo de la aplicación. **No modifica microservicios, Gateway, Prisma ni la base de datos.** Solo consume los contratos existentes.
+
+### Flujo y rutas
+
+**Inicio de sesión → Selección de perfil → Galería → Escáner → Emoción detectada → Recomendaciones.**
+
+La navegación sigue siendo por hash (compatible con `#rostro` y `#galeria` de ramas anteriores y con el retorno de OAuth). `src/lib/rutas.js` traduce el hash; `src/hooks/useRuta.js` lo observa.
+
+| Hash | Pantalla | Requiere sesión |
+|---|---|---|
+| `#` o desconocido (incluido el retorno de OAuth) | `Main` sin sesión; con sesión redirige a `#galeria` | No |
+| `#perfiles` | `Perfiles` ("¿Quién va a ver hoy?") | Sí |
+| `#galeria` | `GaleriaPrincipal` con el encabezado global | Sí |
+| `#rostro` | `RostroDeteccion` con el encabezado global | Sí |
+| `#dashboard` | Dashboard → Mis emociones | Sí |
+| `#recomendaciones` | Dashboard → Mis recomendaciones (último ánimo guardado) | Sí |
+| `#recomendaciones/emocion/:emocion` | Recomendaciones por emoción, **sin guardar** | Sí |
+| `#recomendaciones/animo/:uuid` | Recomendaciones por ánimo propio guardado | Sí |
+| `#historial` | Dashboard → Historial | Sí |
+| `#favoritos` | Dashboard → Mis favoritos | Sí |
+
+Sin sesión válida, `App.jsx` muestra `Main` para **cualquier** hash: ninguna pantalla con datos personales se renderiza ni llama a `/api`.
+
+### Sesión (Supabase Auth)
+
+- `src/lib/sesion.js` → `validarSesion(cliente)`: lee la sesión guardada y la **valida con el servidor** mediante `supabase.auth.getUser()`. No alcanza con que exista en `localStorage`.
+  - `400/401/403/404/422` → token inválido o revocado: `signOut({ scope: 'local' })` y estado `anonimo`.
+  - Error de red → estado `error` con botón **Reintentar** (no se cierra una sesión que podría ser válida).
+- `src/hooks/useSesion.js` escucha `onAuthStateChange` (`SIGNED_IN`, `USER_UPDATED`, `SIGNED_OUT`) sin llamar a Supabase dentro del callback. Tras validar ejecuta una vez `POST /api/usuarios` (`src/services/usuarios.js`), necesario para que emociones y biblioteca no respondan `409`.
+- `cerrarSesion()` en `src/lib/supabase.js` usa `signOut({ scope: 'local' })` (solo este navegador). `App.jsx` además limpia el perfil activo, la sincronización de usuario y la marca de historial registrado, y vuelve a la bienvenida.
+
+### Perfiles — dependencia de backend
+
+**No existe un modelo `Perfil` en PostgreSQL** (`backend/prisma/schema.prisma`: `Usuario`, `Animo`, `Favorito`, `HistorialRecomendacion`). Por eso:
+
+- `Perfiles` muestra un único perfil real, armado con los datos de Supabase Auth (`full_name`/`name`/`user_name`, avatar HTTPS de Google o GitHub, proveedor) por `perfilDeCuenta()` en `src/services/perfiles.js`.
+- La tarjeta **Agregar perfil** no crea nada: explica que hace falta persistencia en la base.
+- El perfil elegido se guarda en `sessionStorage` (`butaca:perfil-activo`) solo como estado de interfaz y únicamente si coincide con el `usuarioId` autenticado. No separa datos en el backend.
+
+**Propuesta para habilitar perfiles múltiples (requiere autorización; no se ejecutó ninguna migración):**
+
+1. Migración aditiva: `model Perfil { id String @id @default(uuid()); usuarioId String; nombre String; avatar String?; creadoEn DateTime @default(now()); usuario Usuario @relation(..., onDelete: Cascade); @@index([usuarioId]) }` y `perfilId String?` (nullable, sin romper registros previos) en `Animo`, `Favorito` y `HistorialRecomendacion`. Se cambia la unicidad de `Favorito` a `@@unique([usuarioId, perfilId, tmdbId, tipo])`.
+2. `auth-service`: `GET/POST/PATCH/DELETE /api/perfiles`, siempre filtrando por `req.user.id`, con un tope de perfiles por cuenta.
+3. Emociones y biblioteca: aceptar el encabezado `X-Butaca-Perfil` y **verificar en el servidor** que el perfil pertenece a `req.user.id` antes de filtrar o guardar (nunca confiar en el valor del cliente). Agregar la ruta al Gateway no requiere cambios: el encabezado se reenvía.
+4. Front: `Perfiles` lista `/api/perfiles` y `solicitarApi` agrega el encabezado del perfil activo.
+
+### Encabezado global y footer
+
+- `src/components/Encabezado/` (`Encabezado.jsx`, `Encabezado.css`): logo oficial; navegación **Galería, Escanearme, Mis recomendaciones, Dashboard, Favoritos** con `aria-current`; menú de usuario con avatar, nombre, correo, **Cambiar perfil** y **Cerrar sesión**. Debajo de 1180 px la navegación pasa a un menú hamburguesa que se cierra con Escape, al hacer clic afuera o al navegar. Reutiliza los íconos oficiales `iconoescanearme.svg` e `iconomisreconocimientos.svg`.
+- `GaleriaPrincipal` recibe el encabezado global por la prop `encabezado`. `EncabezadoGaleria` (pf10) se conserva como respaldo y su botón de recomendaciones ahora enlaza a `#recomendaciones`. Se quitó el aviso "estará disponible cuando se integre pf15".
+- `Footer` enlaza las rutas reales (galería, escáner, recomendaciones, dashboard, favoritos). Se eliminó la prop `onRecommendations`, que ya no es necesaria.
+- `RostroDeteccion` se muestra dentro de `.app-shell` (en `App.css`) para que `Rostro` ocupe el alto restante debajo del encabezado sin modificar `Rostro.jsx`.
+
+### Dashboard (`src/pages/Dashboard/`)
+
+```text
+Dashboard.jsx / Dashboard.css        # Saludo, pestañas por hash, sección activa y Footer.
+estadisticas.js (+ .test.js)         # Distribución, emoción más frecuente, confianza promedio y serie temporal (día/semana/mes).
+formato.js                           # Fechas en español, etiquetas de emoción y FILTROS_VACIOS.
+components/  EstadoPanel, FiltrosHistorial, FilaAnimo, GraficoEvolucion, GraficoDistribucion, Paginacion, TarjetaPelicula
+secciones/   SeccionEmociones, SeccionRecomendaciones, SeccionHistorial, SeccionFavoritos
+```
+
+**A. Mis emociones** (`GET /api/animos`):
+- Filtros por emoción, desde y hasta. Las fechas locales se convierten a ISO con el inicio y el fin del día.
+- Indicadores: total de registros (`paginacion.total`), emoción más frecuente (los empates se resuelven por el registro más reciente), último registro y confianza promedio (solo detecciones; las confirmadas no tienen confianza).
+- **Evolución emocional:** columnas apiladas por periodo, hechas con SVG propio sin dependencias. Tooltip con desglose al pasar el mouse o con foco de teclado, y botón **Ver como tabla**.
+- **Distribución:** barras horizontales con etiqueta, cantidad y porcentaje visibles.
+- Línea de tiempo de los registros recientes con fecha y hora.
+- Los gráficos usan hasta 500 registros (páginas de 100, el máximo del contrato) y avisan si hay más.
+- Colores fijos por emoción (`COLORES_EMOCION`): paleta categórica validada para daltonismo sobre superficie blanca. Siempre acompañada de etiquetas o tabla.
+
+**B. Mis recomendaciones** (`GET /api/recomendaciones`):
+- Con `#recomendaciones` se usa el último ánimo guardado (`animoId`), de modo que el servidor verifica propiedad y consentimiento. Si no hay ninguno, se invita a escanear.
+- Las fichas de emoción consultan con `emocion` (sin guardar nada) y alternan entre Películas y Series (`tipo`).
+- Cada tarjeta muestra póster real de TMDB, título, tipo, año, calificación, sinopsis, acceso al detalle y botón de favorito. Las 5 primeras llevan la marca "Top".
+- **Géneros:** `/api/recomendaciones` no los incluye. `src/services/detallesCatalogo.js` los completa con `GET /api/catalogo/:tipo/:tmdbId` (caché en memoria, 4 consultas simultáneas). Si falla, la tarjeta queda sin géneros: no se inventan.
+
+**C. Historial:**
+- *Emociones registradas*: `GET /api/animos`, paginado de a 20, con filtros de emoción y fechas.
+- *Recomendaciones recibidas*: `GET /api/historial` (persistencia real de pf16), paginado, con filtros de emoción, tipo y fechas.
+  - La interfaz aclara que figurar en el historial **no significa que el usuario haya visto** el contenido.
+  - El filtro de tipo solo se envía a `/api/historial`.
+
+**D. Mis favoritos** (`/api/favoritos`):
+- `src/context/FavoritosProvider.jsx` + `favoritosContexto.js` cargan todos los favoritos del usuario una vez y los comparten entre galería, recomendaciones y dashboard.
+- `BotonFavorito` (`src/components/BotonFavorito/`) agrega con `POST` (idempotente) o quita con `DELETE /api/favoritos/:id`. Está deshabilitado en datos de demostración o sin proveedor.
+- Filtro por tipo y detalle completado con el catálogo.
+
+### Escáner → emoción → recomendaciones
+
+`AccionesResultado` (pf17) conserva su lógica de consentimiento y ahora muestra `RecomendacionesRostro` cuando hay una emoción detectada:
+
+1. Muestra la emoción detectada (sin cambios en `EmotionStatus`).
+2. La casilla de autorización para guardar sigue siendo independiente del permiso de cámara.
+3. `POST /api/animos` solo se ejecuta con la casilla marcada. Ahora se conserva el `id` devuelto.
+4. `GET /api/recomendaciones?emocion=...&tipo=movie` muestra 6 pósters sin guardar nada. **Ver todas** abre `#recomendaciones/emocion/:e`, o `#recomendaciones/animo/:id` si se guardó.
+5. Solo si el resultado se guardó con consentimiento, las 5 recomendaciones destacadas se registran con `POST /api/historial` (una vez por `animoId` por pestaña, controlado con `sessionStorage`). Sin consentimiento, la interfaz aclara que no quedan en el historial.
+6. **Explorar la galería** sigue disponible.
+
+Nunca se envían ni se guardan imágenes o video: solo emoción, confianza y datos públicos de TMDB.
+
+### Contratos consumidos (todas las rutas pasan por el Gateway con `Authorization: Bearer <token de Supabase>`, salvo catálogo)
+
+| Método y ruta | Servicio | Uso en pf20 |
+|---|---|---|
+| `POST /api/usuarios` | auth-service | Sincronización una vez por sesión |
+| `GET /api/animos?pagina&limite&emocion&desde&hasta&orden` | emotions-service | Estadísticas, gráficos, historial → `{ resultados, paginacion }` |
+| `GET /api/animos/:id` | emotions-service | Fecha del ánimo en `#recomendaciones/animo/:id` |
+| `POST /api/animos` | emotions-service | Escáner, con `consentimientoHistorial: true` (sin cambios de pf17) |
+| `GET /api/recomendaciones?emocion\|animoId&tipo` | recommendations-service | Dashboard y escáner (servicio de pf18) |
+| `GET /api/catalogo/:tipo/:tmdbId` | catalog-service | Géneros y detalle |
+| `GET/POST /api/favoritos`, `DELETE /api/favoritos/:id` | library-service | Favoritos |
+| `GET/POST /api/historial` | library-service | Historial de recomendaciones |
+
+`src/services/contratos.js` valida cada respuesta: UUID, emociones conocidas, fechas, rangos, `consentimientoHistorial === true` y paginación. Si el backend devuelve algo fuera de contrato, la sección muestra un error en lugar de datos parciales. Ningún request envía `usuarioId`: el usuario sale siempre del token en el servidor. No se agregaron endpoints ni secretos en el front, y no fue necesario modificar CORS: en desarrollo el proxy de Vite evita CORS, y catalog-service ya permite `localhost:5173`.
+
+### Archivos
+
+**Nuevos:**
+- `src/lib/rutas.js`, `src/lib/sesion.js`
+- `src/hooks/useSesion.js`, `useRuta.js`, `useDetalleContenido.js`
+- `src/context/FavoritosProvider.jsx`, `favoritosContexto.js`
+- `src/components/Encabezado/*`, `src/components/BotonFavorito/*`
+- `src/pages/Perfiles/*`, `src/pages/Dashboard/**`, `src/pages/Rostro/RecomendacionesRostro.jsx`
+- `src/services/biblioteca.js`, `contratos.js`, `detallesCatalogo.js`, `emociones.js`, `perfiles.js`, `usuarios.js`
+- Pruebas: `rutas.test.js`, `sesion.test.js`, `contratos.test.js`, `perfiles.test.js`, `estadisticas.test.js`
+
+**Modificados:**
+- `src/App.jsx`, `src/App.css`: flujo con sesión, perfiles, rutas protegidas y `.app-shell`.
+- `src/lib/supabase.js`: agrega `cerrarSesion`.
+- `src/components/Footer/Footer.jsx`: enlaces reales.
+- `src/pages/Galeria/GaleriaPrincipal.jsx`: prop `encabezado`.
+- `src/pages/Galeria/components/DetalleContenido.jsx`: `BotonFavorito` en lugar del botón deshabilitado y `generos` opcional.
+- `src/pages/Galeria/components/EncabezadoGaleria.jsx`: enlace a `#recomendaciones`.
+- `src/pages/Rostro/AccionesResultado.jsx`, `Rostro.css`: recomendaciones posteriores a la detección.
+- `src/pages/Rostro/services/animos.js`: usa la sincronización compartida de `services/usuarios.js`.
+- `src/services/recomendaciones.test.js`: el render de `DetalleContenido` también compila `BotonFavorito` e ignora `.css`; la aserción original no cambió.
+
+### Pruebas realizadas
+
+| Prueba | Resultado |
+|---|---|
+| `npm run lint` | Sin advertencias ni errores |
+| `npm run build` | Correcto. Antes fue necesario `npm install`: `node_modules` local no tenía `@vladmandic/face-api` de pf17, aunque ya estaba en `package.json` y `package-lock.json`. Persiste el aviso previo de bundle > 500 kB (face-api). |
+| `npm test` | 93/93 (67 previas + 26 nuevas: rutas, validación de sesión, contratos, perfiles, estadísticas) |
+| Navegador (Chrome headless + Playwright, fuera del repo) | 57/57 verificaciones con **Supabase Auth y Gateway simulados a nivel de red** |
+
+Las verificaciones de navegador cubrieron:
+- Rutas protegidas sin sesión.
+- Token rechazado por `getUser` y eliminado del almacenamiento.
+- Sesión existente → perfiles → galería.
+- Las cinco opciones del encabezado.
+- Favorito desde la galería (`POST` con Bearer y sin `usuarioId`) y quitar favorito (`DELETE`).
+- Indicadores, gráfico, tooltip, tabla y filtros de emociones.
+- Recomendaciones por último ánimo, por emoción y por tipo, con géneros del detalle.
+- Que no se escriba historial sin consentimiento.
+- Historial con filtros.
+- Cierre de sesión (limpia token y perfil, vuelve a la bienvenida y las rutas siguen protegidas).
+- Estados de error `502` y respuesta fuera de contrato.
+- Ausencia de scroll horizontal en 1440, 820 y 390 px, menú hamburguesa y ausencia de errores de JavaScript.
+
+### Limitaciones y pendientes
+
+- **Prueba con servicios reales (2026-11-02), con Supabase Auth, PostgreSQL y Docker Compose reales:**
+  - Configuración local creada y fuera de Git y de las imágenes Docker (`.gitignore` y `.dockerignore`): `.env.local` en la raíz solo con `VITE_SUPABASE_URL` y la clave **publicable**, y `.env` de `auth-service`, `library-service` y `recommendations-service` a partir de sus `.env.example` y de los valores de `emotions-service`. Sin claves `service_role` ni `sb_secret`.
+  - El error "No fue posible iniciar sesión. Verifica la configuración…" se debía a la falta de `.env.local`: sin esas variables no se crea el cliente de Supabase.
+  - Funciona: login real con Google (vuelve a `http://localhost:5173`) → "¿Quién va a ver hoy?" → galería con encabezado global; dashboard, recomendaciones, historial y favoritos accesibles con sesión; `GET /api/animos`, `/api/favoritos` y `/api/historial` responden `200` con datos de la cuenta; la sincronización `POST /api/usuarios` funciona (no hay `409`); sin token, el Gateway responde `401`; **Cerrar sesión** borra el token y el perfil activo, vuelve a la bienvenida y `#dashboard` queda protegido.
+  - GitHub: Supabase redirige correctamente a la autorización de GitHub con `redirect_to=http://localhost:5173`; falta que el usuario la acepte para completar el recorrido.
+  - **TMDB integrado:** se creó `microservicios/catalog-service/.env` a partir de su `.env.example`, con `TMDB_API_KEY` (clave v3 entregada por el equipo) y las URLs y el tiempo de espera de la plantilla. Está excluido de Git y de la imagen: no hay `.env` dentro del contenedor y la clave no aparece en los logs ni en archivos versionados. Luego se ejecutó `docker compose up -d --force-recreate catalog-service recommendations-service`.
+    - `/api/catalogo?tipo=movie` y `?tipo=tv` devuelven `fuente: "tmdb"`, 20 resultados cada uno, todos con póster de `image.tmdb.org` (la imagen responde `200 image/jpeg`), título, tipo, géneros y sinopsis en español. El detalle `/api/catalogo/:tipo/:tmdbId` también responde (`movie/550`, `tv/1399`).
+    - Observación sobre `catalog-service` (pf14, fuera del alcance de pf20): agrupa a propósito Suspenso (53) y Misterio (9648) en la categoría "Terror", y Crimen (80) en "Drama". Por eso, por ejemplo, *El caballero oscuro* aparece con "Terror".
+    - Pruebas de los servicios con `npm ci` local (no tenían `node_modules` fuera de Docker): `catalog-service` 20/20 y `recommendations-service` 74/74.
+  - **Recorrido real en Chrome con TMDB activo (sesión Google real):**
+    - Galería: 20 pósters reales de TMDB cargados, con películas y series. El detalle muestra tipo, año, géneros, sinopsis y calificación.
+    - Favoritos: **Agregar a favoritos** desde el detalle → `POST /api/favoritos` guardado en PostgreSQL (total 1, con `tmdbId`, `tipo`, `titulo` y `poster`); aparece en Dashboard → Mis favoritos; **Quitar** desde esa sección → `DELETE`, la base vuelve a 0. La cuenta quedó como estaba.
+    - Recomendaciones: con sesión autenticada, `#recomendaciones/emocion/happy` muestra 20 tarjetas reales con "Top", póster, año, calificación, géneros completados desde el detalle y sinopsis. El cambio Películas/Series funciona. Una consulta por emoción **no** escribe historial (`/api/historial` sigue en 0).
+    - Dashboard: Mis emociones, Historial (emociones y recomendaciones recibidas), Mis recomendaciones y Mis favoritos cargan con datos reales de la cuenta y muestran el estado vacío correcto (la cuenta no tiene emociones guardadas). Navegación del encabezado verificada.
+    - Escáner con cámara real: el consentimiento de cámara es independiente; face-api.js detectó "Calma 79 %" y se mostraron recomendaciones reales debajo del resultado, con el aviso de que no quedan en el historial. La casilla "Autorizo guardar esta emoción" se dejó **desmarcada**: `/api/animos` y `/api/historial` siguieron en 0. **Apagar cámara** detiene el stream.
+    - Cerrar sesión: borra el token de Supabase y el perfil activo, vuelve a la bienvenida y `#dashboard`, `#favoritos` y `#rostro` quedan protegidos.
+  - **Pendiente de verificación real:**
+    - Login con GitHub hasta el final: falta que el usuario acepte "Authorize application".
+    - Guardar una emoción con consentimiento y su efecto en los gráficos, el historial y `#recomendaciones/animo/:id`. Requiere que el usuario marque la casilla.
+    - El botón **Ver todas** del escáner, que solo es visible mientras hay un resultado.
+    - El aislamiento entre dos cuentas distintas.
+    - El diseño responsive con datos reales; se verificó solo con servicios simulados.
+- El flujo **detección → recomendaciones → registro en historial** no se ejecutó en navegador porque requiere cámara y un rostro real para face-api.js. Su lógica de consentimiento es la de pf17 y la vista previa usa los mismos servicios verificados.
+- **Perfiles múltiples:** bloqueados hasta la migración y los endpoints propuestos arriba (requieren autorización del equipo).
+- `/api/recomendaciones` no devuelve géneros: se completan con una consulta de detalle por tarjeta. Si el servicio incluyera `generos`, se podrían evitar esas consultas.
+- `HistorialRecomendacion` registra lo que Butaca recomendó (top 5 por ánimo guardado), no lo que el usuario vio. No existe un modelo de "visto".
+- No hay endpoint para borrar emociones desde el dashboard (`emotions-service` no expone `DELETE /api/animos/:id`).
+- El commit de documentación `bbcf9b5` de pf13 no está en la base de esta rama (solo cambia `IARECURSO.md`).

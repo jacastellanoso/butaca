@@ -659,3 +659,137 @@
     animation: none;
   }
 }
+
+/* Recomendaciones de la emoción detectada (pf20_RecomDashboard) */
+
+.rostro-recs {
+  display: grid;
+  width: 100%;
+  flex: 1 1 100%;
+  gap: 10px;
+  padding: 14px 16px 12px;
+  border: 1px solid rgb(255 255 255 / 34%);
+  border-radius: 18px;
+  background: rgb(0 20 140 / 28%);
+  backdrop-filter: blur(8px);
+}
+
+.rostro-recs__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.rostro-recs__head h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.rostro-recs__all {
+  padding: 7px 14px;
+  border-radius: 999px;
+  color: var(--rostro-highlight);
+  background: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.rostro-recs__row {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rostro-recs__row li {
+  min-width: 0;
+  animation: rostro-rise 380ms ease both;
+  animation-delay: calc(var(--rec-index) * 50ms);
+}
+
+.rostro-recs__card {
+  display: grid;
+  gap: 5px;
+  color: #ffffff;
+  text-decoration: none;
+}
+
+.rostro-recs__card img,
+.rostro-recs__card span,
+.rostro-recs__skeleton {
+  display: grid;
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  place-items: center;
+  border-radius: 12px;
+  object-fit: cover;
+  background: linear-gradient(145deg, #00518b, #002f5b);
+  transition: transform 200ms ease;
+}
+
+.rostro-recs__card span {
+  color: rgb(255 255 255 / 25%);
+  font-size: 28px;
+  font-weight: 800;
+}
+
+.rostro-recs__card strong {
+  overflow: hidden;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rostro-recs__card:hover img,
+.rostro-recs__card:focus-visible img {
+  transform: translateY(-3px);
+}
+
+.rostro-recs__card:focus-visible,
+.rostro-recs__all:focus-visible {
+  outline: 3px solid #ffffff;
+  outline-offset: 3px;
+}
+
+.rostro-recs__skeleton {
+  background: linear-gradient(110deg, rgb(255 255 255 / 12%) 28%, rgb(255 255 255 / 26%) 42%, rgb(255 255 255 / 12%) 56%);
+  background-size: 220% 100%;
+  animation: rostro-recs-shimmer 1.4s linear infinite;
+}
+
+.rostro-recs__message,
+.rostro-recs__note {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.45;
+  opacity: 0.88;
+}
+
+.rostro-recs__note:empty {
+  display: none;
+}
+
+@keyframes rostro-recs-shimmer {
+  to {
+    background-position: -220% 0;
+  }
+}
+
+@media (max-width: 820px) {
+  .rostro-recs__row {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rostro-recs__row li,
+  .rostro-recs__skeleton {
+    animation: none;
+  }
+}

@@ -11,12 +11,13 @@ import { categoriasGaleria } from './data/contenidosDemo.js'
 import { obtenerCatalogo } from './services/catalogo.js'
 
 /* oxlint-disable react/set-state-in-effect -- sincronización asíncrona con la capa de catálogo */
-function GaleriaPrincipal() {
+// encabezado: desde pf20 App.jsx pasa el encabezado global con navegación y
+// menú de usuario. Sin él se conserva el encabezado original de pf10.
+function GaleriaPrincipal({ encabezado }) {
   const [contenidos, setContenidos] = useState([])
   const [categoria, setCategoria] = useState('Todos')
   const [seleccionado, setSeleccionado] = useState(null)
   const [estado, setEstado] = useState('loading')
-  const [notice, setNotice] = useState('')
 
   const cargarCatalogo = useCallback(async () => {
     try {
@@ -42,11 +43,6 @@ function GaleriaPrincipal() {
     [contenidos],
   )
 
-  const handleRecommendations = () => {
-    setNotice('Mis Recomendaciones estará disponible cuando se integre pf15.')
-    window.setTimeout(() => setNotice(''), 3500)
-  }
-
   const recargarCatalogo = () => {
     setEstado('loading')
     cargarCatalogo()
@@ -54,7 +50,7 @@ function GaleriaPrincipal() {
 
   return (
     <div className="gallery-page">
-      <EncabezadoGaleria onRecommendations={handleRecommendations} />
+      {encabezado ?? <EncabezadoGaleria />}
       <main className="gallery-main">
         <h1 className="visually-hidden">Galería principal de Butaca</h1>
         <FiltrosGaleria categorias={categoriasGaleria} activa={categoria} onChange={setCategoria} />
@@ -69,11 +65,8 @@ function GaleriaPrincipal() {
         )}
         {estado === 'ready' && filtrados.length === 0 && <EstadoGaleria estado="empty" />}
       </main>
-      <Footer onRecommendations={handleRecommendations} />
+      <Footer />
 
-      <p className={`gallery-notice${notice ? ' gallery-notice--visible' : ''}`} role="status" aria-live="polite">
-        {notice}
-      </p>
       {seleccionado && <DetalleContenido contenido={seleccionado} onClose={() => setSeleccionado(null)} />}
     </div>
   )

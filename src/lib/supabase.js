@@ -35,3 +35,10 @@ export async function signInWithOAuth(provider) {
 
   return data
 }
+
+/** Cierra la sesión solo en este navegador; el estado local lo limpia quien llama. */
+export async function cerrarSesion() {
+  if (!supabase) return
+  const { error } = await supabase.auth.signOut({ scope: 'local' })
+  if (error) throw error
+}

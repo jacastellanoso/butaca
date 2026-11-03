@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react'
 
+import BotonFavorito from '../../../components/BotonFavorito/BotonFavorito.jsx'
+
 function DetalleContenido({ contenido, onClose }) {
   const closeRef = useRef(null)
 
@@ -36,13 +38,12 @@ function DetalleContenido({ contenido, onClose }) {
           {contenido.esDemostracion && <span className="content-detail__demo">Datos de demostración</span>}
           <h2 id="content-detail-title">{contenido.titulo}</h2>
           <p className="content-detail__meta">
-            {[contenido.tipo, contenido.anio, contenido.generos.join(', ')].filter(Boolean).join(' · ')}
+            {[contenido.tipo, contenido.anio, (contenido.generos ?? []).join(', ')].filter(Boolean).join(' · ')}
           </p>
           <p>{contenido.sinopsis}</p>
-          {contenido.calificacion !== null && <p>Calificación: {contenido.calificacion}</p>}
-          <button className="content-detail__favorite" type="button" disabled title="La persistencia se implementará en pf16">
-            Favoritos · Próximamente
-          </button>
+          {contenido.calificacion !== null && contenido.calificacion !== undefined && <p>Calificación: {contenido.calificacion}</p>}
+          {/* Favoritos reales en library-service (pf16), conectados en pf20. */}
+          <BotonFavorito contenido={contenido} />
         </div>
       </section>
     </div>

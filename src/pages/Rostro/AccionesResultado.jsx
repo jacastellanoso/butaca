@@ -1,5 +1,6 @@
 import { useId, useState } from 'react'
 
+import RecomendacionesRostro from './RecomendacionesRostro.jsx'
 import { guardarAnimo } from './services/animos.js'
 
 /**
@@ -15,7 +16,7 @@ import { guardarAnimo } from './services/animos.js'
 function AccionesResultado({ detection, onAnalyze }) {
   const consentId = useId()
   const [autorizado, setAutorizado] = useState(false)
-  const [guardado, setGuardado] = useState({ estado: 'idle', mensaje: '' })
+  const [guardado, setGuardado] = useState({ estado: 'idle', mensaje: '', animoId: null })
 
   const { status, emotion, confidence } = detection
   const analizando = status === 'analyzing'
@@ -24,12 +25,16 @@ function AccionesResultado({ detection, onAnalyze }) {
   const yaGuardado = guardado.estado === 'saved'
 
   const handleGuardar = async () => {
-    setGuardado({ estado: 'saving', mensaje: '' })
+    setGuardado({ estado: 'saving', mensaje: '', animoId: null })
     try {
-      await guardarAnimo({ emocion: emotion, confianza: confidence })
-      setGuardado({ estado: 'saved', mensaje: 'Guardado en tu historial emocional.' })
+      const animo = await guardarAnimo({ emocion: emotion, confianza: confidence })
+      setGuardado({
+        estado: 'saved',
+        mensaje: 'Guardado en tu historial emocional.',
+        animoId: typeof animo?.id === 'string' ? animo.id : null,
+      })
     } catch (error) {
-      setGuardado({ estado: 'error', mensaje: error.message })
+      setGuardado({ estado: 'error', mensaje: error.message, animoId: null })
     }
   }
 
@@ -77,6 +82,9 @@ function AccionesResultado({ detection, onAnalyze }) {
           )}
         </div>
       )}
+
+      {/* pf20: recomendaciones de la emoción detectada (no requieren guardar). */}
+      {puedeGuardar && <RecomendacionesRostro emocion={emotion} animoId={guardado.animoId} />}
 
       <button
         className="rostro-button rostro-button--secondary"
