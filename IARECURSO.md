@@ -17,6 +17,7 @@
 - Rama de detección de emociones: `pf17_FaceAPI`, basada en `dev`. `Rostro` detecta la expresión con face-api.js en el navegador y, con autorización explícita, guarda el resultado en `emotions-service` (sección 5).
 - Rama de pruebas de API en Postman: `pf19_PruebasPostman`, basada en `dev`. Colección e instrucciones en `postman/` para validar de punta a punta los contratos HTTP del API Gateway (`http://localhost:3000`) y sus cinco microservicios sin versionar credenciales.
 - Rama del tablero y la navegación integrada: `pf20_RecomDashboard`, basada en `dev` (`d730fde`). Sesión validada con Supabase Auth, selección de perfil, encabezado global con cierre de sesión, dashboard de emociones, recomendaciones, historial y favoritos, y recomendaciones posteriores al escáner (sección "Dashboard y navegación integrada — pf20_RecomDashboard"). Con esta rama ya existen rutas protegidas y pantallas posteriores al acceso; las líneas de alcance siguientes describen el estado anterior a pf20.
+- Rama de pruebas: `pf21_Testing`, basada en `dev`. Pruebas E2E con Playwright (`e2e/`, backend falso, sesión simulada y cámara falsa) y `npm run test:todo`, que corre las suites unitarias y de integración del front, el gateway y los cinco microservicios (sección «Pruebas automatizadas — pf21_Testing»).
 - Pantallas implementadas: `Main`, destinada visualmente a visitantes sin sesión, y `Rostro`, con cámara, consentimiento e interfaz de detección de emociones (accesible temporalmente desde `/#rostro`).
 - Alcance actual: presentación visual, animaciones e inicio de sesión OAuth 2.0 con Google o GitHub mediante Supabase. El cliente conserva y renueva la sesión; todavía no existen rutas protegidas ni una pantalla posterior al acceso.
 - Tipografía oficial de toda la aplicación: **Montserrat**. Está instalada localmente mediante `@fontsource/montserrat` y se cargan solamente los subconjuntos latinos de los pesos 400, 600, 700 y 800 desde `src/main.jsx`.
@@ -52,6 +53,8 @@ Después de implementar un cambio:
 6. Si se modificó el gateway, ejecutar `npm test` dentro de `apigateway/`, comprobar `GET /health` y validar `docker compose config` cuando Docker esté disponible.
 7. Si se modificó un microservicio, ejecutar `npm test` dentro de su carpeta y `docker compose up --build -d` desde la raíz; `docker compose ps` debe mostrar los seis contenedores `healthy`.
 8. Si se modificó el frontend con lógica pura (sin React ni navegador), agregar o actualizar su `*.test.js` y ejecutar `npm test` en la raíz.
+9. Antes de abrir un PR, ejecutar `npm run test:todo` (unitarias e integración de todos los paquetes) y `npm run e2e` (flujos de usuario con Playwright). Si un cambio altera textos, roles o nombres accesibles de la interfaz, actualizar las pruebas de `e2e/` en la misma rama.
+10. Si cambia el contrato de una ruta del gateway (forma del body o de la respuesta), actualizar también `e2e/support/backendFalso.js`, que lo imita.
 
 ## 3. Arquitectura actual
 
@@ -1069,6 +1072,14 @@ Esta verificación sustituye el bloqueo Docker anterior. Docker Desktop estaba i
 
 ## 17. Historial
 
+### 2026-11-03 — Pruebas unitarias, de integración y E2E (`pf21_Testing`)
+
+- Se instaló `@playwright/test` 1.63.0 (versión exacta) y se crearon `playwright.config.js` y `playwright.slow.config.js`.
+- `e2e/` contiene 9 pruebas E2E: acceso y rutas protegidas, galería y favoritos, y detección facial con guardado autorizado. Corren con un backend falso que imita los contratos reales, una sesión de Supabase simulada y una cámara falsa con un rostro (Y4M).
+- `scripts/test-todo.mjs` (`npm run test:todo`) corre y resume las 301 pruebas unitarias y de integración del front, el gateway y los cinco microservicios.
+- Scripts nuevos: `test:todo`, `e2e`, `e2e:ui`, `e2e:slow` y `e2e:report`. `.gitignore` excluye `test-results/` y `playwright-report/`.
+- Verificado en Windows: 301/301 unitarias e integración y 9/9 E2E.
+
 ### 2026-11-02 — Dashboard de recomendaciones y navegación integrada (`pf20_RecomDashboard`)
 
 - Flujo completo: inicio de sesión → selección de perfil → galería → escáner → emoción detectada → recomendaciones. La sesión se valida con `supabase.auth.getUser()`, no solo con `localStorage`, y las rutas con datos personales están protegidas.
@@ -1554,3 +1565,88 @@ Las verificaciones de navegador cubrieron:
 - `HistorialRecomendacion` registra lo que Butaca recomendó (top 5 por ánimo guardado), no lo que el usuario vio. No existe un modelo de "visto".
 - No hay endpoint para borrar emociones desde el dashboard (`emotions-service` no expone `DELETE /api/animos/:id`).
 - El commit de documentación `bbcf9b5` de pf13 no está en la base de esta rama (solo cambia `IARECURSO.md`).
+
+## Pruebas automatizadas — pf21_Testing
+
+### Pirámide de pruebas de Butaca
+
+| Nivel | Qué prueba | Dónde | Comando | Cantidad |
+|---|---|---|---|---:|
+| Unitarias (front) | Lógica pura: análisis de face-api, rutas, sesión, contratos, estadísticas, recomendaciones | `src/**/*.test.js` | `npm test` | 93 |
+| Integración (servicios) | Endpoints reales de cada servicio con Supabase, Prisma y TMDB simulados | `apigateway/test`, `microservicios/*/test` | `npm test` en cada carpeta | 208 |
+| Todo lo anterior | Las 7 suites con resumen | `scripts/test-todo.mjs` | `npm run test:todo` | **301** |
+| Integración con servicios reales | Cadena completa vía gateway con Docker, Supabase y TMDB reales | `postman/` (pf19) | Postman / Runner | 27 peticiones |
+| **E2E** | Flujos completos del usuario en un navegador real | `e2e/*.spec.js` | `npm run e2e` | **9** |
+
+### Comandos
+
+```bash
+npm run test:todo              # unitarias + integración de los 7 paquetes (usa node_modules existentes)
+npm run test:todo -- --instalar  # máquina limpia o CI: npm ci + prisma generate en cada paquete
+npm run e2e                    # E2E headless (rápido, para el día a día y CI)
+npm run e2e:ui                 # panel interactivo: viaje en el tiempo por cada acción
+npm run e2e:slow               # ventana visible en cámara lenta (1 s por acción), para demos
+npm run e2e:report             # reporte HTML con capturas, video y trace de la última corrida
+```
+
+La primera vez: `npm install` y `npx playwright install chromium` (descarga el navegador de Playwright, ~300 MB con el headless shell).
+
+### `test:todo`
+
+- Entra a cada paquete y ejecuta su `npm test` (regla 12: cada uno es un proyecto npm independiente), lee el resumen de `node:test` y muestra una tabla.
+- Con `--instalar`, o si falta `node_modules`, hace `npm ci` y, en los servicios con Prisma, `prisma generate` con una URL de relleno (generar el cliente no se conecta a la base).
+- Termina con código de salida `1` si algún paquete falla, para que la integración continua (`pf24_GitHubActions`) marque el check en rojo.
+- No necesita `.env`, Docker ni red: las pruebas de los servicios simulan Supabase, Prisma y TMDB.
+
+### Estrategia E2E
+
+El login real con Google/GitHub no se puede automatizar (los proveedores bloquean navegadores automatizados y exigen cuentas reales), y en CI no hay cámara, Docker ni llaves. Por eso los E2E prueban **la aplicación completa en el navegador** contra dependencias simuladas en la red:
+
+- **Sesión simulada** (`e2e/support/sesion.js`): se guarda en `localStorage` una sesión con el formato de supabase-js (`sb-e2e-butaca-auth-token`) para una Supabase **inventada** (`https://e2e-butaca.supabase.co`). Si algo escapara del backend falso, falla en lugar de tocar el Supabase real.
+- **Backend falso** (`e2e/support/backendFalso.js`): `page.route` intercepta en el navegador `/api/*` y Supabase Auth (`/auth/v1/user`, `/auth/v1/logout`), y responde con **los mismos contratos** de los microservicios. Respeta sus reglas: `401` sin token, `403` sin `consentimientoHistorial: true`, favoritos sin duplicados y paginación `{ resultados, paginacion }`. Guarda estado durante la prueba y registra cada petición en `backend.peticiones` para afirmar qué envió el front. `backend.fallar('/api/catalogo', 502)` simula un servicio caído.
+- **Cámara falsa** (`e2e/fixtures/rostro-sonriente.y4m`): Chromium la reproduce como webcam (`--use-file-for-fake-video-capture`). **face-api.js corre de verdad** y detecta *Alegría*. Se usa Y4M porque Chromium no reproduce MJPEG en este modo.
+- **Fixtures** (`e2e/support/pruebas.js`): `backend` se conecta automáticamente en cada prueba (`auto: true`) y empieza vacío; `test.use({ conSesion: true })` inicia la prueba con sesión. El segundo parámetro de las fixtures se llama `entregar` (no `use`) porque la regla `react/rules-of-hooks` de oxlint lo confundía con un hook.
+- **Selectores**: `getByRole`, `getByLabel` y nombres accesibles, sin `data-testid`. Las pantallas ya exponen roles y nombres accesibles, así que no fue necesario modificar componentes de otras ramas y, de paso, se verifica su accesibilidad. Los enlaces del encabezado se buscan dentro de la navegación principal (`menu(page, nombre)`) porque el footer repite algunos.
+
+### Configuración (`playwright.config.js`)
+
+- `webServer` levanta `npm run dev` en el puerto **5174** (no 5173): `reuseExistingServer` nunca reutiliza el `npm run dev` personal, que apunta al Supabase real.
+- `webServer.env` define `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` y `VITE_API_GATEWAY_URL=''`. Vite da prioridad a las variables del proceso sobre `.env.local`.
+- Un solo navegador (Chromium) y `workers: 1`: face-api usa mucha CPU y en paralelo las pruebas se estorban. `timeout` de 90 s por prueba.
+- `trace`, `screenshot` y `video` se conservan **solo cuando una prueba falla** (`retain-on-failure`); en CI hay `retries: 1` y el reporte HTML no se abre solo.
+- `playwright.slow.config.js` hereda la configuración con ventana visible y `slowMo: 1000`.
+
+### Casos E2E
+
+| Archivo | Prueba | Tipo |
+|---|---|---|
+| `acceso.spec.js` | Bienvenida con accesos de Google y GitHub | feliz |
+| | `#dashboard`, `#favoritos`, `#rostro` y `#galeria` sin sesión muestran la bienvenida y no piden datos personales | borde / seguridad |
+| | Con sesión: "¿Quién va a ver hoy?" → galería, y sincronización con `POST /api/usuarios` | feliz |
+| | Cerrar sesión vuelve a la bienvenida y `#dashboard` queda protegido | seguridad |
+| `galeria.spec.js` | Catálogo visible y filtro por género | feliz |
+| | Favorito desde el detalle → aparece en *Mis favoritos*; el body es `{ tmdbId, tipo, titulo, poster }` con `Bearer` | feliz / contrato |
+| | Catálogo caído (`502`) → error con "Reintentar" | borde |
+| `rostro.spec.js` | face-api detecta *Alegría* → "Para tu alegría" → **Guardar deshabilitado sin la casilla** → guarda → el body tiene **solo** `emocion`, `confianza`, `origen` y `consentimientoHistorial` → aparece en el dashboard | feliz / privacidad |
+| | Apagar la cámara vuelve al consentimiento, oculta el video y no guarda nada | borde / privacidad |
+
+### Para la integración continua (`pf24_GitHubActions`)
+
+```yaml
+- run: npm ci
+- run: npm run lint
+- run: npm run test:todo -- --instalar
+- run: npx playwright install --with-deps chromium
+- run: npm run e2e
+- uses: actions/upload-artifact@v4
+  if: ${{ !cancelled() }}
+  with: { name: playwright-report, path: playwright-report/ }
+```
+
+Ninguno de estos pasos necesita secretos.
+
+### Verificación realizada
+
+- Windows (máquina del desarrollador): `npm run test:todo -- --instalar` → **301/301**. `npm run e2e` → **9/9** en ~27 s; la detección facial tarda ~8 s por prueba.
+- Linux sin GPU: 9/9 E2E. Las pruebas con cámara, repetidas 3 veces, dieron 6/6 (estables).
+- `npm run lint` 0 errores, `npm test` 93/93 y `npm run build` correcto.
