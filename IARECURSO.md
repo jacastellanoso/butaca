@@ -15,6 +15,7 @@
 - Rama del pie de página: `pf11_Pie`, basada en `dev` (con la galería de `pf10_GaleriaPrincipal` ya integrada). Componente reutilizable `Footer` integrado en la galería.
 - Rama del microservicio de emociones: `pf13_MSEmociones`, basada en `dev` (con `pf12_MSAutenticacion` integrada). `emotions-service` recibe, guarda y consulta resultados emocionales autorizados en `/api/animos` (sección 8). La migración aditiva `20261030120000_animo_consentimiento_historial` está **aplicada** en la base de Supabase.
 - Rama de detección de emociones: `pf17_FaceAPI`, basada en `dev`. `Rostro` detecta la expresión con face-api.js en el navegador y, con autorización explícita, guarda el resultado en `emotions-service` (sección 5).
+- Rama de pruebas de API en Postman: `pf19_PruebasPostman`, basada en `dev`. Colección e instrucciones en `postman/` para validar de punta a punta los contratos HTTP del API Gateway (`http://localhost:3000`) y sus cinco microservicios sin versionar credenciales.
 - Pantallas implementadas: `Main`, destinada visualmente a visitantes sin sesión, y `Rostro`, con cámara, consentimiento e interfaz de detección de emociones (accesible temporalmente desde `/#rostro`).
 - Alcance actual: presentación visual, animaciones e inicio de sesión OAuth 2.0 con Google o GitHub mediante Supabase. El cliente conserva y renueva la sesión; todavía no existen rutas protegidas ni una pantalla posterior al acceso.
 - Tipografía oficial de toda la aplicación: **Montserrat**. Está instalada localmente mediante `@fontsource/montserrat` y se cargan solamente los subconjuntos latinos de los pesos 400, 600, 700 y 800 desde `src/main.jsx`.
@@ -1065,6 +1066,14 @@ Esta verificación sustituye el bloqueo Docker anterior. Docker Desktop estaba i
 
 ## 17. Historial
 
+### 2026-11-02 — Pruebas de endpoints y contratos HTTP en Postman (`pf19_PruebasPostman`)
+
+- Se creó la carpeta `postman/` con la colección exportable `Butaca_API_Gateway.postman_collection.json` (Collection v2.1), el entorno local `Butaca_Local.postman_environment.json` y la guía paso a paso `postman/README.md`.
+- Se organizaron las peticiones en seis carpetas que recorren todos los endpoints expuestos por el API Gateway (`http://localhost:3000`): salud y rutas inexistentes, autenticación (`sesiones` y `usuarios`), emociones (`animos` con verificación de consentimiento `403`), catálogo TMDB (`catalogo` general y detalle por tipo e identificador), recomendaciones (`recomendaciones` por emoción explícita y por `animoId` autorizado) y biblioteca (`favoritos` con validación de idempotencia `201`/`200` e `historial` con limpieza mediante `DELETE`).
+- Se agregaron scripts de prueba en Postman (`pm.test`) para verificar códigos de estado HTTP, estructura de las respuestas y encadenamiento automático de variables (`usuarioId`, `animoId`, `favoritoId`, `historialId`) durante la ejecución en el Collection Runner.
+- Se garantizó que ningún archivo versionado incluya tokens reales ni secretos privados (`accessToken` se declara vacío y como variable secreta en el entorno).
+
+
 ### 2026-11-01 — Detección de emociones con face-api.js (`pf17_FaceAPI`)
 
 - Se instaló `@vladmandic/face-api` 1.7.15 y se agregaron a `public/models/` los modelos `tiny_face_detector` y `face_expression`.
@@ -1290,3 +1299,52 @@ Para JSON inválido se conserva el estado HTTP recibido; para estructura incompa
 - `git diff --check`: aprobado. La implementación inicial se verificó antes de commit/push; la revisión final repitió las 67 pruebas, lint y build satisfactoriamente para autorizar la publicación de pf18. No se ejecutaron migraciones, escrituras en bases, lecturas de archivos privados ni activación de cámara.
 - Pendiente: recorrido real con Supabase, Gateway, servicios y TMDB configurados, incluido aislamiento entre cuentas para `animoId`. Estas pruebas automatizadas no acreditan disponibilidad de esos servicios ni autenticación real.
 - Pendiente para pf20: conexión visual, estados y navegación; verificación en navegador de teclado, foco y distintos anchos de escritorio/móviles. pf18 no cambia HTML/CSS ni implementa una pantalla para esa revisión visual.
+
+
+## Pruebas de API con Postman — pf19_PruebasPostman
+
+Implementada por Raúl sobre `dev` para documentar y verificar de manera ordenada todos los contratos HTTP del ecosistema de microservicios de Butaca a través de su único punto de entrada público: el API Gateway en `http://localhost:3000`. Esta entrega no modifica la lógica de los microservicios ni del frontend, sino que provee una suite de pruebas interactiva y automatizable en Postman.
+
+### Alcance y estructura de la carpeta `postman/`
+
+```text
+postman/
+├── Butaca_API_Gateway.postman_collection.json   # Colección Postman v2.1 con las 6 carpetas de pruebas y scripts pm.test.
+├── Butaca_Local.postman_environment.json        # Variables de entorno locales sin credenciales ni secretos versionados.
+└── README.md                                    # Guía de importación, obtención del token de Supabase y uso del Collection Runner.
+```
+
+- **`Butaca_API_Gateway.postman_collection.json`**: agrupa todas las peticiones HTTP dirigidas exclusivamente a `{{gatewayUrl}}` (`http://localhost:3000`), verificando tanto casos exitosos como rechazos esperados por reglas de negocio y seguridad (`400`, `401`, `403`, `404`).
+- **`Butaca_Local.postman_environment.json`**: define las variables necesarias para parametrizar las consultas y encadenar los identificadores creados durante las pruebas, manteniendo `accessToken` vacío por seguridad.
+- **`postman/README.md`**: explica en lenguaje claro cómo levantar los seis contenedores con Docker Compose, cómo importar la colección y el entorno en Postman, cómo obtener el `access_token` desde una sesión iniciada en el navegador y cómo ejecutar el flujo completo desde el Collection Runner.
+
+### Carpetas y peticiones de la colección
+
+Todas las rutas se consumen mediante el API Gateway (`http://localhost:3000`), el cual redirige cada solicitud al microservicio interno correspondiente dentro de la red de Docker:
+
+| Carpeta | Microservicio destino | Método y ruta | Propósito y validaciones en Postman (`pm.test`) |
+|---|---|---|---|
+| **1. API Gateway y Salud** | `api-gateway` (`:3000`) | `GET /health`<br>`GET /api/no-existe` | Comprueba que el gateway responde `200 OK` con `{ status: 'ok', service: 'butaca-api-gateway', routes }` y que cualquier ruta fuera de contrato devuelve `404 Not Found` en formato JSON. |
+| **2. Autenticación y Usuarios (`auth-service`)** | `auth-service` (`:3021`) | `GET /api/sesiones` (con y sin token)<br>`POST /api/usuarios`<br>`GET /api/usuarios` | Verifica el rechazo `401` cuando no se envía token, valida la identidad de la sesión activa (`200`), sincroniza al usuario en PostgreSQL mediante `upsert` (`200`) guardando `usuarioId` y consulta su perfil local (`200`). |
+| **3. Emociones y Consentimiento (`emotions-service`)** | `emotions-service` (`:3022`) | `POST /api/animos` (sin consentimiento)<br>`POST /api/animos` (confianza inválida)<br>`POST /api/animos` (válido)<br>`GET /api/animos`<br>`GET /api/animos/{{animoId}}`<br>`GET /api/animos/:idInexistente` | Confirma que enviar `consentimientoHistorial: false` se rechaza con `403 Forbidden`, valida el rechazo `400` por confianza fuera de rango, registra un ánimo autorizado (`201`) guardando `animoId`, consulta el listado paginado (`200`), el detalle propio (`200`) y el rechazo `404` ante un UUID inexistente o ajeno. |
+| **4. Catálogo TMDB (`catalog-service`)** | `catalog-service` (`:3023`) | `GET /api/catalogo`<br>`GET /api/catalogo?tipo=movie&categoria=Acción&pagina=1`<br>`GET /api/catalogo?busqueda=Matrix&pagina=1`<br>`GET /api/catalogo/movie/{{tmdbIdPelicula}}`<br>`GET /api/catalogo/movie/999999999`<br>`GET /api/catalogo?tipo=invalido` | Valida las rutas públicas del catálogo con tendencias generales (`200`), filtrado por categoría (`200`), búsqueda por texto (`200`), detalle enriquecido (`200`), contenido inexistente (`404`) y parámetro `tipo` inválido (`400`). |
+| **5. Recomendaciones por Ánimo (`recommendations-service`)** | `recommendations-service` (`:3024`) | `GET /api/recomendaciones?emocion=happy&tipo=movie`<br>`GET /api/recomendaciones?animoId={{animoId}}&tipo=tv`<br>`GET /api/recomendaciones?emocion=happy&animoId={{animoId}}`<br>`GET /api/recomendaciones` (sin token) | Comprueba la obtención de recomendaciones con `fuente: 'tmdb'` tanto por emoción explícita (`200`) como a partir del `animoId` propio autorizado (`200`), además de validar el error `400` al enviar ambos parámetros simultáneamente y el rechazo `401` sin sesión. |
+| **6. Biblioteca: Favoritos e Historial (`library-service`)** | `library-service` (`:3025`) | `POST /api/favoritos` (1.ª y 2.ª vez)<br>`GET /api/favoritos`<br>`POST /api/historial`<br>`GET /api/historial`<br>`DELETE /api/favoritos/{{favoritoId}}` (1.ª y 2.ª vez)<br>`DELETE /api/historial/{{historialId}}` (1.ª y 2.ª vez) | Verifica la creación de un favorito (`201`) y su idempotencia al repetir la petición (`200` sin duplicar el registro), registra una recomendación en el historial (`201`), consulta ambos listados paginados (`200`) y ejecuta la limpieza final con `DELETE` (`204 No Content` la primera vez y `404 Not Found` la segunda). |
+
+### Variables de entorno y encadenamiento automático
+
+El archivo `Butaca_Local.postman_environment.json` define las siguientes variables para permitir que la colección funcione de forma automática en el **Collection Runner** sin intervención manual entre pasos:
+
+| Variable | Valor inicial en el repositorio | Uso en la colección |
+|---|---|---|
+| `gatewayUrl` | `http://localhost:3000` | Dirección única del API Gateway hacia donde apuntan todas las peticiones. |
+| `accessToken` | `""` (vacío, tipo `secret`) | Token JWT de Supabase que el desarrollador pega localmente antes de probar las rutas protegidas. |
+| `accessTokenSecundario` | `""` (vacío, tipo `secret`) | Variable opcional para pruebas de aislamiento entre dos cuentas distintas. |
+| `usuarioId` | `""` (autocompletado) | Se asigna automáticamente al ejecutar `POST /api/usuarios`. |
+| `animoId` | `""` (autocompletado) | Se captura en `POST /api/animos` y se reutiliza en `GET /api/animos/:id` y `GET /api/recomendaciones?animoId=...`. |
+| `favoritoId` | `""` (autocompletado) | Se captura en `POST /api/favoritos` y se elimina al final con `DELETE /api/favoritos/:id`. |
+| `historialId` | `""` (autocompletado) | Se captura en `POST /api/historial` y se elimina al final con `DELETE /api/historial/:id`. |
+| `tmdbIdPelicula` | `"550"` | Identificador numérico de película en TMDB utilizado para probar catálogo, favoritos e historial. |
+| `tmdbIdSerie` | `"1399"` | Identificador numérico de serie en TMDB disponible para pruebas de detalle de series. |
+
+De esta manera, al finalizar la corrida del Collection Runner, los registros de prueba creados en `Favorito` e `HistorialRecomendacion` se limpian automáticamente mediante sus respectivos endpoints `DELETE`, y el repositorio permanece libre de credenciales o tokens de sesión.
