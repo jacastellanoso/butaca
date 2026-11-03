@@ -147,9 +147,17 @@ test('los componentes React existentes renderizan películas y series adaptadas,
     const { code } = await transformWithOxc(source, url.pathname, { jsx: { runtime: 'automatic' } })
     modulos.set(url.href, code)
   }
+  // pf20: DetalleContenido usa BotonFavorito (favoritos reales); sin proveedor queda deshabilitado.
+  const urlBoton = new URL('../components/BotonFavorito/BotonFavorito.jsx', import.meta.url)
+  const { code: codigoBoton } = await transformWithOxc(await readFile(urlBoton, 'utf8'), urlBoton.pathname, {
+    jsx: { runtime: 'automatic' },
+  })
+  modulos.set(urlBoton.href, codigoBoton)
   const jsxHooks = registerHooks({
     load(url, context, nextLoad) {
       if (modulos.has(url)) return { format: 'module', shortCircuit: true, source: modulos.get(url) }
+      // Node no interpreta hojas de estilo: en la prueba se reemplazan por un módulo vacío.
+      if (url.endsWith('.css')) return { format: 'module', shortCircuit: true, source: '' }
       return nextLoad(url, context)
     },
   })
