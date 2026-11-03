@@ -2,6 +2,132 @@
 
 > **Consulta obligatoria:** toda persona o asistente de IA debe leer este archivo antes de crear, editar, mover o eliminar código del proyecto. Después de cada cambio se debe actualizar esta guía para mantenerla alineada con la implementación real.
 
+## Validación de entradas — pf22_Zod (2026-11-03)
+
+### Objetivo y alcance
+
+Migrar las validaciones manuales de entradas de negocio a Zod sin cambiar contratos HTTP.
+Rama `pf22_Zod`, basada en `fbd45775c05fee821b33f9e615ebc7e600878830` de `dev`, con pf21_Testing integrada.
+Esta sección describe el estado actual de Zod; las referencias históricas a `pf15_Zod`
+y a validaciones pendientes que aparecen más abajo corresponden a etapas anteriores.
+
+Se instaló `zod` como dependencia de producción `^4.6.7` (resuelta a **4.6.7**)
+en los cuatro servicios siguientes. Cada paquete conserva su propio manifiesto y lockfile.
+No se modificaron frontend, Gateway, auth-service, controladores, rutas, servicios,
+configuración, archivos de entorno, esquemas Prisma, migraciones ni pruebas existentes.
+
+### Esquemas y archivos
+
+| Servicio | Archivo en `src/validators/` | Esquemas |
+|---|---|---|
+| emotions-service | `animos.validator.js` | Consentimiento, nuevo ánimo, confianza, consulta de historial e identificador |
+| catalog-service | `catalogo.validator.js` | Consulta de catálogo, identificador TMDB y parámetros de detalle |
+| recommendations-service | `recomendaciones.validator.js` | Parámetros conocidos de texto y consulta por emoción o ánimo |
+| library-service | `biblioteca.validator.js` | Identificador, contenido compartido, nuevo favorito, nuevo historial y consultas paginadas |
+
+Cada servicio incorpora `test/validadores.test.js`. También se actualizaron únicamente
+sus respectivos `package.json` y `package-lock.json`, además de esta guía.
+Las funciones públicas anteriores se conservan. Los adaptadores usan `safeParse`
+y devuelven el primer mensaje existente, sin publicar objetos `ZodError`.
+
+### Compatibilidad conservada
+
+- Se mantienen tipos de datos, campos requeridos, defaults, límites, normalizaciones,
+  valores nulos y prioridad de errores. Los cuerpos JSON no convierten cadenas en números.
+- Emociones exige `consentimientoHistorial === true` antes de validar emoción, origen
+  y confianza; su ausencia o valor incorrecto mantiene **403**. Detección requiere
+  confianza numérica finita entre 0 y 1; confirmada permite confianza ausente o nula.
+- Recomendaciones exige exactamente uno entre `emocion` y `animoId`, con `movie`
+  por defecto, y rechaza claves desconocidas y parámetros no textuales/repetidos.
+- Los demás esquemas seleccionan campos conocidos e ignoran los ajenos como antes.
+  Las consultas preservan también las claves opcionales cuyo valor es `undefined`.
+- Se conserva el formato UUID hexadecimal anterior, incluyendo versiones que un
+  validador UUID más estricto podría rechazar. Biblioteca sigue exigiendo una cadena.
+- Las fechas siguen la interpretación previa de `new Date`, incluyendo su zona horaria;
+  no se endurecieron a ISO estricto. Se conserva `desde <= hasta`.
+- Solo catálogo recorta espacios en enteros de query. Emociones y biblioteca mantienen
+  su rechazo de espacios, decimales y notación exponencial. Las repeticiones de campos
+  conocidos siguen rechazándose.
+- Catálogo conserva búsqueda vacía como `null`, máximo 120 caracteres, páginas 1–500
+  e identificadores TMDB 1–999999999. Biblioteca conserva título y póster recortados,
+  opcionales nulos y redondeo de calificación a un decimal.
+- No se cambió el orden de autenticación ni el parseo JSON. Se mantienen **400**, **403**,
+  **404** para identificadores inválidos en los recursos protegidos existentes y **413**
+  por cuerpos mayores de 10 KB en emociones/biblioteca. Favoritos conserva `201`/`200`
+  por idempotencia y los borrados mantienen `204`.
+
+### Ejemplos
+
+| Entrada | Resultado |
+|---|---|
+| POST ánimo: `{"emocion":"happy","confianza":0.92,"consentimientoHistorial":true}` | Válida; origen por defecto `deteccion` |
+| POST ánimo: `{"emocion":"sad","origen":"confirmada","consentimientoHistorial":true}` | Válida; confianza normalizada a `null` |
+| POST ánimo sin consentimiento | `403`, `No se guarda el resultado sin autorización explícita para conservar el historial emocional.` |
+| POST ánimo de detección con confianza `"0.92"` y consentimiento verdadero | `400`, `La confianza debe ser un número entre 0 y 1.` |
+| Catálogo: `?pagina=%20001%20&busqueda=%20Matrix%20` | Página `1`, búsqueda `Matrix` |
+| Recomendaciones: `?emocion=happy&tipo=tv` | Válida |
+| Recomendaciones: `?emocion=happy&animoId=abcdef01-0000-0000-0000-000000000000` | `400`, `Indicá exactamente uno de emocion o animoId.` |
+| Favorito: `{"tmdbId":550,"tipo":"movie","titulo":" Matrix "}` | Válido; título `Matrix`, póster `null` |
+| Favorito con `tmdbId: "550"` | `400`, `tmdbId debe ser un entero entre 1 y 999999999.` |
+
+### Verificación realizada
+
+Pruebas ejecutadas con `DOTENV_CONFIG_PATH=NUL`; las dependencias externas de las
+suites se simulan. No se ejecutaron migraciones, Docker ni pruebas contra Supabase,
+PostgreSQL o TMDB reales.
+
+| Comprobación | Resultado final |
+|---|---|
+| Frontend, `npm test` | **93/93** |
+| API Gateway, `npm test` | **7/7** |
+| auth-service, mediante `test:todo` | **44/44** |
+| emotions-service | **51/51** (31 existentes + 20 nuevas) |
+| catalog-service | **35/35** (20 existentes + 15 nuevas) |
+| recommendations-service | **87/87** (74 existentes + 13 nuevas) |
+| library-service | **50/50** (32 existentes + 18 nuevas) |
+| `npm run test:todo` | **367/367**, cero fallos, las siete suites completas |
+| Comparación temporal con los validadores de HEAD/base | **3341/3341** entradas equivalentes, incluyendo dos errores simultáneos; script temporal eliminado |
+| `npm run lint` | Código 0, sin diagnósticos |
+| Oxlint dirigido a los cuatro validadores y las cuatro pruebas nuevas | Código 0, sin diagnósticos |
+| `npm run build -- --outDir <carpeta temporal>` | Correcto; no se escribió en `dist`. Vite avisó que el destino externo no se vacía automáticamente |
+| `npm run e2e`, con `CI=true` | **9/9 aprobadas**, 0 fallos, sin reintentos; código 0, resumen `9 passed (2.4m)` |
+| `git diff --check` | Sin errores |
+
+Problemas corregidos: la primera ejecución encontró el cliente Prisma sin generar.
+Se generó únicamente el cliente local de emociones/biblioteca mediante una configuración
+temporal que omite cargar variables de entorno, con URLs ficticias y sin conexión a BD.
+La primera suite de emociones detectó que Zod exigía la clave `confianza` ausente:
+se marcó explícitamente opcional y se añadió una prueba. Una expectativa nueva de fecha
+se corrigió para respetar la interpretación local de `new Date` en lugar de asumir UTC.
+No se alteraron pruebas existentes para corregir estos fallos.
+
+E2E completadas posteriormente en esta misma rama: la instalación local raíz no tenía
+`@playwright/test` ni su ejecutable, aunque `1.63.0` ya estaba declarado y bloqueado.
+Se restauraron 52 paquetes con `npm ci --include=dev --no-audit --no-fund`, sin cambiar
+`package.json` ni `package-lock.json` raíz. Faltaba también el navegador; el comando
+oficial `npx playwright install chromium` instaló Chromium/Headless Shell v1243
+(Chrome 153.0.8010.12) y FFmpeg v1011, sin instalar Firefox ni WebKit.
+La ejecución usó el backend, la sesión y la cámara simulados existentes, con servidor
+propio y `CI=true` para impedir reutilizar un servidor previo. Las nueve pruebas
+pasaron en su primer intento. Después de aprobarse todas, el cierre automático del
+servidor Vite quedó esperando en este entorno Windows; se detuvo únicamente el proceso
+Vite iniciado por esa ejecución y el runner terminó con código 0. El HTTP 502 del log
+corresponde a la prueba deliberada de catálogo caído; el aviso NO_COLOR/FORCE_COLOR
+solo afecta al color de la consola. No se modificaron tests ni configuración.
+
+### Limitaciones y pruebas pendientes
+
+- Postman no se ejecutó: sus 27 peticiones requieren servicios reales. Se conservaron
+  mensajes exactos, estados y formas de respuesta comprobados por la colección.
+- Las nueve E2E se verificaron en Desktop Chrome. Su backend simulado no ejecuta los
+  validadores Zod: complementa las 367 pruebas unitarias/de integración y los 3341 casos
+  de equivalencia, sin sustituirlos.
+- No se hizo una revisión visual adicional ni se probaron anchos móviles en esta rama;
+  no se cambió interfaz. Los resultados de responsive de pf20 siguen siendo históricos.
+- Quedan pendientes integración real vía Gateway, aislamiento entre cuentas y flujos
+  de persistencia con consentimiento, bajo autorización posterior para servicios reales.
+- La validación de configuración con Zod y el backend anterior quedan fuera de pf22.
+
 ## 1. Estado del proyecto
 
 - Aplicación creada con React 19 y Vite 8.
