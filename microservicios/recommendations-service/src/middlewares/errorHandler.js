@@ -17,5 +17,10 @@ export function errorHandler(error, req, res, next) {
     return
   }
 
+    // pf23: el body pasa el límite de express.json (10kb): 413 en lugar de 500.
+  if (error.type === 'entity.too.large') {
+    res.status(413).json({ error: 'El cuerpo de la petición es demasiado grande.' })
+    return
+  }
   res.status(500).json({ error: 'Ocurrió un error interno. Intentá de nuevo.' })
 }

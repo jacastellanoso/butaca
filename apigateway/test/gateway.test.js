@@ -76,7 +76,10 @@ test('una ruta desconocida responde 404 en JSON', async () => {
 })
 
 test('un microservicio desconectado responde 502 de forma controlada', async () => {
-  const response = await fetch(`${baseUrl}/api/sesiones`)
+  // Con token: desde pf23 el gateway rechaza antes (401) las rutas privadas sin token.
+  const response = await fetch(`${baseUrl}/api/sesiones`, {
+    headers: { Authorization: 'Bearer token-de-prueba' },
+  })
   const body = await response.json()
 
   assert.equal(response.status, 502)

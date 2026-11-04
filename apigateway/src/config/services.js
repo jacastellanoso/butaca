@@ -1,5 +1,7 @@
 import { env } from './env.js'
 
+// Por defecto toda ruta exige `Authorization: Bearer <token>` en el gateway
+// (pf23). Solo las marcadas con `publico: true` pasan sin token.
 export const services = [
   {
     name: 'auth-service',
@@ -18,6 +20,8 @@ export const services = [
     description: 'Películas, series y detalles de TMDB',
     target: env.catalogServiceUrl,
     paths: ['/api/catalogo'],
+    // El catálogo de TMDB es público: se puede explorar sin iniciar sesión.
+    publico: true,
   },
   {
     name: 'recommendations-service',

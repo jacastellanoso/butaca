@@ -37,3 +37,15 @@ test('no expone el header X-Powered-By', async () => {
 
   assert.equal(res.headers.get('x-powered-by'), null)
 })
+// pf23: express.json({ limit: '10kb' }). Sin el manejo en errorHandler era un 500.
+test('un body de más de 10kb responde 413 en JSON', async (t) => {
+  t.mock.method(console, 'error', () => {})
+  const res = await fetch(`${baseUrl}/api/no-existe`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ relleno: 'A'.repeat(20_000) }),
+  })
+
+  assert.equal(res.status, 413)
+  assert.deepEqual(await res.json(), { error: 'El cuerpo de la petición es demasiado grande.' })
+})

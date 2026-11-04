@@ -10,7 +10,7 @@ import { usuariosRouter } from './routes/usuarios.routes.js'
 export const app = express()
 
 app.disable('x-powered-by')
-app.use(express.json())
+app.use(express.json({ limit: '10kb' }))
 
 // Health check: lo usan Docker (HEALTHCHECK) y el gateway para saber si el servicio vive.
 app.get('/health', (req, res) => {

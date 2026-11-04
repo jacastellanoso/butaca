@@ -33,7 +33,7 @@ app.use((req, res, next) => {
   return next()
 })
 
-app.use(express.json())
+app.use(express.json({ limit: '10kb' }))
 
 // Health check: lo usan Docker (HEALTHCHECK) y el gateway para saber si el servicio vive.
 app.get('/health', (req, res) => {

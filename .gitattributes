@@ -1,0 +1,9 @@
+# Archivos binarios: Git no debe convertir finales de línea (CRLF ↔ LF) en
+# ellos. El video falso de la cámara (.y4m) tiene bytes 0x0D sueltos y se
+# corrompería en Windows con core.autocrlf=true.
+*.y4m  binary
+*.bin  binary
+*.wasm binary
+*.png  binary
+*.jpg  binary
+*.ico  binary
