@@ -19,6 +19,18 @@ function decodificarJwt(token) {
 /** Oculta el valor: solo deja ver los primeros 6 caracteres. */
 export const enmascarar = (valor) => `${valor.slice(0, 6)}…(${valor.length} caracteres)`
 
+// Valores ficticios exactos utilizados exclusivamente en pruebas de los detectores
+// y registrados en el commit histórico 24a3eb1 de pf23_Seguridad.
+export const ES_EJEMPLO_FICTICIO = (coincidencia, lineaCompleta = '') => {
+  if (coincidencia === 'sb_secret_AbCdEfGhIjKlMnOpQrSt') return true
+  if (coincidencia.includes('postgres.abcd:Cl4veReal!@aws-0-us-east-1.pooler.supabase.com')) return true
+  if (coincidencia.includes('b3e7a06d85c97108194829ca46b85e85')) return true
+  if (coincidencia.includes('PRIVATE KEY')) {
+    return /buscarSecretos|assert|detectores|\.test/i.test(lineaCompleta)
+  }
+  return false
+}
+
 const DETECTORES = [
   {
     tipo: 'Clave secreta de Supabase (sb_secret_)',
@@ -51,7 +63,7 @@ const DETECTORES = [
 ]
 
 /** Busca secretos en un texto. Devuelve [{ tipo, linea, valor }]. */
-export function buscarSecretos(texto) {
+export function buscarSecretos(texto, { ignorarEjemplosDePrueba = false } = {}) {
   const hallazgos = []
   const lineas = texto.split('\n')
 
@@ -59,6 +71,7 @@ export function buscarSecretos(texto) {
     for (const { tipo, patron, confirmar } of DETECTORES) {
       for (const coincidencia of contenido.matchAll(patron)) {
         if (confirmar && !confirmar(...coincidencia)) continue
+        if (ignorarEjemplosDePrueba && ES_EJEMPLO_FICTICIO(coincidencia[0], contenido)) continue
         hallazgos.push({ tipo, linea: indice + 1, valor: enmascarar(coincidencia[0]) })
       }
     }
