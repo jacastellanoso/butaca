@@ -145,6 +145,7 @@ solo afecta al color de la consola. No se modificaron tests ni configuración.
 - Rama del tablero y la navegación integrada: `pf20_RecomDashboard`, basada en `dev` (`d730fde`). Sesión validada con Supabase Auth, selección de perfil, encabezado global con cierre de sesión, dashboard de emociones, recomendaciones, historial y favoritos, y recomendaciones posteriores al escáner (sección "Dashboard y navegación integrada — pf20_RecomDashboard"). Con esta rama ya existen rutas protegidas y pantallas posteriores al acceso; las líneas de alcance siguientes describen el estado anterior a pf20.
 - Rama de pruebas: `pf21_Testing`, basada en `dev`. Pruebas E2E con Playwright (`e2e/`, backend falso, sesión simulada y cámara falsa) y `npm run test:todo`, que corre las suites unitarias y de integración del front, el gateway y los cinco microservicios (sección «Pruebas automatizadas — pf21_Testing»).
 - Pantallas implementadas: `Main`, destinada visualmente a visitantes sin sesión, y `Rostro`, con cámara, consentimiento e interfaz de detección de emociones (accesible temporalmente desde `/#rostro`).
+- Rama de integración continua: `pf24_GitHubActions`, basada en `dev` (con `pf23_Seguridad` integrada). Pipeline automatizado en `.github/workflows/ci.yml` con 5 jobs independientes (`Calidad`, `Pruebas unitarias`, `Pruebas de integración`, `Pruebas E2E (Playwright)` y `Docker`), hermético, sin secretos ni dependencias en vivo, con escaneo histórico y publicación de reportes Playwright.
 - Alcance actual: presentación visual, animaciones e inicio de sesión OAuth 2.0 con Google o GitHub mediante Supabase. El cliente conserva y renueva la sesión; todavía no existen rutas protegidas ni una pantalla posterior al acceso.
 - Tipografía oficial de toda la aplicación: **Montserrat**. Está instalada localmente mediante `@fontsource/montserrat` y se cargan solamente los subconjuntos latinos de los pesos 400, 600, 700 y 800 desde `src/main.jsx`.
 
@@ -1203,6 +1204,19 @@ Esta verificación sustituye el bloqueo Docker anterior. Docker Desktop estaba i
 
 ## 17. Historial
 
+### 2026-11-04 — Integración continua con GitHub Actions (`pf24_GitHubActions`)
+
+- Se diseñó e implementó el workflow principal de CI en `.github/workflows/ci.yml` activado en `push` y `pull_request` para `dev`, `main` y `pf*`.
+- Arquitectura en 5 jobs modulares con dependencias (`needs:`):
+  1. `Calidad`: linter (`oxlint`), compilación (`vite build`) y escaneo histórico de secretos con `fetch-depth: 0`.
+  2. `Pruebas unitarias`: 99 pruebas del frontend ejecutadas en memoria.
+  3. `Pruebas de integración`: ejecución unificada hermética de los 7 paquetes mediante `npm run test:todo -- --instalar` (389 pruebas en total) con generación automática de Prisma mediante URLs dummy.
+  4. `Pruebas E2E (Playwright)`: instalación de Chromium con dependencias Linux (`--with-deps`), ejecución headless de las 9 pruebas E2E con cámara simulada (`rostro-sonriente.y4m`) y publicación incondicional de artefactos (`playwright-report/` y `test-results/`).
+  5. `Docker`: validación estática y estructural del archivo `compose.yaml` mediante `docker compose config`.
+- Optimización de tiempos mediante caché de dependencias npm monitoreando los 7 archivos lockfile activos, caché de binarios de Playwright en `~/.cache/ms-playwright` y control de concurrencia con `cancel-in-progress: true`.
+- Se incorporó el badge de estado de CI en `README.md` y se documentaron las reglas de protección de rama para `dev` y `main` con verificación estricta de los 5 checks.
+- Verificación completa aprobada: 389/389 unitarias/integración, 9/9 E2E, compilación y linter sin errores, y cero secretos detectados.
+
 ### 2026-11-03 — Pruebas unitarias, de integración y E2E (`pf21_Testing`)
 
 - Se instaló `@playwright/test` 1.63.0 (versión exacta) y se crearon `playwright.config.js` y `playwright.slow.config.js`.
@@ -1854,3 +1868,96 @@ Render sirve HTTPS y helmet envía HSTS. Las demás variables pueden quedar con 
 - Navegador (app real con Supabase): el dashboard carga ánimos y favoritos; en DevTools las respuestas de `/api/*` traen `Content-Security-Policy`, `RateLimit: "general"; r=298; t=60` y `RateLimit-Policy: "general"; q=300; w=60`.
 - El `20` del gateway incluye `test/apoyo.js`: `node --test` ejecuta todo `.js` dentro de `test/`, y ese archivo cuenta como 1 aunque solo exporta funciones (19 pruebas reales).
 - Linux: gateway 20/20, auth 45/45, emotions 51/51, catalog 36/36, recommendations 88/88, library 50/50, raíz 99/99. `npm run e2e` 9/9. `npm run lint` 0 errores. `npm run build` correcto. `npm run seguridad:secretos -- --historial` → sin secretos.
+
+## Integración continua — pf24_GitHubActions (2026-11-04)
+
+### Objetivo y alcance
+
+Implementar el pipeline automatizado de Integración Continua (CI) mediante GitHub Actions en `.github/workflows/ci.yml` para la plataforma Butaca, abarcando el frontend (React 19 + Vite 8), el API Gateway (Express 5), los cinco microservicios (`auth-service`, `emotions-service`, `catalog-service`, `recommendations-service`, `library-service`) y la infraestructura de Docker Compose. Rama `pf24_GitHubActions`, basada en `dev` con `pf23_Seguridad` integrada.
+
+El pipeline garantiza los siguientes principios de ingeniería:
+1. **Hermetismo absoluto:** ejecución 100 % autónoma sin requerir secretos productivos ni conexiones a bases de datos PostgreSQL, instancias de Supabase ni APIs de TMDB en vivo.
+2. **Preservación de la pirámide de pruebas:** verificación íntegra de las 389 pruebas unitarias y de integración de los 7 paquetes activos, y las 9 pruebas de extremo a extremo (E2E) con Playwright.
+3. **Seguridad y detección de secretos:** escaneo profundo de todo el árbol de archivos y del historial completo de commits de Git mediante `scripts/revisar-secretos.mjs`.
+4. **Optimización de recursos:** ejecución modular mediante grafos de dependencia (`needs:`), almacenamiento en caché multinivel de dependencias npm y binarios de navegador, y cancelación automática de flujos redundantes.
+
+### Estructura del pipeline y detalle de los 5 jobs
+
+El flujo de trabajo se dispara en eventos de `push` y `pull_request` sobre las ramas `dev`, `main` y ramas de características `pf*`. Opera bajo el principio de menor privilegio con `permissions: contents: read` a nivel global y control de concurrencia mediante `cancel-in-progress: true`.
+
+| Job | Nombre del Job (`name`) | Dependencias (`needs`) | Tiempo límite (`timeout`) | Propósito y Comandos Ejecutados |
+|---|---|---|---|---|
+| `calidad` | **Calidad** | Ninguna (inicial) | 5 minutos | Descarga el código con `fetch-depth: 0`, configura Node.js 24 con caché npm multi-lockfile, ejecuta `npm ci`, análisis estático con `npm run lint` (oxlint), compilación con `npm run build` (Vite) y escaneo exhaustivo de secretos con `npm run seguridad:secretos -- --historial`. |
+| `pruebas-unitarias` | **Pruebas unitarias** | `calidad` | 5 minutos | Ejecuta la suite de pruebas unitarias del frontend en la raíz (`npm test`, 99 pruebas con el runner nativo `node:test`), validando la lógica pura de detección facial, rutas, sesión, contratos, estadísticas, recomendaciones y detectores de seguridad. |
+| `pruebas-integracion` | **Pruebas de integración** | `calidad` | 10 minutos | Ejecuta la orquestación global hermética en un único paso mediante `npm run test:todo -- --instalar`. Recorre los 7 paquetes activos, instala dependencias faltantes con `npm ci`, genera clientes de Prisma con URLs de relleno y ejecuta las 389 pruebas unitarias y de integración. |
+| `pruebas-e2e` | **Pruebas E2E (Playwright)** | `pruebas-unitarias`, `pruebas-integracion` | 15 minutos | Restaura o genera caché de binarios en `~/.cache/ms-playwright`, instala el motor Chromium con librerías del sistema Linux (`npx playwright install --with-deps chromium`), ejecuta las 9 pruebas E2E en modo headless (`npm run e2e` con `CI=true`), y publica incondicionalmente (`if: always()`) los artefactos `playwright-report/` y `test-results/`. |
+| `docker` | **Docker** | `calidad` | 5 minutos | Valida la integridad sintáctica, consistencia de redes, mapeo de puertos y resolución de variables de entorno de los 6 servicios definidos en `compose.yaml` mediante `docker compose config`. |
+
+### Decisiones de diseño clave
+
+1. **Node.js 24 en CI frente a Docker Node 22 Alpine:**
+   - En el entorno de CI se configura `node-version: 24` (`actions/setup-node@v4`) debido a que las pruebas unitarias del frontend (`src/services/recomendaciones.test.js`) requieren la API nativa `import { registerHooks } from 'node:module'` para interceptar la carga de módulos en memoria, disponible plenamente en Node 24.
+   - En contraste, los contenedores Docker en producción mantienen `FROM node:22-alpine` en sus respectivos `Dockerfile`, ya que en producción no se ejecutan pruebas ni hooks dinámicos, beneficiándose de una imagen base LTS, ligera y con menor superficie de ataque.
+
+2. **Generación hermética de clientes Prisma con URLs simuladas:**
+   - Los microservicios `auth-service`, `emotions-service` y `library-service` requieren que el cliente `@prisma/client` esté generado en `node_modules` para iniciar y ejecutar sus pruebas.
+   - `prisma generate` valida únicamente la sintaxis del esquema y que existan variables de conexión válidas sintácticamente; no abre sockets de red ni requiere una base de datos real.
+   - El script `test-todo.mjs` automatiza este paso inyectando variables dummy (`DATABASE_URL=postgresql://generate:generate@localhost:5432/generate` y `DIRECT_URL=postgresql://generate:generate@localhost:5432/generate`), asegurando una compilación determinista y hermética.
+
+3. **Control de concurrencia y cancelación de ejecuciones obsoletas:**
+   - Se implementa `concurrency: group: ${{ github.workflow }}-${{ github.ref }}, cancel-in-progress: true`.
+   - Cuando un desarrollador envía nuevos commits a una rama o Pull Request mientras una ejecución previa se encuentra en curso, GitHub Actions cancela inmediatamente el flujo anterior, liberando minutos de ejecución y evitando saturación de runners.
+
+4. **Clonación completa con `fetch-depth: 0` para escaneo de secretos:**
+   - La acción `actions/checkout@v4` realiza por defecto una clonación superficial (`fetch-depth: 1`).
+   - El script `scripts/revisar-secretos.mjs` invoca `git rev-list --all` al recibir el argumento `--historial` para examinar cada parche de commit en la historia del repositorio. Con clonación superficial, solo se evaluaría el último commit.
+   - Declarar `fetch-depth: 0` garantiza que el escaneo histórico sea efectivo al 100 %.
+
+5. **Exclusión justificada del backend monolítico (`backend/`):**
+   - El directorio `backend/` corresponde a un prototipo monolítico previo a la arquitectura orientada a servicios establecida en `pf8_APIGateway` y `pf9_Docker`.
+   - La totalidad de las capacidades de negocio fueron migradas a los microservicios en `microservicios/`. `backend/` no posee pruebas activas en `scripts/test-todo.mjs`, no forma parte de `compose.yaml` y no se despliega en producción. Incluirlo en el pipeline consumiría tiempo de cómputo en paquetes obsoletos.
+
+6. **Exclusión justificada de la colección Postman (pf19):**
+   - La colección de 27 peticiones en `postman/` requiere una infraestructura real activa con base de datos PostgreSQL en Supabase, credenciales de sesión vivas y claves v3 de TMDB, realizando operaciones de escritura y borrado.
+   - Su inclusión en CI introduciría lentitud, fragilidad ante latencias de red externa, riesgos de revocación o rate-limit de cuotas de TMDB y riesgos de seguridad por manejo de credenciales reales.
+   - La cobertura de contratos se encuentra cubierta de forma determinista y sin dependencias externas mediante las 389 pruebas unitarias/integración y las 9 pruebas E2E con backend simulado en memoria (`e2e/support/backendFalso.js`).
+
+### Protocolo de diagnóstico de fallos y gestión de artefactos
+
+Cuando un check de GitHub Actions se marca en rojo (icono ✖), el desarrollador debe seguir el siguiente procedimiento ordenado:
+
+1. **Identificación del Job fallido:**
+   - Acceder a la pestaña **Actions** del repositorio en GitHub o hacer clic en **Details** junto al check fallido en el Pull Request.
+   - Observar el grafo de ejecución: si falla `Calidad`, los jobs posteriores (`Pruebas unitarias`, `Pruebas de integración`, `Docker` y `Pruebas E2E`) no se ejecutarán o serán cancelados.
+2. **Inspección de logs paso a paso:**
+   - Hacer clic sobre el job que presenta el fallo.
+   - Desplegar el paso específico marcado con una cruz roja para examinar la salida estándar (`stdout`) y de error (`stderr`):
+     - *Fallo en Linter:* oxlint reportará el archivo exacto, línea y regla infringida.
+     - *Fallo en Build:* Vite detallará el error de sintaxis, importación rota o recurso no resuelto.
+     - *Fallo en Secretos:* el script `revisar-secretos.mjs` indicará el tipo de patrón detectado y el archivo o commit infractor sin exponer el valor confidencial.
+     - *Fallo en Pruebas Unitarias o de Integración:* `node:test` o la tabla de `test-todo.mjs` detallarán qué paquete falló y el mensaje de aserción incumplido.
+     - *Fallo en Docker:* Docker Compose reportará la línea o variable mal configurada en `compose.yaml`.
+3. **Descarga e inspección de artefactos de Playwright:**
+   - En caso de fallo en el job `Pruebas E2E (Playwright)`, Playwright captura trazas interactivas, capturas de pantalla y videos del navegador.
+   - Al final de la página de la corrida en GitHub Actions, en la sección **Artifacts**, hacer clic en `reporte-playwright` para descargar el archivo comprimido ZIP.
+   - Descomprimir el archivo localmente y abrir `playwright-report/index.html` en cualquier navegador web.
+   - El informe interactivo permite reproducir paso a paso la acción del usuario, examinar los selectores, inspeccionar el DOM y consultar la traza de ejecución en el visor interactivo de Playwright.
+
+### Verificación realizada
+
+| Comprobación | Resultado final |
+|---|---|
+| `npm run lint` | Código 0, sin advertencias ni errores |
+| `npm run build` | Compilación exitosa del frontend con Vite en modo producción |
+| `npm run seguridad:secretos -- --historial` | Código 0, sin secretos detectados en archivos versionados ni historial |
+| `npm test` (Frontend raíz) | **99/99 aprobadas** (lógica de rostro, rutas, sesión, contratos, estadísticas, recomendaciones y detectores de seguridad) |
+| `npm test` en `apigateway/` | **20/20 aprobadas** (helmet, CORS, rate limits, proxy y manejo de errores) |
+| `npm test` en `auth-service` | **45/45 aprobadas** |
+| `npm test` en `emotions-service` | **51/51 aprobadas** (incluyendo validadores Zod) |
+| `npm test` en `catalog-service` | **36/36 aprobadas** (incluyendo validadores Zod) |
+| `npm test` en `recommendations-service` | **88/88 aprobadas** (incluyendo validadores Zod y pruebas HTTP locales) |
+| `npm test` en `library-service` | **50/50 aprobadas** (incluyendo validadores Zod) |
+| `npm run test:todo -- --instalar` | **389/389 aprobadas**, 0 fallos, 7 paquetes en verde en una sola corrida |
+| `npm run e2e` con `CI=true` | **9/9 aprobadas**, 0 fallos (acceso, galería, rostro y detección facial real con Y4M) |
+| `docker compose config` | Validación sintáctica y estructural aprobada para los 6 servicios |
+| Validación sintáctica del YAML (`ci.yml`) | Esquema válido, sin marcadores pendientes, triggers y permisos consistentes |
