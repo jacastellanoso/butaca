@@ -7,6 +7,7 @@ const jwt = (payload) =>
   ['eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9', Buffer.from(JSON.stringify(payload)).toString('base64url'), 'firmafalsafirmafalsa'].join('.')
 
 test('detecta una clave secreta de Supabase', () => {
+  // Ejemplo sintético de prueba para comprobar la detección del prefijo sb_secret_
   const [hallazgo] = buscarSecretos('SUPABASE_KEY=sb_secret_AbCdEfGhIjKlMnOpQrSt')
   assert.match(hallazgo.tipo, /Supabase/)
   assert.equal(hallazgo.linea, 1)
@@ -23,9 +24,10 @@ test('detecta JWT service_role y tokens de TMDB, pero no un JWT cualquiera', () 
   assert.equal(buscarSecretos(jwt({ role: 'authenticated', sub: 'usuario' })).length, 0)
 })
 
-test('detecta una cadena de PostgreSQL real e ignora las de ejemplo', () => {
-  const real = 'DATABASE_URL="postgresql://postgres.abcd:Cl4veReal!@aws-0-us-east-1.pooler.supabase.com:6543/postgres"'
-  assert.equal(buscarSecretos(real).length, 1)
+test('detecta una cadena de PostgreSQL ficticia con clave e ignora las de ejemplo', () => {
+  // Ejemplo sintético de prueba con contraseña que no coincide con placeholders para verificar el detector:
+  const ejemploFicticioConClave = 'DATABASE_URL="postgresql://postgres.abcd:Cl4veReal!@aws-0-us-east-1.pooler.supabase.com:6543/postgres"'
+  assert.equal(buscarSecretos(ejemploFicticioConClave).length, 1)
 
   for (const ejemplo of [
     'postgresql://postgres.abcd:[YOUR-PASSWORD]@aws-0-us-east-1.pooler.supabase.com:6543/postgres',
@@ -39,9 +41,14 @@ test('detecta una cadena de PostgreSQL real e ignora las de ejemplo', () => {
 })
 
 test('detecta una API key de TMDB asignada y una llave privada', () => {
+  // Ejemplos sintéticos de prueba:
   assert.equal(buscarSecretos('TMDB_API_KEY=b3e7a06d85c97108194829ca46b85e85').length, 1)
   assert.deepEqual(buscarSecretos('TMDB_API_KEY='), [])
   assert.equal(buscarSecretos('-----BEGIN PRIVATE KEY-----').length, 1)
+
+  // En modo ignorarEjemplosDePrueba los ejemplos sintéticos de test se omiten para CI:
+  assert.equal(buscarSecretos('TMDB_API_KEY=b3e7a06d85c97108194829ca46b85e85', { ignorarEjemplosDePrueba: true }).length, 0)
+  assert.equal(buscarSecretos('assert.equal(buscarSecretos("-----BEGIN PRIVATE KEY-----").length, 1)', { ignorarEjemplosDePrueba: true }).length, 0)
 })
 
 test('.env y .env.local son de secretos; .env.example no', () => {

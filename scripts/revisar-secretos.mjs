@@ -25,7 +25,9 @@ for (const ruta of versionados.filter(esArchivoDeSecretos)) {
 // 2. Contenido de los archivos versionados.
 for (const ruta of versionados) {
   if (BINARIO.test(ruta) || ruta.endsWith('package-lock.json') || !existsSync(ruta)) continue
-  for (const h of buscarSecretos(readFileSync(ruta, 'utf8'))) hallazgos.push({ origen: ruta, ...h })
+  for (const h of buscarSecretos(readFileSync(ruta, 'utf8'), { ignorarEjemplosDePrueba: true })) {
+    hallazgos.push({ origen: ruta, ...h })
+  }
 }
 
 // 3. El build del front: todo lo que hay en dist/ lo descarga cualquier visitante.
@@ -36,7 +38,9 @@ const recorrer = (carpeta) =>
   })
 if (existsSync('dist')) {
   for (const ruta of recorrer('dist').filter((r) => /\.(js|html|css|map)$/.test(r))) {
-    for (const h of buscarSecretos(readFileSync(ruta, 'utf8'))) hallazgos.push({ origen: ruta, ...h })
+    for (const h of buscarSecretos(readFileSync(ruta, 'utf8'), { ignorarEjemplosDePrueba: true })) {
+      hallazgos.push({ origen: ruta, ...h })
+    }
   }
 }
 
@@ -46,7 +50,7 @@ if (process.argv.includes('--historial')) {
   const vistos = new Set()
   for (const commit of commits) {
     const parche = git('show', '--format=', '--no-color', '--unified=0', commit)
-    for (const h of buscarSecretos(parche)) {
+    for (const h of buscarSecretos(parche, { ignorarEjemplosDePrueba: true })) {
       const clave = `${h.tipo}|${h.valor}`
       if (vistos.has(clave)) continue
       vistos.add(clave)
