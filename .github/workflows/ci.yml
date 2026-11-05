@@ -1,0 +1,221 @@
+# -----------------------------------------------------------------------------
+# Pipeline de Integración Continua (CI) - Plataforma Butaca
+# Rama de referencia: pf24_GitHubActions
+#
+# Este flujo de trabajo automatiza la verificación estática, compilación,
+# seguridad, pruebas unitarias, pruebas de integración, pruebas de extremo a
+# extremo (E2E) con Playwright y la validación estructural de Docker Compose.
+# -----------------------------------------------------------------------------
+
+name: CI - Integración Continua Butaca
+
+# Disparadores de ejecución: se activa en eventos de push y pull request
+# orientados a las ramas principales de desarrollo, producción y características.
+on:
+  push:
+    branches:
+      - dev
+      - main
+      - 'pf*'
+  pull_request:
+    branches:
+      - dev
+      - main
+      - 'pf*'
+
+# Permisos mínimos de seguridad otorgados al token GITHUB_TOKEN en el runner.
+# Se aplica el principio de menor privilegio (únicamente lectura de contenido).
+permissions:
+  contents: read
+
+# Control de concurrencia para evitar consumo innecesario de minutos de cómputo.
+# Cancela automáticamente ejecuciones previas en la misma rama ante nuevos commits.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Variables globales de entorno aplicables a todos los trabajos y pasos.
+env:
+  CI: 'true'
+  DOTENV_CONFIG_PATH: /dev/null
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1. Job «Calidad»: Análisis estático, compilación y detección de secretos.
+  # ---------------------------------------------------------------------------
+  calidad:
+    name: Calidad
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Descarga el historial completo del repositorio (fetch-depth: 0) para
+      # permitir que el script de seguridad analice todos los commits históricos.
+      - name: Descargar código fuente del repositorio
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Configura el entorno de ejecución Node.js versión 24 y activa el caché
+      # de npm monitoreando los archivos lockfile activos del proyecto.
+      - name: Configurar Node.js versión 24 y caché de dependencias npm
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: 'npm'
+          cache-dependency-path: |
+            package-lock.json
+            apigateway/package-lock.json
+            microservicios/*/package-lock.json
+
+      # Instala las dependencias deterministas del frontend mediante npm ci.
+      - name: Instalar dependencias del proyecto raíz
+        run: npm ci
+
+      # Ejecuta el análisis estático de código mediante oxlint.
+      - name: Ejecutar análisis estático de código (linter)
+        run: npm run lint
+
+      # Verifica que el código fuente del frontend compile sin errores con Vite.
+      - name: Compilar frontend de producción (Vite build)
+        run: npm run build
+
+      # Analiza el árbol de archivos y el historial de Git en busca de credenciales.
+      - name: Escanear secretos sensibles en código e historial de commits
+        run: npm run seguridad:secretos -- --historial
+
+  # ---------------------------------------------------------------------------
+  # 2. Job «Pruebas unitarias»: Ejecución de la suite del frontend en memoria.
+  # ---------------------------------------------------------------------------
+  pruebas-unitarias:
+    name: Pruebas unitarias
+    needs: calidad
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Descarga el código fuente del repositorio.
+      - name: Descargar código fuente del repositorio
+        uses: actions/checkout@v4
+
+      # Configura Node.js 24 con la estrategia de caché para dependencias npm.
+      - name: Configurar Node.js versión 24 y caché de dependencias npm
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: 'npm'
+          cache-dependency-path: |
+            package-lock.json
+            apigateway/package-lock.json
+            microservicios/*/package-lock.json
+
+      # Instala las dependencias limpias del proyecto frontend.
+      - name: Instalar dependencias del proyecto raíz
+        run: npm ci
+
+      # Ejecuta las pruebas unitarias del frontend utilizando el runner nativo de Node.js.
+      - name: Ejecutar suite de pruebas unitarias del frontend
+        run: npm test
+
+  # ---------------------------------------------------------------------------
+  # 3. Job «Pruebas de integración»: Ejecución de las 7 suites del proyecto.
+  # ---------------------------------------------------------------------------
+  pruebas-integracion:
+    name: Pruebas de integración
+    needs: calidad
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Descarga el código fuente del repositorio.
+      - name: Descargar código fuente del repositorio
+        uses: actions/checkout@v4
+
+      # Configura Node.js 24 con la estrategia de caché para dependencias npm.
+      - name: Configurar Node.js versión 24 y caché de dependencias npm
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: 'npm'
+          cache-dependency-path: |
+            package-lock.json
+            apigateway/package-lock.json
+            microservicios/*/package-lock.json
+
+      # Ejecuta la orquestación global hermética que instala dependencias, genera
+      # clientes Prisma con URLs de relleno y corre las pruebas de los 7 paquetes.
+      - name: Ejecutar suite completa de integración hermética en todos los paquetes
+        run: npm run test:todo -- --instalar
+
+  # ---------------------------------------------------------------------------
+  # 4. Job «Pruebas E2E (Playwright)»: Pruebas end-to-end con cámara simulada.
+  # ---------------------------------------------------------------------------
+  pruebas-e2e:
+    name: Pruebas E2E (Playwright)
+    needs:
+      - pruebas-unitarias
+      - pruebas-integracion
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # Descarga el código fuente del repositorio.
+      - name: Descargar código fuente del repositorio
+        uses: actions/checkout@v4
+
+      # Configura Node.js 24 con caché de paquetes npm.
+      - name: Configurar Node.js versión 24 y caché de dependencias npm
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: 'npm'
+          cache-dependency-path: |
+            package-lock.json
+            apigateway/package-lock.json
+            microservicios/*/package-lock.json
+
+      # Instala dependencias del frontend incluyendo el paquete @playwright/test.
+      - name: Instalar dependencias del proyecto raíz
+        run: npm ci
+
+      # Almacena o recupera los binarios del navegador descargados en el runner.
+      - name: Restaurar o guardar caché de binarios del navegador Playwright
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      # Instala exclusivamente el navegador Chromium y las librerías del sistema Ubuntu.
+      - name: Instalar navegador Chromium y dependencias del sistema operativo
+        run: npx playwright install --with-deps chromium
+
+      # Ejecuta la suite de pruebas E2E levantando el servidor web local en el puerto 5174.
+      - name: Ejecutar pruebas de extremo a extremo (E2E) con Playwright
+        env:
+          CI: 'true'
+        run: npm run e2e
+
+      # Publica el reporte interactivo y los resultados de fallo como artefactos de GitHub Actions.
+      - name: Publicar artefactos y reportes de Playwright
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reporte-playwright
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 30
+
+  # ---------------------------------------------------------------------------
+  # 5. Job «Docker»: Verificación sintáctica y de dependencias de contenedores.
+  # ---------------------------------------------------------------------------
+  docker:
+    name: Docker
+    needs: calidad
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Descarga el código fuente del repositorio.
+      - name: Descargar código fuente del repositorio
+        uses: actions/checkout@v4
+
+      # Valida la sintaxis del archivo compose.yaml, variables y redes sin construir imágenes.
+      - name: Validar sintaxis y configuración estructural de Docker Compose
+        run: docker compose config
