@@ -10,9 +10,12 @@ function readPositiveInteger(value, fallback) {
 
 function readServiceUrl(value, fallback) {
   const serviceUrl = value || fallback
+  const normalizedUrl = serviceUrl.includes('://')
+    ? serviceUrl
+    : `http://${serviceUrl}`
 
   try {
-    return new URL(serviceUrl).origin
+    return new URL(normalizedUrl).origin
   } catch {
     throw new Error(`URL de microservicio inválida: ${serviceUrl}`)
   }

@@ -21,7 +21,9 @@ function readTimeout(name, fallback) {
 
 function readUrl(name, fallback) {
   try {
-    const url = new URL(process.env[name] || fallback)
+    const value = process.env[name] || fallback
+    const normalizedUrl = value.includes('://') ? value : `http://${value}`
+    const url = new URL(normalizedUrl)
     if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password ||
         url.pathname !== '/' || url.search || url.hash) throw new Error()
     return url.origin

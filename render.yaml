@@ -1,0 +1,221 @@
+services:
+  - type: web
+    runtime: static
+    name: butaca-fxumhujdmabgxjqmzoxs-frontend
+    branch: pf25_MejorasVisuales
+    autoDeployTrigger: checksPass
+    buildCommand: npm ci && npm run build
+    staticPublishPath: ./dist
+    envVars:
+      - key: VITE_SUPABASE_URL
+        value: https://fxumhujdmabgxjqmzoxs.supabase.co
+      - key: VITE_SUPABASE_PUBLISHABLE_KEY
+        value: sb_publishable_ltaNA7nnVozoSCOcZIjg
+      - key: VITE_API_GATEWAY_URL
+        value: https://butaca-fxumhujdmabgxjqmzoxs-gateway.onrender.com
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+
+  - type: web
+    runtime: docker
+    name: butaca-fxumhujdmabgxjqmzoxs-gateway
+    branch: pf25_MejorasVisuales
+    rootDir: apigateway
+    plan: free
+    region: virginia
+    autoDeployTrigger: checksPass
+    healthCheckPath: /health
+    envVars:
+      - key: GATEWAY_PORT
+        value: 10000
+      - key: CORS_ORIGINS
+        value: https://butaca-fxumhujdmabgxjqmzoxs-frontend.onrender.com
+      - key: TRUST_PROXY
+        value: 1
+      - key: PROXY_TIMEOUT_MS
+        value: 15000
+      - key: RATE_LIMIT_WINDOW_MS
+        value: 60000
+      - key: RATE_LIMIT_MAX
+        value: 300
+      - key: RATE_LIMIT_WRITE_MAX
+        value: 60
+      - key: MAX_BODY_BYTES
+        value: 32768
+      - key: AUTH_SERVICE_URL
+        fromService:
+          type: web
+          name: butaca-fxumhujdmabgxjqmzoxs-auth
+          property: hostport
+      - key: EMOTIONS_SERVICE_URL
+        fromService:
+          type: web
+          name: butaca-fxumhujdmabgxjqmzoxs-emotions
+          property: hostport
+      - key: CATALOG_SERVICE_URL
+        fromService:
+          type: web
+          name: butaca-fxumhujdmabgxjqmzoxs-catalog
+          property: hostport
+      - key: RECOMMENDATIONS_SERVICE_URL
+        fromService:
+          type: web
+          name: butaca-fxumhujdmabgxjqmzoxs-recommendations
+          property: hostport
+      - key: LIBRARY_SERVICE_URL
+        fromService:
+          type: web
+          name: butaca-fxumhujdmabgxjqmzoxs-library
+          property: hostport
+
+  - type: web
+    runtime: docker
+    name: butaca-fxumhujdmabgxjqmzoxs-auth
+    branch: pf25_MejorasVisuales
+    rootDir: microservicios/auth-service
+    plan: free
+    region: virginia
+    autoDeployTrigger: checksPass
+    healthCheckPath: /health
+    envVars:
+      - key: SERVICE_NAME
+        value: auth-service
+      - key: PORT
+        value: 10000
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+
+  - type: web
+    runtime: docker
+    name: butaca-fxumhujdmabgxjqmzoxs-emotions
+    branch: pf25_MejorasVisuales
+    rootDir: microservicios/emotions-service
+    plan: free
+    region: virginia
+    autoDeployTrigger: checksPass
+    healthCheckPath: /health
+    envVars:
+      - key: SERVICE_NAME
+        value: emotions-service
+      - key: PORT
+        value: 10000
+      - key: SUPABASE_URL
+        fromService:
+          type: web
+          name: butaca-fxumhujdmabgxjqmzoxs-auth
+          envVarKey: SUPABASE_URL
+      - key: SUPABASE_PUBLISHABLE_KEY
+        fromService:
+          type: web
+          name: butaca-fxumhujdmabgxjqmzoxs-auth
+          envVarKey: SUPABASE_PUBLISHABLE_KEY
+      - key: DATABASE_URL
+        fromService:
+          type: web
+          name: butaca-fxumhujdmabgxjqmzoxs-auth
+          envVarKey: DATABASE_URL
+      - key: DIRECT_URL
+        fromService:
+          type: web
+          name: butaca-fxumhujdmabgxjqmzoxs-auth
+          envVarKey: DIRECT_URL
+
+  - type: web
+    runtime: docker
+    name: butaca-fxumhujdmabgxjqmzoxs-catalog
+    branch: pf25_MejorasVisuales
+    rootDir: microservicios/catalog-service
+    plan: free
+    region: virginia
+    autoDeployTrigger: checksPass
+    healthCheckPath: /health
+    envVars:
+      - key: SERVICE_NAME
+        value: catalog-service
+      - key: PORT
+        value: 10000
+      - key: TMDB_API_KEY
+        sync: false
+      - key: TMDB_BASE_URL
+        value: https://api.themoviedb.org/3
+      - key: TMDB_IMAGE_BASE_URL
+        value: https://image.tmdb.org/t/p/w500
+      - key: TMDB_TIMEOUT_MS
+        value: 5000
+
+  - type: web
+    runtime: docker
+    name: butaca-fxumhujdmabgxjqmzoxs-recommendations
+    branch: pf25_MejorasVisuales
+    rootDir: microservicios/recommendations-service
+    plan: free
+    region: virginia
+    autoDeployTrigger: checksPass
+    healthCheckPath: /health
+    envVars:
+      - key: SERVICE_NAME
+        value: recommendations-service
+      - key: PORT
+        value: 10000
+      - key: REQUEST_TIMEOUT_MS
+        value: 4000
+      - key: UPSTREAM_TIMEOUT_MS
+        value: 2500
+      - key: AUTH_SERVICE_URL
+        fromService:
+          type: web
+          name: butaca-fxumhujdmabgxjqmzoxs-auth
+          property: hostport
+      - key: EMOTIONS_SERVICE_URL
+        fromService:
+          type: web
+          name: butaca-fxumhujdmabgxjqmzoxs-emotions
+          property: hostport
+      - key: CATALOG_SERVICE_URL
+        fromService:
+          type: web
+          name: butaca-fxumhujdmabgxjqmzoxs-catalog
+          property: hostport
+
+  - type: web
+    runtime: docker
+    name: butaca-fxumhujdmabgxjqmzoxs-library
+    branch: pf25_MejorasVisuales
+    rootDir: microservicios/library-service
+    plan: free
+    region: virginia
+    autoDeployTrigger: checksPass
+    healthCheckPath: /health
+    envVars:
+      - key: SERVICE_NAME
+        value: library-service
+      - key: PORT
+        value: 10000
+      - key: SUPABASE_URL
+        fromService:
+          type: web
+          name: butaca-fxumhujdmabgxjqmzoxs-auth
+          envVarKey: SUPABASE_URL
+      - key: SUPABASE_PUBLISHABLE_KEY
+        fromService:
+          type: web
+          name: butaca-fxumhujdmabgxjqmzoxs-auth
+          envVarKey: SUPABASE_PUBLISHABLE_KEY
+      - key: DATABASE_URL
+        fromService:
+          type: web
+          name: butaca-fxumhujdmabgxjqmzoxs-auth
+          envVarKey: DATABASE_URL
+      - key: DIRECT_URL
+        fromService:
+          type: web
+          name: butaca-fxumhujdmabgxjqmzoxs-auth
+          envVarKey: DIRECT_URL
