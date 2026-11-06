@@ -12,7 +12,7 @@ services:
       - key: VITE_SUPABASE_PUBLISHABLE_KEY
         value: sb_publishable_ltaNA7nnVozoSCOcZIjg
       - key: VITE_API_GATEWAY_URL
-        value: https://butaca-fxumhujdmabgxjqmzoxs-gateway.onrender.com
+        value: https://butaca-fxumhujdmabgxjqmzoxs-gateway-7rkz.onrender.com
     routes:
       - type: rewrite
         source: /*
@@ -31,7 +31,7 @@ services:
       - key: GATEWAY_PORT
         value: 10000
       - key: CORS_ORIGINS
-        value: https://butaca-fxumhujdmabgxjqmzoxs-frontend.onrender.com
+        value: https://butaca-fxumhujdmabgxjqmzoxs-frontend-7rkz.onrender.com
       - key: TRUST_PROXY
         value: 1
       - key: PROXY_TIMEOUT_MS
