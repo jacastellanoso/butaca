@@ -45,30 +45,15 @@ services:
       - key: MAX_BODY_BYTES
         value: 32768
       - key: AUTH_SERVICE_URL
-        fromService:
-          type: web
-          name: butaca-fxumhujdmabgxjqmzoxs-auth
-          property: hostport
+        value: https://butaca-fxumhujdmabgxjqmzoxs-auth-7rkz.onrender.com
       - key: EMOTIONS_SERVICE_URL
-        fromService:
-          type: web
-          name: butaca-fxumhujdmabgxjqmzoxs-emotions
-          property: hostport
+        value: https://butaca-fxumhujdmabgxjqmzoxs-emotions-7rkz.onrender.com
       - key: CATALOG_SERVICE_URL
-        fromService:
-          type: web
-          name: butaca-fxumhujdmabgxjqmzoxs-catalog
-          property: hostport
+        value: https://butaca-fxumhujdmabgxjqmzoxs-catalog-7rkz.onrender.com
       - key: RECOMMENDATIONS_SERVICE_URL
-        fromService:
-          type: web
-          name: butaca-fxumhujdmabgxjqmzoxs-recommendations
-          property: hostport
+        value: https://butaca-fxumhujdmabgxjqmzoxs.onrender.com
       - key: LIBRARY_SERVICE_URL
-        fromService:
-          type: web
-          name: butaca-fxumhujdmabgxjqmzoxs-library
-          property: hostport
+        value: https://butaca-fxumhujdmabgxjqmzoxs-library-7rkz.onrender.com
 
   - type: web
     runtime: docker
@@ -170,20 +155,11 @@ services:
       - key: UPSTREAM_TIMEOUT_MS
         value: 2500
       - key: AUTH_SERVICE_URL
-        fromService:
-          type: web
-          name: butaca-fxumhujdmabgxjqmzoxs-auth
-          property: hostport
+        value: https://butaca-fxumhujdmabgxjqmzoxs-auth-7rkz.onrender.com
       - key: EMOTIONS_SERVICE_URL
-        fromService:
-          type: web
-          name: butaca-fxumhujdmabgxjqmzoxs-emotions
-          property: hostport
+        value: https://butaca-fxumhujdmabgxjqmzoxs-emotions-7rkz.onrender.com
       - key: CATALOG_SERVICE_URL
-        fromService:
-          type: web
-          name: butaca-fxumhujdmabgxjqmzoxs-catalog
-          property: hostport
+        value: https://butaca-fxumhujdmabgxjqmzoxs-catalog-7rkz.onrender.com
 
   - type: web
     runtime: docker
