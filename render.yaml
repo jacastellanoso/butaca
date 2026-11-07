@@ -1,7 +1,7 @@
 services:
   - type: web
     runtime: static
-    name: butaca-fxumhujdmabgxjqmzoxs-frontend
+    name: butacaweb
     branch: pf25_MejorasVisuales
     autoDeployTrigger: checksPass
     buildCommand: npm ci && npm run build
@@ -31,7 +31,7 @@ services:
       - key: GATEWAY_PORT
         value: 10000
       - key: CORS_ORIGINS
-        value: https://butaca-fxumhujdmabgxjqmzoxs-frontend-7rkz.onrender.com
+        value: https://butacaweb.onrender.com
       - key: TRUST_PROXY
         value: 1
       - key: PROXY_TIMEOUT_MS
