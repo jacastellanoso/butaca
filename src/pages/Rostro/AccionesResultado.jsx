@@ -15,7 +15,7 @@ import { guardarAnimo } from './services/animos.js'
  */
 function AccionesResultado({ detection, onAnalyze }) {
   const consentId = useId()
-  const [autorizado, setAutorizado] = useState(false)
+  const [autorizado, setAutorizado] = useState(true)
   const [guardado, setGuardado] = useState({ estado: 'idle', mensaje: '', animoId: null })
 
   const { status, emotion, confidence } = detection
@@ -42,6 +42,10 @@ function AccionesResultado({ detection, onAnalyze }) {
     <div className="rostro-result">
       {puedeGuardar && (
         <div className="rostro-save">
+          <div className="rostro-save__heading">
+            <span aria-hidden="true">✓</span>
+            <div><strong>Escaneo completado</strong><small>Tu imagen no se almacena.</small></div>
+          </div>
           <label className="rostro-save__consent" htmlFor={consentId}>
             <input
               id={consentId}
@@ -84,7 +88,7 @@ function AccionesResultado({ detection, onAnalyze }) {
       )}
 
       {/* pf20: recomendaciones de la emoción detectada (no requieren guardar). */}
-      {puedeGuardar && <RecomendacionesRostro emocion={emotion} animoId={guardado.animoId} />}
+      {yaGuardado && <RecomendacionesRostro emocion={emotion} animoId={guardado.animoId} />}
 
       <button
         className="rostro-button rostro-button--secondary"

@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 
 import BotonFavorito from '../../../components/BotonFavorito/BotonFavorito.jsx'
 
@@ -15,7 +16,13 @@ function DetalleContenido({ contenido, onClose }) {
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [onClose])
 
-  return (
+  useEffect(() => {
+    const overflowAnterior = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = overflowAnterior }
+  }, [])
+
+  const modal = (
     <div
       className="content-modal"
       role="presentation"
@@ -41,13 +48,21 @@ function DetalleContenido({ contenido, onClose }) {
             {[contenido.tipo, contenido.anio, (contenido.generos ?? []).join(', ')].filter(Boolean).join(' · ')}
           </p>
           <p>{contenido.sinopsis}</p>
-          {contenido.calificacion !== null && contenido.calificacion !== undefined && <p>Calificación: {contenido.calificacion}</p>}
+          {contenido.calificacion !== null && contenido.calificacion !== undefined && (
+            <div className="content-detail__rating" aria-label={`Calificación ${contenido.calificacion} de 10`}>
+              <span aria-hidden="true">★</span>
+              <strong>{Number(contenido.calificacion).toFixed(1)}</strong>
+              <small>/ 10</small>
+            </div>
+          )}
           {/* Favoritos reales en library-service (pf16), conectados en pf20. */}
           <BotonFavorito contenido={contenido} />
         </div>
       </section>
     </div>
   )
+
+  return typeof document === 'undefined' ? modal : createPortal(modal, document.body)
 }
 
 export default DetalleContenido

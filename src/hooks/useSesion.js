@@ -4,6 +4,21 @@ import { validarSesion } from '../lib/sesion.js'
 import { supabase } from '../lib/supabase.js'
 import { sincronizarUsuario } from '../services/usuarios.js'
 
+const esperar = (milisegundos) => new Promise((resolve) => window.setTimeout(resolve, milisegundos))
+
+async function prepararCuenta() {
+  let ultimoError
+  for (const demora of [0, 1200, 2500]) {
+    if (demora) await esperar(demora)
+    try {
+      return await sincronizarUsuario()
+    } catch (error) {
+      ultimoError = error
+    }
+  }
+  throw ultimoError
+}
+
 /* oxlint-disable react/set-state-in-effect -- sincronización asíncrona con Supabase Auth */
 /**
  * Estado de la sesión validado contra Supabase Auth.
@@ -16,7 +31,7 @@ export function useSesion() {
     const resultado = await validarSesion(supabase)
     if (resultado.estado === 'autenticado') {
       try {
-        const registro = await sincronizarUsuario()
+        const registro = await prepararCuenta()
         setSesion({ estado: 'autenticado', usuario: resultado.usuario, registro })
       } catch {
         setSesion({

@@ -7,13 +7,13 @@ export const env = {
   authServiceUrl: readUrl('AUTH_SERVICE_URL', 'http://auth-service:3021'),
   emotionsServiceUrl: readUrl('EMOTIONS_SERVICE_URL', 'http://emotions-service:3022'),
   catalogServiceUrl: readUrl('CATALOG_SERVICE_URL', 'http://catalog-service:3023'),
-  requestTimeoutMs: readTimeout('REQUEST_TIMEOUT_MS', 4000),
-  upstreamTimeoutMs: readTimeout('UPSTREAM_TIMEOUT_MS', 2500),
+  requestTimeoutMs: readTimeout('REQUEST_TIMEOUT_MS', 45_000),
+  upstreamTimeoutMs: readTimeout('UPSTREAM_TIMEOUT_MS', 30_000),
 }
 
 function readTimeout(name, fallback) {
   const value = Number(process.env[name] ?? fallback)
-  if (!Number.isInteger(value) || value < 1 || value > 4000) {
+  if (!Number.isInteger(value) || value < 1 || value > 60_000) {
     throw new Error(`Configuración inválida: ${name}`)
   }
   return value

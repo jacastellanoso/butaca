@@ -16,7 +16,7 @@ services:
       - key: TRUST_PROXY
         value: 1
       - key: PROXY_TIMEOUT_MS
-        value: 15000
+        value: 60000
       - key: RATE_LIMIT_WINDOW_MS
         value: 60000
       - key: RATE_LIMIT_MAX
@@ -132,9 +132,9 @@ services:
       - key: PORT
         value: 10000
       - key: REQUEST_TIMEOUT_MS
-        value: 4000
+        value: 45000
       - key: UPSTREAM_TIMEOUT_MS
-        value: 2500
+        value: 30000
       - key: AUTH_SERVICE_URL
         value: https://butaca-fxumhujdmabgxjqmzoxs-auth-7rkz.onrender.com
       - key: EMOTIONS_SERVICE_URL

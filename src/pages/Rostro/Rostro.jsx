@@ -70,6 +70,7 @@ function Rostro({ detection, onVideoReady, children }) {
   const isActive = status === 'active'
   const isRequesting = status === 'requesting'
   const detectionStatus = detection?.status ?? 'ready'
+  const completed = isActive && detectionStatus === 'detected'
 
   const handleAccept = () => {
     setConsent('granted')
@@ -111,7 +112,7 @@ function Rostro({ detection, onVideoReady, children }) {
           </header>
 
           <div
-            className={`camera-stage camera-stage--${status}`}
+            className={`camera-stage camera-stage--${status}${completed ? ' camera-stage--completed' : ''}`}
             data-detection={isActive ? detectionStatus : undefined}
           >
             <video
@@ -121,15 +122,23 @@ function Rostro({ detection, onVideoReady, children }) {
               muted
               playsInline
               aria-label="Vista previa de tu cámara"
-              hidden={!isActive}
+              hidden={!isActive || completed}
               onLoadedData={(event) => onVideoReady?.(event.currentTarget)}
               onEmptied={() => onVideoReady?.(null)}
             />
 
-            {isActive && (
+            {isActive && !completed && (
               <div className="face-guide" aria-hidden="true">
                 <span className="face-guide__frame" />
                 <span className="face-guide__scan" />
+              </div>
+            )}
+
+            {completed && (
+              <div className="camera-complete" role="status">
+                <span aria-hidden="true">✓</span>
+                <strong>Lectura completada</strong>
+                <small>Ahora decidí si querés guardar el resultado.</small>
               </div>
             )}
 

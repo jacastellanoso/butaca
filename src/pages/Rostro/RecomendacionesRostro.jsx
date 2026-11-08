@@ -57,8 +57,9 @@ function RecomendacionesRostro({ emocion, animoId }) {
       </div>
 
       {estado === 'loading' && (
-        <div className="rostro-recs__row" aria-busy="true" aria-label="Buscando recomendaciones">
-          {Array.from({ length: VISTA_PREVIA }, (_, index) => <span key={index} className="rostro-recs__skeleton" />)}
+        <div className="rostro-recs__calculating" aria-busy="true" aria-label="Calculando tu experiencia Butaca">
+          <span className="rostro-recs__orb" aria-hidden="true">B</span>
+          <div><strong>Calculando tu experiencia Butaca…</strong><small>Combinando tu emoción con historias para vos.</small></div>
         </div>
       )}
 

@@ -3,6 +3,28 @@ import { ApiError, solicitarApi } from '../lib/api.js'
 const emociones = ['neutral', 'happy', 'sad', 'angry', 'fearful', 'disgusted', 'surprised']
 const tipos = ['movie', 'tv']
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const CLAVE_RECOMENDACIONES = 'butaca:recomendaciones-recientes'
+
+function recordarRecomendaciones(resultados) {
+  try {
+    const anteriores = JSON.parse(window.localStorage.getItem(CLAVE_RECOMENDACIONES) ?? '[]')
+    const unicos = [...resultados, ...(Array.isArray(anteriores) ? anteriores : [])]
+      .filter((item, indice, lista) => lista.findIndex((otro) => otro.id === item.id) === indice)
+      .slice(0, 60)
+    window.localStorage.setItem(CLAVE_RECOMENDACIONES, JSON.stringify(unicos))
+  } catch {
+    // El almacenamiento puede estar bloqueado; no impide mostrar recomendaciones.
+  }
+}
+
+export function obtenerRecomendacionesRecientes() {
+  try {
+    const guardadas = JSON.parse(window.localStorage.getItem(CLAVE_RECOMENDACIONES) ?? '[]')
+    return Array.isArray(guardadas) ? guardadas : []
+  } catch {
+    return []
+  }
+}
 
 function parametrosInvalidos() {
   return new ApiError('parametros-invalidos', 'Indicá una emoción válida o un animoId UUID, y tipo movie o tv.', 400)
@@ -73,5 +95,6 @@ export async function obtenerRecomendaciones(parametros = {}) {
   }
   const resultados = respuesta.resultados.map((item) => adaptarContenido(item, tipo))
   if (new Set(resultados.map((item) => item.id)).size !== resultados.length) throw respuestaInvalida()
+  recordarRecomendaciones(resultados)
   return { emocion: respuesta.emocion, tipo, fuente: 'tmdb', resultados }
 }
