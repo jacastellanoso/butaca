@@ -148,3 +148,40 @@ test('quien creó el grupo puede quitar integrantes y eliminar el grupo', async 
   await expect(page.getByText('Todavía no formás parte de ningún grupo.', { exact: false })).toBeVisible()
   expect(backend.social.grupos).toHaveLength(0)
 })
+
+test('la página Grupos lista las invitaciones recibidas y permite aceptarlas aunque el aviso ya no esté en la campana', async ({ page, backend }) => {
+  const grupo = grupoDeLeo(backend)
+  // El aviso se perdió entre notificaciones viejas: la campana ya no lo muestra.
+  backend.social.notificaciones.length = 0
+  await entrarComo(page)
+  await menu(page, 'Grupos').click()
+
+  const invitaciones = page.getByRole('region', { name: 'Invitaciones recibidas' })
+  await expect(invitaciones.getByText(/Leo Ruiz\s*te invitó a\s*«Club de cine»/)).toBeVisible()
+  await invitaciones.getByRole('button', { name: 'Aceptar invitación a Club de cine' }).click()
+
+  await expect(page).toHaveURL(new RegExp(`#grupos/${grupo.id}$`))
+  await expect(page.getByRole('heading', { name: 'Club de cine' })).toBeVisible()
+  await expect(page.getByText('Majo Prueba (vos)')).toBeVisible()
+  await expect(invitaciones).toHaveCount(0)
+  await expect(page.getByRole('link', { name: /Club de cine/ })).toBeVisible()
+  expect(backend.social.invitaciones[0].estado).toBe('aceptada')
+})
+
+test('rechazar desde la página Grupos quita la invitación y no agrega al grupo', async ({ page, backend }) => {
+  const grupo = grupoDeLeo(backend)
+  await entrarComo(page)
+  await menu(page, 'Grupos').click()
+
+  const invitaciones = page.getByRole('region', { name: 'Invitaciones recibidas' })
+  await invitaciones.getByRole('button', { name: 'Rechazar invitación a Club de cine' }).click()
+
+  await expect(invitaciones).toHaveCount(0)
+  await expect(page).toHaveURL(/#grupos$/)
+  expect(backend.social.invitaciones[0].estado).toBe('rechazada')
+  expect(backend.social.miembros.some((m) => m.grupoId === grupo.id && m.usuarioId === USUARIO_PRUEBA.id)).toBe(false)
+  // La campana deja de ofrecer Aceptar para esa invitación.
+  await campana(page).click()
+  const panel = page.getByRole('region', { name: 'Centro de notificaciones' })
+  await expect(panel.getByRole('button', { name: 'Aceptar' })).toHaveCount(0)
+})

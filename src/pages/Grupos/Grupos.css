@@ -60,6 +60,49 @@
   font-weight: 600;
 }
 
+/* Invitaciones recibidas: arriba de la lista, resaltadas en celeste. */
+.grupos-invitaciones {
+  margin: 14px 0 4px;
+  padding: 12px;
+  border: 2px solid var(--dash-light);
+  border-radius: 16px;
+  background: var(--dash-soft);
+}
+
+.grupos-invitaciones h3 {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+.grupos-invitaciones ul {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.grupos-invitaciones p {
+  display: grid;
+  gap: 2px;
+  margin: 0 0 8px;
+  font-size: 14px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.grupos-invitaciones small {
+  color: var(--dash-ink-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.grupos-invitaciones__acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .grupos-ayuda {
   margin: 10px 0 0;
   color: var(--dash-ink-2);

@@ -15,8 +15,10 @@ import {
   eliminarGrupo,
   invitarAGrupo,
   listarGrupos,
+  listarInvitaciones,
   obtenerGrupo,
   quitarMiembro,
+  responderInvitacion,
 } from '../../services/grupos.js'
 import EstadoPanel from '../Dashboard/components/EstadoPanel.jsx'
 import TarjetaPelicula from '../Dashboard/components/TarjetaPelicula.jsx'
@@ -311,13 +313,83 @@ function DetalleGrupo({ grupoId, onCambio }) {
   )
 }
 
+/**
+ * Invitaciones pendientes dirigidas a esta cuenta (GET /api/invitaciones).
+ * La campana también las muestra, pero solo entre las últimas notificaciones:
+ * aquí siempre se pueden aceptar o rechazar, aunque el aviso ya no esté a la vista.
+ */
+function InvitacionesRecibidas({ invitaciones, onRespondida }) {
+  const [respondiendo, setRespondiendo] = useState(null)
+  const [error, setError] = useState('')
+
+  if (invitaciones.length === 0) return null
+
+  const responder = async (invitacion, aceptar) => {
+    setRespondiendo(invitacion.id)
+    setError('')
+    try {
+      const { grupoId } = await responderInvitacion(invitacion.id, aceptar)
+      // La campana y la lista de grupos se actualizan con el mismo evento.
+      window.dispatchEvent(new Event(EVENTO_GRUPOS))
+      onRespondida()
+      if (aceptar && grupoId) window.location.assign(hashDeGrupo(grupoId))
+    } catch (fallo) {
+      setError(fallo.message)
+    } finally {
+      setRespondiendo(null)
+    }
+  }
+
+  return (
+    <section className="grupos-invitaciones" aria-labelledby="grupos-invitaciones-titulo">
+      <h3 id="grupos-invitaciones-titulo">Invitaciones recibidas</h3>
+      <ul>
+        {invitaciones.map((i) => (
+          <li key={i.id}>
+            <p>
+              <strong>{i.remitente}</strong> te invitó a <strong>«{i.grupoNombre}»</strong>
+              <small><time dateTime={i.creadoEn}>{formatearFechaHora(new Date(i.creadoEn))}</time></small>
+            </p>
+            <div className="grupos-invitaciones__acciones">
+              <button
+                type="button"
+                className="dash-button dash-button--primary"
+                disabled={respondiendo === i.id}
+                aria-label={`Aceptar invitación a ${i.grupoNombre}`}
+                onClick={() => responder(i, true)}
+              >
+                Aceptar
+              </button>
+              <button
+                type="button"
+                className="dash-button"
+                disabled={respondiendo === i.id}
+                aria-label={`Rechazar invitación a ${i.grupoNombre}`}
+                onClick={() => responder(i, false)}
+              >
+                Rechazar
+              </button>
+            </div>
+          </li>
+        ))}
+      </ul>
+      {error && <p className="grupos-form__error" role="alert">{error}</p>}
+    </section>
+  )
+}
+
 /** Grupos de la cuenta: crear, invitar, gestionar integrantes y compartir recomendaciones. */
 function Grupos({ encabezado, grupoId }) {
   const [estado, setEstado] = useState('loading')
   const [grupos, setGrupos] = useState([])
   const [error, setError] = useState('')
+  const [invitaciones, setInvitaciones] = useState([])
 
   const cargar = useCallback(async () => {
+    // Las invitaciones no bloquean la lista de grupos si fallan.
+    listarInvitaciones()
+      .then((lista) => setInvitaciones(Array.isArray(lista) ? lista : []))
+      .catch(() => {})
     try {
       setGrupos(await listarGrupos())
       setEstado('ready')
@@ -346,11 +418,12 @@ function Grupos({ encabezado, grupoId }) {
         <div className="grupos-layout">
           <aside className="dash-section grupos-lista" aria-labelledby="grupos-lista-titulo">
             <h2 id="grupos-lista-titulo">Tus grupos</h2>
+            <InvitacionesRecibidas invitaciones={invitaciones} onRespondida={cargar} />
             <FormCrearGrupo onCreado={(grupo) => { cargar(); window.location.hash = hashDeGrupo(grupo.id) }} />
             {estado === 'loading' && <EstadoPanel estado="loading" titulo="Cargando grupos" filas={2} />}
             {estado === 'error' && <EstadoPanel estado="error" titulo="No pudimos cargar tus grupos" mensaje={error} onRetry={cargar} />}
             {estado === 'ready' && grupos.length === 0 && (
-              <p className="grupos-ayuda">Todavía no formás parte de ningún grupo. Creá uno o aceptá una invitación desde la campana.</p>
+              <p className="grupos-ayuda">Todavía no formás parte de ningún grupo. Creá uno o aceptá una invitación.</p>
             )}
             {estado === 'ready' && grupos.length > 0 && (
               <ul className="grupos-items">
