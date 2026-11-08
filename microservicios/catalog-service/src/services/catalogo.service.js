@@ -5,7 +5,7 @@ import {
   GENEROS_TMDB_POR_CATEGORIA,
   PAGINACION_CATALOGO,
 } from '../constants/catalogo.js'
-import { coincideConEmocion, emocionesDeGeneros, REGLAS_EMOCION, relevanciaParaEmocion } from '../constants/emociones.js'
+import { emocionesDeGeneros, REGLAS_EMOCION, relevanciaParaEmocion } from '../constants/emociones.js'
 
 const SINOPSIS_POR_DEFECTO = 'Sin sinopsis disponible en español.'
 

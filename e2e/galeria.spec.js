@@ -238,3 +238,30 @@ test('el filtro por emoción muestra títulos relacionados, se combina con categ
   expect(backend.peticiones.filter((p) => p.ruta === '/api/recomendaciones' && p.query.includes('fearful'))).toHaveLength(0)
   expect(backend.peticionesA('POST', '/api/animos')).toHaveLength(0)
 })
+
+test('con el catálogo dormido, el navegador lo despierta en Render y la galería carga sola', async ({ page, backend }) => {
+  // El gateway no puede despertar un servicio dormido de Render: devuelve 502 con
+  // X-Butaca-Despertar (la URL pública de /health) y el navegador la visita.
+  const SALUD = 'https://butaca-catalog-e2e.onrender.com/health'
+  const despertares = []
+  await page.route(SALUD, (route) => {
+    despertares.push(route.request().method())
+    return route.fulfill({ status: 200, body: '{"status":"ok"}' })
+  })
+  let dormido = true
+  await page.route('**/api/catalogo**', (route) => {
+    if (dormido) {
+      return route.fulfill({ status: 502, contentType: 'text/html', headers: { 'X-Butaca-Despertar': SALUD }, body: '<!DOCTYPE html><title>502</title>' })
+    }
+    return route.fallback()
+  })
+  await entrarComo(page)
+  await expect(page.getByText('Estamos preparando tus películas…')).toBeVisible()
+  // El servicio se despierta con la visita del navegador; desde entonces responde.
+  await expect.poll(() => despertares.length).toBeGreaterThan(0)
+  dormido = false
+  await expect(page.getByRole('button', { name: `Ver detalles de ${CATALOGO[0].titulo}` })).toBeVisible({ timeout: 20_000 })
+  // Se visita como máximo una vez cada 20 s, no en cada reintento.
+  expect(despertares.length).toBeLessThanOrEqual(2)
+  expect(backend.peticiones.filter((p) => p.ruta === '/api/catalogo').length).toBeGreaterThanOrEqual(1)
+})

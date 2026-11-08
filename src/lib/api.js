@@ -1,3 +1,4 @@
+import { despertarSiHaceFalta } from './despertar.js'
 import { perfilActivoActual } from './perfilActivo.js'
 import { supabase } from './supabase.js'
 
@@ -86,6 +87,9 @@ export async function solicitarApi(ruta, { method = 'GET', body, mensajesServido
   }
 
   if (!respuesta.ok) {
+    // Un microservicio dormido en Render se despierta desde el navegador; los
+    // reintentos de quien llama (inicio de sesión, recomendaciones…) completan la operación.
+    despertarSiHaceFalta(respuesta)
     const [codigo, mensaje] = MENSAJES_POR_STATUS[respuesta.status] ?? [
       'error-servidor',
       'No pudimos completar la operación. Intentá de nuevo.',

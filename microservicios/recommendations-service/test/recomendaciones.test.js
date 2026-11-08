@@ -221,3 +221,19 @@ for (const mode of ['cabeceras', 'body', 'global']) {
     assert.ok(performance.now() - start < 1000)
   })
 }
+
+test('una dependencia dormida en Render se informa con X-Butaca-Despertar', async (t) => {
+  const f = await fixture(t, (url) => url.hostname === 'catalog.test' &&
+    new Response('<!DOCTYPE html>', { status: 502, headers: { 'x-render-routing': 'no-deploy', 'Content-Type': 'text/html' } }),
+  { catalogServiceUrl: 'https://catalog.test' })
+  const { response } = await f.request()
+  assert.equal(response.status, 503)
+  assert.equal(response.headers.get('x-butaca-despertar'), 'https://catalog.test/health')
+})
+
+test('un 503 propio de una dependencia (sin x-render-routing) no pide despertar nada', async (t) => {
+  const f = await fixture(t, (url) => url.hostname === 'catalog.test' && json({ error: 'x' }, 503), { catalogServiceUrl: 'https://catalog.test' })
+  const { response } = await f.request()
+  assert.equal(response.status, 503)
+  assert.equal(response.headers.get('x-butaca-despertar'), null)
+})

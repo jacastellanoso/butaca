@@ -49,7 +49,8 @@ export const portero = cors({
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   // X-Butaca-Perfil: perfil activo de la cuenta; cada microservicio verifica que sea propio.
   allowedHeaders: ['Authorization', 'Content-Type', 'X-Butaca-Perfil'],
-  exposedHeaders: ['RateLimit', 'RateLimit-Policy', 'Retry-After'],
+  // X-Butaca-Despertar: URL de /health de un servicio dormido en Render (gateway.routes.js).
+  exposedHeaders: ['RateLimit', 'RateLimit-Policy', 'Retry-After', 'X-Butaca-Despertar'],
   credentials: false,
   maxAge: 600,
 })

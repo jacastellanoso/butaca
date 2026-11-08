@@ -1,5 +1,21 @@
 export class DependencyError extends Error {
-  constructor(status, message) { super(message); this.status = status }
+  // despertar: URL pública de /health de una dependencia dormida en Render.
+  constructor(status, message, despertar = null) { super(message); this.status = status; this.despertar = despertar }
+}
+
+/**
+ * Un servicio dormido en Render no despierta con peticiones desde otro servicio
+ * de Render: responde 502 con x-render-routing. Se devuelve su /health público
+ * para que el navegador lo despierte (X-Butaca-Despertar).
+ */
+export function urlParaDespertar(baseUrl, response) {
+  if (![502, 503, 504].includes(response.status) || !response.headers.get('x-render-routing')) return null
+  try {
+    const url = new URL('/health', baseUrl)
+    return url.protocol === 'https:' ? url.href : null
+  } catch {
+    return null
+  }
 }
 
 // El plazo cubre también el body; nunca seguir redirecciones con el Bearer.
@@ -17,7 +33,9 @@ export function crearCliente({ fetchImpl, config, signal }) {
       if (response.status === 401 && protectedResource) throw new DependencyError(401, 'Sesión inválida o expirada.')
       if (response.status === 403 && protectedResource) throw new DependencyError(403, 'El perfil indicado no pertenece a tu cuenta.')
       if (response.status === 404 && protectedResource) throw new DependencyError(404, 'El registro emocional no existe.')
-      if ([429, 500, 502, 503, 504].includes(response.status)) throw new DependencyError(503, 'Un servicio necesario no está disponible.')
+      if ([429, 500, 502, 503, 504].includes(response.status)) {
+        throw new DependencyError(503, 'Un servicio necesario no está disponible.', urlParaDespertar(baseUrl, response))
+      }
       if (response.status !== 200 || !response.headers.get('content-type')?.includes('application/json')) {
         throw new DependencyError(502, 'Respuesta inválida de un servicio necesario.')
       }

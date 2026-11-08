@@ -1,3 +1,4 @@
+import { despertarSiHaceFalta } from '../../../lib/despertar.js'
 import { contenidosDemo } from '../data/contenidosDemo.js'
 
 const API_GATEWAY_URL = (
@@ -79,6 +80,8 @@ export async function obtenerPaginaCatalogo({ categoria = 'Todos', emocion = nul
   }
 
   if (!respuesta.ok) {
+    // catalog-service dormido en Render: el navegador lo despierta (lib/despertar.js).
+    despertarSiHaceFalta(respuesta)
     throw Object.assign(new Error(`Error al consultar el catálogo (HTTP ${respuesta.status}).`), { status: respuesta.status })
   }
 
