@@ -14,6 +14,7 @@ model Usuario {
   nombre    String?
   apellido  String?
   edad      Int?
+  datosJson Json       @default("{}")
   creadoEn  DateTime   @default(now())
   animos    Animo[]
   favoritos Favorito[]

@@ -12,6 +12,7 @@ model Usuario {
   id              String                   @id
   email           String?
   edad            Int?
+  datosJson       Json                     @default("{}")
   creadoEn        DateTime                 @default(now())
   animos          Animo[]
   favoritos       Favorito[]
