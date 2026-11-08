@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import { validarSesion } from '../lib/sesion.js'
-import { prepararSesionOAuth, supabase } from '../lib/supabase.js'
+import { supabase } from '../lib/supabase.js'
 import { sincronizarUsuario } from '../services/usuarios.js'
 
 /* oxlint-disable react/set-state-in-effect -- sincronización asíncrona con Supabase Auth */
@@ -13,17 +13,6 @@ export function useSesion() {
   const [sesion, setSesion] = useState({ estado: 'cargando', usuario: null })
 
   const validar = useCallback(async () => {
-    try {
-      await prepararSesionOAuth()
-    } catch {
-      setSesion({
-        estado: 'error',
-        usuario: null,
-        registro: null,
-        mensaje: 'No pudimos completar el inicio de sesión. Volvé a intentarlo con Google o GitHub.',
-      })
-      return
-    }
     const resultado = await validarSesion(supabase)
     if (resultado.estado === 'autenticado') {
       try {
@@ -50,13 +39,20 @@ export function useSesion() {
   }, [])
 
   useEffect(() => {
-    validar()
-    if (!supabase) return undefined
+    if (!supabase) {
+      validar()
+      return undefined
+    }
 
-    const { data } = supabase.auth.onAuthStateChange((evento) => {
+    const { data } = supabase.auth.onAuthStateChange((evento, sesionInicial) => {
       if (evento === 'SIGNED_OUT') {
         setSesion({ estado: 'anonimo', usuario: null })
-      } else if (evento === 'SIGNED_IN' || evento === 'USER_UPDATED') {
+      } else if (evento === 'INITIAL_SESSION' && !sesionInicial) {
+        setSesion({ estado: 'anonimo', usuario: null, registro: null })
+      } else if (
+        evento === 'INITIAL_SESSION' || evento === 'SIGNED_IN' ||
+        evento === 'USER_UPDATED' || evento === 'TOKEN_REFRESHED'
+      ) {
         // No se llama a Supabase dentro del callback: puede bloquear su cola interna.
         window.setTimeout(validar, 0)
       }
