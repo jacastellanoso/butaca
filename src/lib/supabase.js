@@ -11,7 +11,8 @@ export const supabase = isSupabaseConfigured
   ? createClient(supabaseUrl, supabasePublishableKey, {
       auth: {
         autoRefreshToken: true,
-        detectSessionInUrl: true,
+        detectSessionInUrl: false,
+        flowType: 'pkce',
         persistSession: true,
       },
     })
@@ -27,14 +28,28 @@ let retornoOAuth = null
 export function prepararSesionOAuth() {
   if (!supabase || retornoOAuth) return retornoOAuth ?? Promise.resolve()
 
-  const parametros = new URLSearchParams(window.location.hash.replace(/^#/, ''))
-  const accessToken = parametros.get('access_token')
-  const refreshToken = parametros.get('refresh_token')
-  if (!accessToken || !refreshToken) return Promise.resolve()
+  const url = new URL(window.location.href)
+  const parametrosHash = new URLSearchParams(url.hash.replace(/^#/, ''))
+  const codigo = url.searchParams.get('code')
+  const accessToken = parametrosHash.get('access_token')
+  const refreshToken = parametrosHash.get('refresh_token')
+  const errorOAuth = url.searchParams.get('error_description') ?? parametrosHash.get('error_description')
 
-  window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`)
-  retornoOAuth = supabase.auth
-    .setSession({ access_token: accessToken, refresh_token: refreshToken })
+  if (!codigo && (!accessToken || !refreshToken) && !errorOAuth) return Promise.resolve()
+
+  for (const parametro of ['code', 'error', 'error_code', 'error_description']) {
+    url.searchParams.delete(parametro)
+  }
+  url.hash = ''
+  window.history.replaceState(null, '', `${url.pathname}${url.search}`)
+
+  if (errorOAuth) return Promise.reject(new Error('El proveedor rechazó el inicio de sesión.'))
+
+  const operacion = codigo
+    ? supabase.auth.exchangeCodeForSession(codigo)
+    : supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
+
+  retornoOAuth = operacion
     .then(({ error }) => {
       if (error) throw error
     })
@@ -53,6 +68,7 @@ export async function signInWithOAuth(provider) {
     provider,
     options: {
       redirectTo: window.location.origin,
+      skipBrowserRedirect: false,
     },
   })
 

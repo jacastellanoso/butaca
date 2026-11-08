@@ -31,7 +31,7 @@ function PantallaSesion({ error, onRetry }) {
       <img className="app-splash__logo" src={logoButaca} alt="Butaca" />
       {error ? (
         <div className="app-splash__error" role="alert">
-          <p>No pudimos verificar tu sesión con el servidor. Revisá tu conexión.</p>
+          <p>{error}</p>
           <button type="button" onClick={onRetry}>Reintentar</button>
         </div>
       ) : (
@@ -84,7 +84,7 @@ function App() {
   }, [])
 
   if (sesion.estado === 'cargando') return <PantallaSesion />
-  if (sesion.estado === 'error') return <PantallaSesion error onRetry={sesion.reintentar} />
+  if (sesion.estado === 'error') return <PantallaSesion error={sesion.mensaje} onRetry={sesion.reintentar} />
   if (!autenticado) return <Main />
 
   if (necesitaNombre) {

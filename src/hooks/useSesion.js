@@ -16,7 +16,12 @@ export function useSesion() {
     try {
       await prepararSesionOAuth()
     } catch {
-      setSesion({ estado: 'error', usuario: null, registro: null })
+      setSesion({
+        estado: 'error',
+        usuario: null,
+        registro: null,
+        mensaje: 'No pudimos completar el inicio de sesión. Volvé a intentarlo con Google o GitHub.',
+      })
       return
     }
     const resultado = await validarSesion(supabase)
@@ -25,11 +30,23 @@ export function useSesion() {
         const registro = await sincronizarUsuario()
         setSesion({ estado: 'autenticado', usuario: resultado.usuario, registro })
       } catch {
-        setSesion({ estado: 'error', usuario: resultado.usuario, registro: null })
+        setSesion({
+          estado: 'error',
+          usuario: resultado.usuario,
+          registro: null,
+          mensaje: 'Tu sesión fue validada, pero no pudimos preparar tu cuenta. Intentá de nuevo.',
+        })
       }
       return
     }
-    setSesion({ estado: resultado.estado, usuario: resultado.usuario ?? null, registro: null })
+    setSesion({
+      estado: resultado.estado,
+      usuario: resultado.usuario ?? null,
+      registro: null,
+      mensaje: resultado.estado === 'error'
+        ? 'No pudimos verificar tu sesión con Supabase. Revisá tu conexión.'
+        : null,
+    })
   }, [])
 
   useEffect(() => {
