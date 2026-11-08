@@ -1204,6 +1204,14 @@ Esta verificación sustituye el bloqueo Docker anterior. Docker Desktop estaba i
 
 ## 17. Historial
 
+### 2026-11-08 — Perfiles, grupos, notificaciones y correcciones (`pf25_MejorasVisuales`)
+
+- Perfiles con nombre, apellido y edad por cuenta; datos (ánimos, favoritos, historial, recomendación del día) separados por perfil con `X-Butaca-Perfil` verificado en el servidor.
+- Grupos con invitaciones por correo, recomendaciones compartidas (con autor) y gestión de integrantes; centro de notificaciones con campana.
+- Correcciones: "Mis recomendaciones" en local (URLs de Docker en el `.env`), formulario "Queremos conocerte" en celulares y 8 pruebas E2E del PR #24.
+- Migración `20261109120000_perfiles_grupos_notificaciones` verificada en PostgreSQL local; su aplicación en Supabase requiere autorización. Detalle en la sección «Perfiles, grupos y notificaciones — pf25_MejorasVisuales».
+- Verificación: 426/426 unitarias e integración (7 paquetes), 32/32 E2E, lint y build sin errores, sin secretos.
+
 ### 2026-11-04 — Integración continua con GitHub Actions (`pf24_GitHubActions`)
 
 - Se diseñó e implementó el workflow principal de CI en `.github/workflows/ci.yml` activado en `push` y `pull_request` para `dev`, `main` y `pf*`.
@@ -1961,3 +1969,54 @@ Cuando un check de GitHub Actions se marca en rojo (icono ✖), el desarrollador
 | `npm run e2e` con `CI=true` | **9/9 aprobadas**, 0 fallos (acceso, galería, rostro y detección facial real con Y4M) |
 | `docker compose config` | Validación sintáctica y estructural aprobada para los 6 servicios |
 | Validación sintáctica del YAML (`ci.yml`) | Esquema válido, sin marcadores pendientes, triggers y permisos consistentes |
+## Perfiles, grupos y notificaciones — pf25_MejorasVisuales (2026-11-08)
+
+### Estado de la rama
+
+- Rama de trabajo: `pf25_MejorasVisuales` (PR #24), que ya contiene `origin/dev` completo (`26e13b7`, merge del PR #23 `pf24_GitHubActions`): no hubo commits de `dev` por integrar ni conflictos.
+- Ramas remotas revisadas: todas las `pf1`–`pf24` están integradas en `dev`, salvo `pf13_MSEmociones`, que conserva un commit solo de documentación (`bbcf9b5`, IARECURSO) nunca integrado; no se fusionó.
+
+### Perfiles de una misma cuenta
+
+- `Perfil` guarda ahora `nombre`, `apellido` y `edad` (5 a 120). El principal se crea por trigger y copia los datos de "Queremos conocerte"; editar el principal actualiza también `Usuario`.
+- `auth-service`: `GET/POST /api/perfiles`, `PATCH/DELETE /api/perfiles/:id` (máximo 6; el principal no se borra; borrar un perfil borra en cascada sus datos).
+- Perfil activo: encabezado `X-Butaca-Perfil`. `solicitarApi` lo envía y cada servicio lo verifica contra `req.user.id` (`src/middlewares/perfilActivo.js` en auth, emotions y library; recommendations lo reenvía a emotions). Sin encabezado se usa el principal (compatibilidad con Postman y clientes previos). Perfil ajeno: 403.
+- `Animo`, `Favorito` e `HistorialRecomendacion` tienen `perfilId` con FK compuesta `(perfilId, usuarioId) → Perfil(id, propietarioId)`: un registro nunca puede apuntar al perfil de otra cuenta. Un trigger asigna el principal si una versión anterior inserta sin perfil. Favoritos: único por `(usuarioId, perfilId, tmdbId, tipo)`.
+- Front: `App.jsx` carga `/api/perfiles`, recuerda el perfil en `sessionStorage` (validado contra la cuenta) y monta el contenido con `key` del perfil, así nada del perfil anterior queda en pantalla. El menú de usuario permite cambiar de perfil al instante. Las recomendaciones recientes en `localStorage` se guardan por perfil.
+- Los vínculos de amistad de pf25 (`InvitacionPerfil`) ya no aparecen como perfiles (mezclaban datos de otras cuentas): la tabla se conserva intacta y el intercambio pasa a grupos.
+
+### Grupos e invitaciones (auth-service)
+
+- Tablas `Grupo`, `MiembroGrupo`, `InvitacionGrupo` (por correo; si la cuenta aún no existe se vincula al iniciar sesión en `POST /api/usuarios`) y `RecomendacionGrupo` (`autorNombre` congela el perfil que compartió; `destinatarioId` opcional para un integrante).
+- Rutas: `GET/POST /api/grupos`, `GET/DELETE /api/grupos/:id`, `POST /api/grupos/:id/invitaciones`, `DELETE /api/grupos/:id/invitaciones/:invitacionId`, `DELETE /api/grupos/:id/miembros/:usuarioId` (el creador quita; un integrante sale), `POST /api/grupos/:id/recomendaciones`, `GET /api/invitaciones`, `PUT /api/invitaciones/:id` `{ aceptar }`.
+- Front: pantalla `#grupos` / `#grupos/<id>` (`src/pages/Grupos/`) y botón "Compartir con un grupo" en el detalle de cada título (`src/components/Compartir/`).
+
+### Centro de notificaciones
+
+- Tabla `Notificacion` (`perfilId` nulo = toda la cuenta; definido = solo ese perfil; `clave` única por cuenta para la recomendación del día).
+- Rutas: `GET /api/notificaciones?limite=`, `PATCH /api/notificaciones/:id`, `POST /api/notificaciones/leer-todas`, `POST /api/notificaciones/del-dia`.
+- Tipos: `invitacion-grupo` (aceptar/rechazar desde la campana), `invitacion-aceptada`, `invitacion-rechazada`, `recomendacion-compartida`, `recomendacion-del-dia`, `miembro-removido`, `miembro-salio`, `grupo-eliminado`.
+- Campana en el encabezado (`src/components/Notificaciones/`) con indicador de pendientes; se actualiza cada 60 s. La recomendación del día se elige de forma estable por perfil y fecha con el último ánimo del perfil (o neutral).
+- El gateway enruta `/api/grupos` y `/api/notificaciones` a auth-service y permite `X-Butaca-Perfil` en CORS.
+
+### Migración `20261109120000_perfiles_grupos_notificaciones`
+
+- Ubicación: `microservicios/auth-service/prisma/migrations/` (misma carpeta que las migraciones de pf25). Aditiva: no elimina tablas, columnas ni filas. Solo reemplaza el trigger de actualización del perfil principal y el índice único de `Favorito`.
+- Verificada en un PostgreSQL 17 local descartable: se aplicaron las 8 migraciones previas, datos de ejemplo y luego esta; se comprobaron relleno de `perfilId`, trigger de compatibilidad, FK compuesta, unicidad de favoritos por perfil, cascadas y unicidad de la recomendación del día. También se ejecutaron los servicios reales con Prisma contra esa base.
+- Orden seguro de despliegue: primero la migración (el código anterior sigue funcionando con ella) y después el código. `render.yaml` despliega esta rama automáticamente cuando el CI pasa.
+
+### "Mis recomendaciones": causa del error
+
+- Local: `microservicios/recommendations-service/.env` usaba los nombres internos de Docker (`http://auth-service:3021`, …). Fuera de Docker no se resuelven → 503 → "El servicio no está disponible en este momento". Es el único servicio que llama a otros, por eso solo fallaba esa sección.
+- Corrección: valores por defecto `http://localhost:302x` (como el gateway), `.env.example` actualizado y `compose.yaml` fija los nombres de Docker para recommendations-service.
+- Producción (Render gratuito): la cadena gateway → recomendaciones → auth/emociones/catálogo responde bien (verificado con token inválido → 401 y el catálogo devuelve datos válidos en las 12 combinaciones). Un servicio dormido puede devolver 502/503 en el primer acceso: la sección reintenta una vez automáticamente antes de mostrar el error.
+
+### Formulario "Queremos conocerte" en celulares
+
+- `body` tiene `overflow: hidden`; la pantalla no tenía contenedor con scroll y `place-items: center` cortaba la tarjeta. Ahora `.registro-nombre` usa `height: 100dvh` con `overflow-y: auto`, la tarjeta se centra con `margin: auto` (si no entra, se desplaza), respeta las áreas seguras del iPhone, los campos usan 16 px (sin zoom en iOS) y el campo enfocado se desplaza a la vista. `index.html` agrega `interactive-widget=resizes-content`.
+
+### Pruebas E2E del PR #24
+
+- Causa de 8/10 fallos: el usuario simulado no tenía `edad` (la app quedaba en "Queremos conocerte") y el flujo vigente pasa por "¿Quién va a ver hoy?" (`#perfiles`), no por `#rostro`. Se corrigieron `backendFalso.js` (edad, perfiles, separación por perfil, grupos y notificaciones en `socialFalso.js`) y `entrarComo`.
+- `rostro.spec.js` se adaptó al flujo de pf25 (casilla de autorización premarcada y recomendaciones tras guardar) manteniendo sus garantías: sin autorización no se guarda y solo viajan emoción y confianza.
+- Nuevas: `perfiles.spec.js`, `grupos.spec.js`, `notificaciones.spec.js`, `movil.spec.js` (iPhone SE 1.ª y 2.ª gen. e iPhone 14 Pro).
