@@ -94,8 +94,9 @@ test('emocion=fearful consulta discover con los géneros de Miedo, sin los exclu
   assert.equal(llamadas[0].searchParams.get('page'), '2')
   assert.deepEqual(llamadas[0].searchParams.get('with_genres').split('|').map(Number), REGLAS_EMOCION.fearful.movie.generos)
   assert.deepEqual(llamadas[0].searchParams.get('without_genres').split(',').map(Number), REGLAS_EMOCION.fearful.movie.excluidos)
-  // La animación familiar y la comedia no se recomiendan para «Miedo».
-  assert.deepEqual(cuerpo.resultados.map((r) => r.tmdbId), [1, 3])
+  // La animación familiar y la comedia no se recomiendan para «Miedo»; thriller + crimen
+  // suma más relevancia (5 + 2) que terror solo (6), por eso va primero.
+  assert.deepEqual(cuerpo.resultados.map((r) => r.tmdbId), [3, 1])
   assert.ok(cuerpo.resultados.every((r) => r.emociones.includes('fearful')))
   assert.equal(cuerpo.filtros.emocion, 'fearful')
   assert.deepEqual(cuerpo.paginacion, { pagina: 2, totalPaginas: 7, totalResultados: 140, total: 140 })
@@ -127,4 +128,21 @@ test('una emoción desconocida responde 400 sin consultar TMDB', async () => {
   const res = await fetch(`${base}/api/catalogo?emocion=euforia`)
   assert.equal(res.status, 400)
   assert.equal(llamadas.length, 0)
+})
+
+test('dentro de una emoción, los títulos más representativos van primero', async () => {
+  respuestaPara = () => ({
+    page: 1, total_pages: 1, total_results: 3,
+    // TMDB los devuelve por popularidad: primero una aventura de ciencia ficción.
+    results: [pelicula(50, [G.aventura, G.fantasia]), pelicula(51, [G.familiar, G.animacion, G.comedia]), pelicula(52, [G.romance])],
+  })
+  const calma = await (await fetch(`${base}/api/catalogo?tipo=movie&emocion=neutral`)).json()
+  // Familiar + animación + comedia (8 + 7 + 2) supera a aventura + fantasía (4 + 3) y a romance (6).
+  assert.deepEqual(calma.resultados.map((r) => r.tmdbId), [51, 50, 52])
+})
+
+test('Calma no incluye acción', () => {
+  assert.equal(coincideConEmocion([G.accion, G.aventura], 'neutral'), false)
+  assert.equal(coincideConEmocion([G.accionAventuraTv, G.comedia], 'neutral', 'tv'), false)
+  assert.equal(coincideConEmocion([G.familiar, G.aventura], 'neutral'), true)
 })

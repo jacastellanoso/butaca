@@ -32,17 +32,19 @@ const G = GENERO
  * - excluidos: si el título tiene alguno, no corresponde a la emoción.
  * - soloCombinados: géneros que por sí solos no alcanzan (p. ej. Drama en
  *   Enojo): cuentan solo si el título tiene además otro género de la lista.
+ * El orden de `generos` importa: los primeros son los más representativos de
+ * la emoción y pesan más al ordenar por relevancia (relevanciaParaEmocion).
  */
 export const REGLAS_EMOCION = Object.freeze({
   neutral: {
     etiqueta: 'Calma',
     movie: {
       generos: [G.familiar, G.animacion, G.romance, G.documental, G.aventura, G.fantasia, G.comedia, G.musica],
-      excluidos: [G.terror, G.thriller, G.crimen, G.belica],
+      excluidos: [G.terror, G.thriller, G.crimen, G.belica, G.accion],
     },
     tv: {
       generos: [G.familiar, G.animacion, G.infantilTv, G.documental, G.comedia],
-      excluidos: [G.crimen, G.guerraPoliticaTv, G.misterio],
+      excluidos: [G.crimen, G.guerraPoliticaTv, G.misterio, G.accionAventuraTv],
     },
   },
   happy: {
@@ -136,4 +138,17 @@ export function coincideConEmocion(genreIds, emocion, tipoTmdb = 'movie') {
   if (coincidencias.length === 0) return false
   const combinados = regla.soloCombinados ?? []
   return coincidencias.some((id) => !combinados.includes(id))
+}
+
+/**
+ * Qué tan representativo es un título para la emoción (0 si no corresponde).
+ * Suma el peso de cada género coincidente; los primeros de la lista pesan más.
+ * Así «Calma» prioriza lo familiar y animado, y «Alegría» la comedia, aunque un
+ * título de aventura muy popular también califique por un género secundario.
+ */
+export function relevanciaParaEmocion(genreIds, emocion, tipoTmdb = 'movie') {
+  const ids = genreIds instanceof Set ? genreIds : new Set((genreIds ?? []).map(Number))
+  if (!coincideConEmocion(ids, emocion, tipoTmdb)) return 0
+  const { generos } = REGLAS_EMOCION[emocion][tipoTmdb === 'tv' ? 'tv' : 'movie']
+  return generos.reduce((suma, id, indice) => suma + (ids.has(id) ? generos.length - indice : 0), 0)
 }

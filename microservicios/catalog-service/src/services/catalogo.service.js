@@ -5,7 +5,7 @@ import {
   GENEROS_TMDB_POR_CATEGORIA,
   PAGINACION_CATALOGO,
 } from '../constants/catalogo.js'
-import { coincideConEmocion, emocionesDeGeneros, REGLAS_EMOCION } from '../constants/emociones.js'
+import { coincideConEmocion, emocionesDeGeneros, REGLAS_EMOCION, relevanciaParaEmocion } from '../constants/emociones.js'
 
 const SINOPSIS_POR_DEFECTO = 'Sin sinopsis disponible en español.'
 
@@ -330,8 +330,11 @@ async function listarPorEmocion({ tipo, categoria, emocion, pagina }) {
     const datos = await consultarTmdb(ruta, parametros)
     const lista = (Array.isArray(datos?.results) ? datos.results : [])
       .filter((item) => item && typeof item === 'object' && item.id)
-      .filter((item) => coincideConEmocion(idsDeGeneros(item), emocion, tipoTmdb))
-      .map((item) => normalizarElementoCatalogo(item, tipoPorDefecto))
+      .map((item, posicion) => ({ item, posicion, relevancia: relevanciaParaEmocion(idsDeGeneros(item), emocion, tipoTmdb) }))
+      .filter(({ relevancia }) => relevancia > 0)
+      // Más representativos primero; a igual relevancia, el orden de popularidad de TMDB.
+      .sort((a, b) => b.relevancia - a.relevancia || a.posicion - b.posicion)
+      .map(({ item }) => normalizarElementoCatalogo(item, tipoPorDefecto))
       .filter((elemento) => categoria === 'Todos' || elemento.generos.includes(categoria))
     return { lista, totalPaginas: Number(datos?.total_pages) || 0, totalResultados: Number(datos?.total_results) || 0 }
   }))
