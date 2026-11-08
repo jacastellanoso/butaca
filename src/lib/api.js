@@ -1,3 +1,4 @@
+import { perfilActivoActual } from './perfilActivo.js'
 import { supabase } from './supabase.js'
 
 // Dirección del API Gateway.
@@ -47,9 +48,25 @@ async function obtenerToken() {
   return token
 }
 
-/** fetch al gateway con el token de Supabase y errores traducidos a ApiError. */
-export async function solicitarApi(ruta, { method = 'GET', body } = {}) {
+// Mensaje del servidor para 400/403/404/409 cuando la operación lo permite
+// (perfiles y grupos devuelven textos pensados para mostrarse). Se limita a
+// un texto corto: nunca se muestra un detalle interno arbitrario.
+async function mensajeDelServidor(respuesta) {
+  try {
+    const { error } = await respuesta.clone().json()
+    return typeof error === 'string' && error.length <= 160 ? error : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * fetch al gateway con el token de Supabase y errores traducidos a ApiError.
+ * mensajesServidor: usa el mensaje del servicio en errores 4xx de validación.
+ */
+export async function solicitarApi(ruta, { method = 'GET', body, mensajesServidor = false } = {}) {
   const token = await obtenerToken()
+  const perfil = perfilActivoActual()
 
   let respuesta
   try {
@@ -58,6 +75,8 @@ export async function solicitarApi(ruta, { method = 'GET', body } = {}) {
       headers: {
         Accept: 'application/json',
         Authorization: `Bearer ${token}`,
+        // Perfil activo: el servidor verifica que pertenezca a la cuenta del token.
+        ...(perfil && { 'X-Butaca-Perfil': perfil }),
         ...(body !== undefined && { 'Content-Type': 'application/json' }),
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -71,7 +90,10 @@ export async function solicitarApi(ruta, { method = 'GET', body } = {}) {
       'error-servidor',
       'No pudimos completar la operación. Intentá de nuevo.',
     ]
-    throw new ApiError(codigo, mensaje, respuesta.status)
+    const propio = mensajesServidor && [400, 403, 404, 409].includes(respuesta.status)
+      ? await mensajeDelServidor(respuesta)
+      : null
+    throw new ApiError(codigo, propio ?? mensaje, respuesta.status)
   }
 
   if (respuesta.status === 204) return null

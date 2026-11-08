@@ -232,6 +232,36 @@
   font-weight: 600;
 }
 
+.app-header__menu-perfiles {
+  display: grid;
+  gap: 2px;
+  margin-bottom: 4px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #e3edfc;
+}
+
+.app-header__menu-titulo {
+  padding: 2px 12px;
+  color: #4c5f8f;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.app-header__menu-perfil {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+}
+
+.app-header__menu-perfil span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Avatar compartido (encabezado y selección de perfiles) */
 
 .avatar-perfil {
@@ -317,6 +347,32 @@
   from {
     opacity: 0;
     transform: translateY(-6px);
+  }
+}
+
+/* Entre 1181 y 1440 px entran las seis opciones: el botón de usuario muestra
+   solo el avatar (su nombre sigue en aria-label) y los enlaces se compactan. */
+@media (min-width: 1181px) and (max-width: 1440px) {
+  .app-header {
+    gap: 10px;
+  }
+
+  .app-header__nav {
+    gap: 2px;
+  }
+
+  .app-header__link {
+    padding-right: 10px;
+    font-size: 13px;
+  }
+
+  .app-header__user-name,
+  .app-header__chevron {
+    display: none;
+  }
+
+  .app-header__user-button {
+    padding: 3px;
   }
 }
 

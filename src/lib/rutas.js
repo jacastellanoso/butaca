@@ -21,6 +21,9 @@ export function leerRuta(hash = '') {
     case 'galeria':
     case 'rostro':
       return { pantalla: base }
+    case 'grupos':
+      // #grupos o #grupos/<uuid> (grupo abierto).
+      return UUID.test(clave ?? '') ? { pantalla: 'grupos', grupoId: clave.toLowerCase() } : { pantalla: 'grupos' }
     case 'dashboard':
       return { pantalla: 'dashboard', seccion: 'emociones' }
     case 'historial':
@@ -47,6 +50,11 @@ export function hashDeRecomendaciones({ emocion, animoId } = {}) {
   if (animoId && UUID.test(animoId)) return `#recomendaciones/animo/${animoId}`
   if (EMOCIONES.includes(emocion)) return `#recomendaciones/emocion/${emocion}`
   return '#recomendaciones'
+}
+
+/** Hash de la pantalla de grupos, con el grupo abierto si se indica. */
+export function hashDeGrupo(grupoId) {
+  return grupoId && UUID.test(grupoId) ? `#grupos/${grupoId}` : '#grupos'
 }
 
 /** Cambia el hash sin dejar una entrada extra en el historial del navegador. */

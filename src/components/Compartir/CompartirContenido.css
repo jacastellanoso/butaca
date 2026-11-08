@@ -1,0 +1,88 @@
+.compartir {
+  margin-top: 12px;
+}
+
+.compartir__boton,
+.compartir__form button {
+  min-height: 42px;
+  padding: 8px 16px;
+  border: 0;
+  border-radius: 999px;
+  color: #ffffff;
+  background: #0470f6;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.compartir__boton {
+  color: #0470f6;
+  background: #eaf3ff;
+}
+
+.compartir__form {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border: 1px solid #d9e8ff;
+  border-radius: 16px;
+  color: #062a7a;
+  background: #f6faff;
+}
+
+.compartir__form label {
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.compartir__form select,
+.compartir__form input {
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  padding: 8px 10px;
+  border: 2px solid #c9d8f2;
+  border-radius: 10px;
+  color: #062a7a;
+  background: #ffffff;
+  font: inherit;
+  font-size: max(16px, 1rem);
+}
+
+.compartir__acciones {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.compartir__form .compartir__cancelar {
+  color: #062a7a;
+  background: #e3edfc;
+}
+
+.compartir__form button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.compartir__estado {
+  margin: 4px 0 0;
+  color: #34477a;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.compartir__estado a {
+  color: #0470f6;
+}
+
+.compartir__estado--ok {
+  color: #0b6b3a;
+}
+
+.compartir__estado--error {
+  color: #a00028;
+}

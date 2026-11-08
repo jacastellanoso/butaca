@@ -4,6 +4,7 @@ import iconoEscanear from '../../../iconoescanearme.svg'
 import iconoRecomendaciones from '../../../iconomisreconocimientos.svg'
 import logoButaca from '../../../logobutacaoficial.svg'
 import { IconoCorazon } from '../BotonFavorito/BotonFavorito.jsx'
+import CentroNotificaciones from '../Notificaciones/CentroNotificaciones.jsx'
 import './Encabezado.css'
 
 function IconoGaleria() {
@@ -25,11 +26,23 @@ function IconoDashboard() {
   )
 }
 
+function IconoGrupos() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <circle cx="9" cy="8" r="3.4" />
+      <circle cx="17" cy="9.5" r="2.6" />
+      <path d="M2.8 19.5c.5-3.4 3.1-5.6 6.2-5.6s5.7 2.2 6.2 5.6Z" />
+      <path d="M15.6 14.2c2.6-.3 5 1.4 5.6 4.3h-4.4" />
+    </svg>
+  )
+}
+
 // Opciones del menú principal. `clave` coincide con la pantalla o sección activa.
 const OPCIONES = [
   { clave: 'galeria', href: '#galeria', etiqueta: 'Galería', icono: <IconoGaleria /> },
   { clave: 'rostro', href: '#rostro', etiqueta: 'Escanearme', imagen: iconoEscanear },
   { clave: 'recomendaciones', href: '#recomendaciones', etiqueta: 'Mis recomendaciones', imagen: iconoRecomendaciones },
+  { clave: 'grupos', href: '#grupos', etiqueta: 'Grupos', icono: <IconoGrupos /> },
   { clave: 'dashboard', href: '#dashboard', etiqueta: 'Dashboard', icono: <IconoDashboard /> },
   { clave: 'favoritos', href: '#favoritos', etiqueta: 'Favoritos', icono: <IconoCorazon lleno /> },
 ]
@@ -49,10 +62,11 @@ export function AvatarPerfil({ perfil, tamano = 'md' }) {
 
 /**
  * Encabezado de las pantallas con sesión: navegación de toda la aplicación y
- * menú de usuario (cambiar perfil y cerrar sesión).
- * activa: 'galeria' | 'rostro' | 'recomendaciones' | 'dashboard' | 'favoritos' | 'historial'
+ * menú de usuario (perfil activo, cambio rápido de perfil y cerrar sesión) y
+ * centro de notificaciones.
+ * activa: 'galeria' | 'rostro' | 'recomendaciones' | 'grupos' | 'dashboard' | 'favoritos' | 'historial'
  */
-function Encabezado({ activa, perfil, onCerrarSesion }) {
+function Encabezado({ activa, perfil, perfiles = [], onCambiarPerfil, onCerrarSesion }) {
   const [menuAbierto, setMenuAbierto] = useState(false)
   const [usuarioAbierto, setUsuarioAbierto] = useState(false)
   const [cerrando, setCerrando] = useState(false)
@@ -96,6 +110,8 @@ function Encabezado({ activa, perfil, onCerrarSesion }) {
     }
   }
 
+  const otrosPerfiles = perfiles.filter((otro) => otro.id !== perfil?.id)
+
   // Historial vive dentro del dashboard.
   const claveActiva = activa === 'historial' || activa === 'emociones' ? 'dashboard' : activa
 
@@ -134,6 +150,8 @@ function Encabezado({ activa, perfil, onCerrarSesion }) {
         ))}
       </nav>
 
+      <CentroNotificaciones key={perfil?.id ?? 'cuenta'} perfilId={perfil?.id} />
+
       <div className="app-header__user" ref={usuarioRef}>
         <button
           className="app-header__user-button"
@@ -141,6 +159,7 @@ function Encabezado({ activa, perfil, onCerrarSesion }) {
           aria-expanded={usuarioAbierto}
           aria-controls={usuarioId}
           aria-haspopup="true"
+          aria-label={`Menú de ${perfil?.nombre ?? 'mi cuenta'}`}
           onClick={() => setUsuarioAbierto((abierto) => !abierto)}
         >
           <AvatarPerfil perfil={perfil} />
@@ -154,11 +173,30 @@ function Encabezado({ activa, perfil, onCerrarSesion }) {
               <AvatarPerfil perfil={perfil} tamano="lg" />
               <div>
                 <strong>{perfil?.nombre}</strong>
-                {perfil?.email && <span>{perfil.email}</span>}
+                <span>{perfil?.email ?? (perfil?.edad ? `Perfil · ${perfil.edad} años` : 'Perfil activo')}</span>
               </div>
             </div>
+            {otrosPerfiles.length > 0 && onCambiarPerfil && (
+              <div className="app-header__menu-perfiles" role="group" aria-label="Cambiar de perfil">
+                <span className="app-header__menu-titulo">Cambiar a</span>
+                {otrosPerfiles.map((otro) => (
+                  <button
+                    key={otro.id}
+                    className="app-header__menu-item app-header__menu-perfil"
+                    type="button"
+                    onClick={() => {
+                      setUsuarioAbierto(false)
+                      onCambiarPerfil(otro.id)
+                    }}
+                  >
+                    <AvatarPerfil perfil={otro} />
+                    <span>{otro.nombre}</span>
+                  </button>
+                ))}
+              </div>
+            )}
             <a className="app-header__menu-item" href="#perfiles">
-              Cambiar perfil
+              {otrosPerfiles.length > 0 ? 'Administrar perfiles' : 'Cambiar perfil'}
             </a>
             <button
               className="app-header__menu-item app-header__menu-item--logout"

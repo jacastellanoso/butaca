@@ -1,10 +1,14 @@
 // Perfiles de visualización ("¿Quién va a ver hoy?").
 //
-// PostgreSQL todavía NO tiene un modelo Perfil: Usuario es la única identidad
-// (backend/prisma/schema.prisma). Por eso el único perfil real es el de la
-// cuenta autenticada, armado con los datos que entrega Supabase Auth.
-// La elección se recuerda en sessionStorage solo como estado de interfaz: no
-// separa datos en el backend ni reemplaza al token.
+// Cada cuenta tiene un perfil principal (creado por auth-service al registrar
+// el usuario) y puede crear perfiles adicionales con nombre, apellido y edad
+// (tabla Perfil, /api/perfiles). Ánimos, favoritos, historial y la
+// recomendación del día se guardan por perfil: el perfil elegido viaja en el
+// encabezado X-Butaca-Perfil y el servidor verifica que sea de la cuenta.
+// La elección se recuerda en sessionStorage para mantenerla al navegar y al
+// recargar la pestaña, solo si coincide con la cuenta autenticada.
+
+import { solicitarApi } from '../lib/api.js'
 
 const CLAVE_PERFIL_ACTIVO = 'butaca:perfil-activo'
 
@@ -42,6 +46,63 @@ export function perfilDeCuenta(usuario, registro) {
     inicial: nombre.charAt(0).toUpperCase(),
   }
 }
+
+/**
+ * Perfil de /api/perfiles listo para la interfaz. El principal hereda el
+ * avatar, el correo y el proveedor de la cuenta; los demás muestran su inicial.
+ */
+export function adaptarPerfil(remoto, cuenta) {
+  const nombre = texto(remoto?.nombre) ?? 'Perfil'
+  const apellido = texto(remoto?.apellido)
+  const nombreCompleto = [nombre, apellido].filter(Boolean).join(' ')
+  return {
+    id: remoto.id,
+    nombre: nombreCompleto,
+    nombrePila: nombre,
+    apellido,
+    edad: Number.isInteger(remoto?.edad) ? remoto.edad : null,
+    esPrincipal: remoto?.esPrincipal === true,
+    avatar: remoto?.esPrincipal ? cuenta?.avatar ?? null : urlSegura(remoto?.avatar),
+    email: remoto?.esPrincipal ? cuenta?.email ?? null : null,
+    proveedor: remoto?.esPrincipal ? cuenta?.proveedor ?? null : null,
+    inicial: nombre.charAt(0).toUpperCase(),
+    remoto: true,
+  }
+}
+
+/** Elige el perfil activo: el guardado si sigue existiendo; si no, el principal. */
+export function elegirPerfilActivo(perfiles, guardadoId) {
+  if (!Array.isArray(perfiles) || perfiles.length === 0) return null
+  return perfiles.find((p) => p.id === guardadoId) ?? perfiles.find((p) => p.esPrincipal) ?? perfiles[0]
+}
+
+// ── API (auth-service) ──────────────────────────────────────────────────
+
+export async function listarPerfiles(cuenta) {
+  const lista = await solicitarApi('/api/perfiles')
+  if (!Array.isArray(lista)) throw new Error('El servicio devolvió los perfiles con un formato inesperado.')
+  return lista.map((perfil) => adaptarPerfil(perfil, cuenta))
+}
+
+export async function crearPerfil({ nombre, apellido, edad }, cuenta) {
+  const creado = await solicitarApi('/api/perfiles', {
+    method: 'POST', body: { nombre, apellido, edad }, mensajesServidor: true,
+  })
+  return adaptarPerfil(creado, cuenta)
+}
+
+export async function actualizarPerfil(id, cambios, cuenta) {
+  const actualizado = await solicitarApi(`/api/perfiles/${encodeURIComponent(id)}`, {
+    method: 'PATCH', body: cambios, mensajesServidor: true,
+  })
+  return adaptarPerfil(actualizado, cuenta)
+}
+
+export async function eliminarPerfil(id) {
+  await solicitarApi(`/api/perfiles/${encodeURIComponent(id)}`, { method: 'DELETE', mensajesServidor: true })
+}
+
+// ── Perfil elegido en esta pestaña ──────────────────────────────────────
 
 function almacenamiento(storage) {
   if (storage) return storage

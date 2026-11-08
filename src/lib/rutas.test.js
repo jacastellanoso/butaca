@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { hashDeRecomendaciones, hashDeSeccion, leerRuta } from './rutas.js'
+import { hashDeGrupo, hashDeRecomendaciones, hashDeSeccion, leerRuta } from './rutas.js'
 
 const animoId = '12345678-1234-1234-1234-123456789abc'
 
@@ -46,4 +46,13 @@ test('los hashes generados vuelven a leerse igual', () => {
   assert.equal(hashDeRecomendaciones({ animoId, emocion: 'sad' }), `#recomendaciones/animo/${animoId}`)
   assert.equal(hashDeRecomendaciones({ emocion: 'x' }), '#recomendaciones')
   assert.deepEqual(leerRuta(hashDeRecomendaciones({ animoId })).animoId, animoId)
+})
+
+test('grupos acepta la lista o un grupo por UUID', () => {
+  assert.deepEqual(leerRuta('#grupos'), { pantalla: 'grupos' })
+  assert.deepEqual(leerRuta(`#grupos/${animoId.toUpperCase()}`), { pantalla: 'grupos', grupoId: animoId })
+  assert.deepEqual(leerRuta('#grupos/no-es-uuid'), { pantalla: 'grupos' })
+  assert.equal(hashDeGrupo(animoId), `#grupos/${animoId}`)
+  assert.equal(hashDeGrupo('x'), '#grupos')
+  assert.deepEqual(leerRuta(hashDeGrupo(animoId)), { pantalla: 'grupos', grupoId: animoId })
 })

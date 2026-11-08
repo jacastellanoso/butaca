@@ -2,9 +2,12 @@ import { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 
 import BotonFavorito from '../../../components/BotonFavorito/BotonFavorito.jsx'
+import CompartirContenido from '../../../components/Compartir/CompartirContenido.jsx'
+import { useFavoritos } from '../../../context/favoritosContexto.js'
 
 function DetalleContenido({ contenido, onClose }) {
   const closeRef = useRef(null)
+  const favoritos = useFavoritos()
 
   useEffect(() => {
     const handleKeyDown = (event) => {
@@ -57,6 +60,8 @@ function DetalleContenido({ contenido, onClose }) {
           )}
           {/* Favoritos reales en library-service (pf16), conectados en pf20. */}
           <BotonFavorito contenido={contenido} />
+          {/* Compartir con grupos: solo con sesión (dentro de FavoritosProvider). */}
+          {favoritos && contenido.tmdbId && <CompartirContenido contenido={contenido} />}
         </div>
       </section>
     </div>

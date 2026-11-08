@@ -1,7 +1,8 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabasePublishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
+// import.meta.env existe con Vite; en las pruebas de Node no hay configuración.
+const supabaseUrl = import.meta.env?.VITE_SUPABASE_URL
+const supabasePublishableKey = import.meta.env?.VITE_SUPABASE_PUBLISHABLE_KEY
 
 export const isSupabaseConfigured = Boolean(
   supabaseUrl && supabasePublishableKey,
