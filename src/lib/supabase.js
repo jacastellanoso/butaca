@@ -17,6 +17,33 @@ export const supabase = isSupabaseConfigured
     })
   : null
 
+let retornoOAuth = null
+
+/**
+ * Completa el flujo OAuth implícito antes de validar la sesión. Supabase suele
+ * hacerlo automáticamente, pero procesarlo aquí evita una carrera con el router
+ * por hash y elimina los tokens de la barra de direcciones inmediatamente.
+ */
+export function prepararSesionOAuth() {
+  if (!supabase || retornoOAuth) return retornoOAuth ?? Promise.resolve()
+
+  const parametros = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+  const accessToken = parametros.get('access_token')
+  const refreshToken = parametros.get('refresh_token')
+  if (!accessToken || !refreshToken) return Promise.resolve()
+
+  window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`)
+  retornoOAuth = supabase.auth
+    .setSession({ access_token: accessToken, refresh_token: refreshToken })
+    .then(({ error }) => {
+      if (error) throw error
+    })
+    .finally(() => {
+      retornoOAuth = null
+    })
+  return retornoOAuth
+}
+
 export async function signInWithOAuth(provider) {
   if (!supabase) {
     throw new Error('Falta configurar la conexión con Supabase.')

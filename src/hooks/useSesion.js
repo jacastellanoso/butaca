@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import { validarSesion } from '../lib/sesion.js'
-import { supabase } from '../lib/supabase.js'
+import { prepararSesionOAuth, supabase } from '../lib/supabase.js'
 import { sincronizarUsuario } from '../services/usuarios.js'
 
 /* oxlint-disable react/set-state-in-effect -- sincronización asíncrona con Supabase Auth */
@@ -13,6 +13,12 @@ export function useSesion() {
   const [sesion, setSesion] = useState({ estado: 'cargando', usuario: null })
 
   const validar = useCallback(async () => {
+    try {
+      await prepararSesionOAuth()
+    } catch {
+      setSesion({ estado: 'error', usuario: null, registro: null })
+      return
+    }
     const resultado = await validarSesion(supabase)
     if (resultado.estado === 'autenticado') {
       try {
