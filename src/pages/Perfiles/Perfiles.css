@@ -42,12 +42,21 @@
 
 .perfiles-logo {
   width: clamp(150px, 16vw, 210px);
-  padding: 10px 18px;
-  border-radius: 999px;
-  background: #ffffff;
-  box-shadow: 0 10px 26px rgb(0 15 120 / 25%);
+  filter: drop-shadow(0 10px 18px rgb(0 15 120 / 25%));
   animation: perfiles-rise 480ms cubic-bezier(0.2, 0.75, 0.3, 1) both;
 }
+
+.perfiles-invite { margin-top: 24px; padding: 10px 18px; border: 0; border-radius: 999px; color: #0670ed; background: #fff; font-weight: 800; cursor: pointer; }
+.perfiles-notificaciones { width: min(100%, 700px); margin-top: 20px; padding: 18px; border: 1px solid rgb(255 255 255 / 35%); border-radius: 20px; background: rgb(0 20 130 / 35%); }
+.perfiles-notificaciones h2 { margin: 0 0 12px; font-size: 18px; }
+.perfiles-notificaciones div { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 0; }
+.perfiles-notificaciones span { flex: 1 1 260px; }
+.perfiles-notificaciones button { padding: 7px 12px; border: 0; border-radius: 999px; cursor: pointer; }
+.perfiles-modal { position: fixed; z-index: 100; inset: 0; display: grid; place-items: center; padding: 20px; background: rgb(0 8 55 / 72%); backdrop-filter: blur(12px); }
+.perfiles-modal form { display: grid; width: min(100%, 460px); gap: 12px; padding: 28px; border-radius: 24px; color: #10225f; background: #fff; box-shadow: 0 24px 70px rgb(0 0 60 / 40%); }
+.perfiles-modal input { min-height: 48px; padding: 10px 14px; border: 2px solid #b9c8ea; border-radius: 12px; font: inherit; }
+.perfiles-modal form > div { display: flex; justify-content: flex-end; gap: 10px; }
+.perfiles-modal button { padding: 10px 16px; border: 0; border-radius: 999px; color: #fff; background: #0872ef; font-weight: 800; cursor: pointer; }
 
 .perfiles-content {
   display: flex;

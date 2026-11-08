@@ -9,15 +9,43 @@ datasource db {
 }
 
 model Usuario {
-  id        String     @id
-  email     String?
-  nombre    String?
-  apellido  String?
-  edad      Int?
-  datosJson Json       @default("{}")
-  creadoEn  DateTime   @default(now())
-  animos    Animo[]
-  favoritos Favorito[]
+  id                    String             @id
+  email                 String?
+  nombre                String?
+  apellido              String?
+  edad                  Int?
+  datosJson             Json               @default("{}")
+  creadoEn              DateTime           @default(now())
+  animos                Animo[]
+  favoritos             Favorito[]
+  perfiles              Perfil[]
+  invitacionesEnviadas  InvitacionPerfil[] @relation("InvitacionesEnviadas")
+  invitacionesRecibidas InvitacionPerfil[] @relation("InvitacionesRecibidas")
+}
+
+model Perfil {
+  id            String   @id @default(uuid())
+  propietarioId String
+  nombre        String
+  avatar        String?
+  esPrincipal   Boolean  @default(false)
+  creadoEn      DateTime @default(now())
+  propietario   Usuario  @relation(fields: [propietarioId], references: [id], onDelete: Cascade)
+
+  @@index([propietarioId])
+}
+
+model InvitacionPerfil {
+  id             String   @id @default(uuid())
+  remitenteId    String
+  destinatarioId String
+  estado         String   @default("pendiente")
+  creadoEn       DateTime @default(now())
+  remitente      Usuario  @relation("InvitacionesEnviadas", fields: [remitenteId], references: [id], onDelete: Cascade)
+  destinatario   Usuario  @relation("InvitacionesRecibidas", fields: [destinatarioId], references: [id], onDelete: Cascade)
+
+  @@unique([remitenteId, destinatarioId])
+  @@index([destinatarioId, estado])
 }
 
 model Animo {

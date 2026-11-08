@@ -7,7 +7,7 @@ export const services = [
     name: 'auth-service',
     description: 'Sesiones de Supabase e información del usuario',
     target: env.authServiceUrl,
-    paths: ['/api/sesiones', '/api/usuarios'],
+    paths: ['/api/sesiones', '/api/usuarios', '/api/perfiles', '/api/invitaciones'],
   },
   {
     name: 'emotions-service',

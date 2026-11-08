@@ -62,8 +62,8 @@ function App() {
 
   // Después del login (o con una sesión previa válida) se sale de la bienvenida.
   useEffect(() => {
-    if (autenticado && !necesitaNombre && !necesitaPerfil && ruta.pantalla === 'inicio') reemplazarHash('#rostro')
-  }, [autenticado, necesitaNombre, necesitaPerfil, ruta.pantalla])
+    if (autenticado && !necesitaNombre && ruta.pantalla === 'inicio') reemplazarHash('#perfiles')
+  }, [autenticado, necesitaNombre, ruta.pantalla])
 
   const seleccionarPerfil = useCallback((perfilId) => {
     guardarPerfilActivo(usuarioId, perfilId)
@@ -91,7 +91,7 @@ function App() {
     const guardarNombre = async (nombre, apellido, edad) => {
       const actualizado = await actualizarNombreUsuario(nombre, apellido, edad)
       setRegistroActualizado({ usuarioId, valor: actualizado })
-      reemplazarHash('#rostro')
+      reemplazarHash('#perfiles')
     }
     return <RegistroNombre onGuardar={guardarNombre} onCerrarSesion={salir} />
   }
