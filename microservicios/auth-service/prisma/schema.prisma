@@ -13,6 +13,7 @@ model Usuario {
   email     String?
   nombre    String?
   apellido  String?
+  edad      Int?
   creadoEn  DateTime   @default(now())
   animos    Animo[]
   favoritos Favorito[]

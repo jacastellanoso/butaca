@@ -44,4 +44,5 @@
 }
 .registro-nombre__card button:disabled { cursor: wait; opacity: .65; }
 .registro-nombre__error { margin: 6px 0 0; color: #a00028; font-weight: 700; }
+.registro-nombre__help { margin: -4px 0 2px; color: #53658f; font-size: 12px; line-height: 1.4; }
 .registro-nombre__salir { display: block; margin: 20px auto 0; border: 0; color: #334a89; background: transparent; text-decoration: underline; cursor: pointer; }

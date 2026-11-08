@@ -57,7 +57,7 @@ function App() {
     : sesion.registro
   const perfil = useMemo(() => perfilDeCuenta(sesion.usuario, registro), [sesion.usuario, registro])
   const autenticado = sesion.estado === 'autenticado'
-  const necesitaNombre = autenticado && (!registro?.nombre || !registro?.apellido)
+  const necesitaNombre = autenticado && (!registro?.nombre || !registro?.apellido || !registro?.edad)
   const necesitaPerfil = autenticado && ruta.pantalla === 'perfiles'
 
   // Después del login (o con una sesión previa válida) se sale de la bienvenida.
@@ -88,8 +88,8 @@ function App() {
   if (!autenticado) return <Main />
 
   if (necesitaNombre) {
-    const guardarNombre = async (nombre, apellido) => {
-      const actualizado = await actualizarNombreUsuario(nombre, apellido)
+    const guardarNombre = async (nombre, apellido, edad) => {
+      const actualizado = await actualizarNombreUsuario(nombre, apellido, edad)
       setRegistroActualizado({ usuarioId, valor: actualizado })
       reemplazarHash('#rostro')
     }

@@ -11,6 +11,7 @@ datasource db {
 model Usuario {
   id        String     @id
   email     String?
+  edad      Int?
   creadoEn  DateTime   @default(now())
   animos    Animo[]
   favoritos Favorito[]

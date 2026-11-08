@@ -1,6 +1,6 @@
 import { prisma } from '../lib/prisma.js'
 
-const usuarioSelect = { id: true, email: true, nombre: true, apellido: true, creadoEn: true }
+const usuarioSelect = { id: true, email: true, nombre: true, apellido: true, edad: true, creadoEn: true }
 
 export const usuariosService = {
   async sincronizar({ id, email }) {
@@ -19,10 +19,10 @@ export const usuariosService = {
     })
   },
 
-  async actualizarNombre(id, { nombre, apellido }) {
+  async actualizarNombre(id, { nombre, apellido, edad }) {
     return prisma.usuario.update({
       where: { id },
-      data: { nombre, apellido },
+      data: { nombre, apellido, edad },
       select: usuarioSelect,
     })
   },
