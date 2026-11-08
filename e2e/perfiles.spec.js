@@ -152,6 +152,10 @@ test('cuenta de Melanie: crear Sofía y Carlos, entrar como Sofía y volver a Me
     await botonUsuario(page).click()
     await expect(page.getByTestId('perfil-activo')).toHaveText(nombre)
     await expect(page.getByTestId('cuenta-sesion')).toContainText('Cuenta: Melanie Hernández')
+    // El avatar del menú es el del perfil activo y su inicial se ve (blanca sobre azul).
+    const avatar = page.locator('.app-header__menu-profile .avatar-perfil')
+    await expect(avatar).toHaveText(perfil.nombre[0])
+    expect(await avatar.evaluate((el) => getComputedStyle(el).color)).toBe('rgb(255, 255, 255)')
     await page.keyboard.press('Escape')
     // Galería: las peticiones viajan con el id real del perfil.
     await menu(page, 'Galería').click()

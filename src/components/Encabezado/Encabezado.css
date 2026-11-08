@@ -180,14 +180,16 @@
   gap: 3px;
 }
 
-.app-header__menu-profile strong,
-.app-header__menu-profile span {
+/* Solo los textos: el avatar también es un <span> y debe conservar su inicial
+   blanca (perfiles sin foto, como uno secundario). */
+.app-header__menu-profile div strong,
+.app-header__menu-profile div span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.app-header__menu-profile span {
+.app-header__menu-profile div span {
   color: #4c5f8f;
   font-size: 12px;
   font-weight: 600;
