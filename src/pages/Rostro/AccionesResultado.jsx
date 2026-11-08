@@ -79,7 +79,7 @@ function AccionesResultado({ detection, onAnalyze }) {
               {guardado.estado === 'error' && guardado.mensaje.startsWith('Iniciá sesión') && (
                 <>
                   {' '}
-                  <a href="#">Ir a iniciar sesión</a>
+                  <a href="/">Ir a iniciar sesión</a>
                 </>
               )}
             </p>

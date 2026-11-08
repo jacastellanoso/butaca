@@ -1,13 +1,13 @@
 import logoButaca from '../../../logobutacaoficial.svg'
 import './Footer.css'
 
-// Rutas reales de la navegación por hash definida en App.jsx (src/lib/rutas.js).
+// Rutas reales de la aplicación (src/lib/rutas.js).
 const menuLinks = [
-  { label: 'Explorar películas', href: '#galeria' },
-  { label: 'Escanearme', href: '#rostro' },
-  { label: 'Mis recomendaciones', href: '#recomendaciones' },
-  { label: 'Dashboard', href: '#dashboard' },
-  { label: 'Favoritos', href: '#favoritos' },
+  { label: 'Explorar películas', href: '/galeria' },
+  { label: 'Escanearme', href: '/rostro' },
+  { label: 'Mis recomendaciones', href: '/recomendaciones' },
+  { label: 'Dashboard', href: '/dashboard' },
+  { label: 'Favoritos', href: '/favoritos' },
 ]
 
 function Footer() {
@@ -15,7 +15,7 @@ function Footer() {
     <footer className="site-footer">
       <div className="site-footer__inner">
         <section className="site-footer__brand" aria-label="Butaca">
-          <img className="site-footer__logo" src={logoButaca} alt="Butaca" />
+          <img draggable={false} className="site-footer__logo" src={logoButaca} alt="Butaca" />
           <p className="site-footer__tagline">Que nadie pierda veinte minutos decidiendo qué ver.</p>
         </section>
 
@@ -41,10 +41,9 @@ function Footer() {
 
       <div className="site-footer__bottom">
         <p className="site-footer__copy">© 2026 Butaca. Todos los derechos reservados.</p>
-        {/* Sin páginas legales todavía: se muestran sin enlace hasta que existan. */}
         <ul className="site-footer__legal" aria-label="Información legal">
-          <li><span title="Próximamente">Privacidad</span></li>
-          <li><span title="Próximamente">Términos y condiciones</span></li>
+          <li><a className="site-footer__link" href="/privacidad">Privacidad</a></li>
+          <li><a className="site-footer__link" href="/terminos">Términos y condiciones</a></li>
         </ul>
       </div>
     </footer>

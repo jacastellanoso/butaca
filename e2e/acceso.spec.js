@@ -10,8 +10,8 @@ test.describe('Sin sesión', () => {
   })
 
   test('las pantallas con datos personales no se abren escribiendo la URL', async ({ page, backend }) => {
-    for (const hash of ['#dashboard', '#favoritos', '#rostro', '#galeria']) {
-      await page.goto(`/${hash}`)
+    for (const ruta of ['/dashboard', '/favoritos', '/rostro', '/galeria', '/grupos', '/perfiles']) {
+      await page.goto(ruta)
       await expect(page.getByRole('button', { name: /Google/ })).toBeVisible()
       await expect(page.getByRole('heading', { name: /Mis emociones|Mis favoritos/ })).toHaveCount(0)
     }
@@ -27,13 +27,13 @@ test.describe('Con sesión', () => {
   test('una cuenta registrada elige perfil y luego entra a la galería', async ({ page, backend }) => {
     await page.goto('/')
 
-    await expect(page).toHaveURL(/#perfiles$/)
+    await expect(page).toHaveURL(/\/perfiles$/)
     await expect(page.getByRole('heading', { name: /Quién va a ver hoy/ })).toBeVisible()
     // Al validar la sesión se sincroniza el usuario con auth-service.
     await expect.poll(() => backend.peticionesA('POST', '/api/usuarios').length).toBeGreaterThan(0)
 
     await page.getByRole('button', { name: 'Entrar como Majo Prueba' }).click()
-    await expect(page).toHaveURL(/#galeria$/)
+    await expect(page).toHaveURL(/\/galeria$/)
     await expect(page.getByRole('navigation', { name: 'Navegación principal' })).toBeVisible()
   })
 
@@ -49,7 +49,7 @@ test.describe('Con sesión', () => {
     await page.getByLabel('Edad').fill('31')
     await page.getByRole('button', { name: 'Continuar al reconocimiento facial' }).click()
 
-    await expect(page).toHaveURL(/#perfiles$/)
+    await expect(page).toHaveURL(/\/perfiles$/)
     await expect.poll(() => backend.peticionesA('PUT', '/api/usuarios').at(-1)?.body)
       .toEqual({ nombre: 'Ana', apellido: 'García', edad: 31 })
     // El perfil principal muestra los datos recién guardados.
@@ -75,7 +75,7 @@ test.describe('Con sesión', () => {
     await page.goto('/')
 
     await expect(page.getByText(/despertando los servicios/)).toBeVisible()
-    await expect(page).toHaveURL(/#perfiles$/, { timeout: 20_000 })
+    await expect(page).toHaveURL(/\/perfiles$/, { timeout: 20_000 })
     await expect(page.getByRole('button', { name: 'Entrar como Majo Prueba' })).toBeVisible()
     await expect(page.getByText(/no pudimos preparar tu cuenta/)).toHaveCount(0)
     expect(backend.peticionesA('POST', '/api/usuarios').length).toBeGreaterThanOrEqual(3)
@@ -95,14 +95,14 @@ test.describe('Con sesión', () => {
       const { name, value } = estadoConSesion(baseURL).origins[0].localStorage[0]
       await page.evaluate(([clave, valor]) => localStorage.setItem(clave, valor), [name, value])
       await page.goto('/')
-      await expect(page).toHaveURL(/#perfiles$/)
+      await expect(page).toHaveURL(/\/perfiles$/)
       await expect(page.getByText(/no pudimos preparar tu cuenta/)).toHaveCount(0)
       await page.getByRole('button', { name: 'Entrar como Majo Prueba' }).click()
-      await expect(page).toHaveURL(/#galeria$/)
+      await expect(page).toHaveURL(/\/galeria$/)
 
       // Recargar con la sesión activa mantiene la cuenta sin pasar por el registro.
       await page.reload()
-      await expect(page).toHaveURL(/#galeria$/)
+      await expect(page).toHaveURL(/\/galeria$/)
       await expect(page.getByRole('heading', { name: 'Queremos conocerte' })).toHaveCount(0)
     }
 
@@ -121,7 +121,7 @@ test.describe('Con sesión', () => {
 
     delete backend.fallas['/api/usuarios']
     await page.getByRole('button', { name: 'Reintentar' }).click()
-    await expect(page).toHaveURL(/#perfiles$/)
+    await expect(page).toHaveURL(/\/perfiles$/)
     await expect(page.getByRole('button', { name: 'Entrar como Majo Prueba' })).toBeVisible()
   })
 
@@ -132,7 +132,7 @@ test.describe('Con sesión', () => {
     await page.getByRole('button', { name: 'Cerrar sesión' }).click()
 
     await expect(page.getByRole('button', { name: /Google/ })).toBeVisible()
-    await page.goto('/#dashboard')
+    await page.goto('/dashboard')
     await expect(page.getByRole('button', { name: /Google/ })).toBeVisible()
   })
 })

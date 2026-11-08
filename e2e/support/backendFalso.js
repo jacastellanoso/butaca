@@ -65,6 +65,8 @@ export class BackendFalso {
     this.fallas = {}
     // Fallas que se resuelven solas: { '/api/recomendaciones': { status: 502, veces: 1 } }.
     this.fallasTemporales = {}
+    // Catálogo grande y paginado (catalogoPaginado()); null = CATALOGO fijo de una página.
+    this.catalogoGrande = null
     this.usuario = {
       id: USUARIO_PRUEBA.id,
       email: USUARIO_PRUEBA.email,
@@ -90,6 +92,43 @@ export class BackendFalso {
   /** Simula un servicio dormido (Render gratuito): falla `veces` y luego responde. */
   fallarVeces(prefijo, status = 502, veces = 1) {
     this.fallasTemporales[prefijo] = { status, veces }
+  }
+
+  /**
+   * Catálogo paginado como catalog-service: `porPagina` títulos por página y
+   * `paginas` páginas por categoría. Como en TMDB, la página siguiente repite
+   * el último título de la anterior (la galería no debe duplicarlo).
+   */
+  catalogoPaginado({ paginas = 3, porPagina = 6 } = {}) {
+    const generos = ['Acción', 'Comedia', 'Drama', 'Terror']
+    this.catalogoGrande = { paginas, porPagina, items: [] }
+    let id = 1000
+    for (const genero of generos) {
+      for (let i = 0; i < paginas * porPagina; i++) {
+        id += 1
+        const tipoTmdb = id % 2 ? 'movie' : 'tv'
+        this.catalogoGrande.items.push({
+          id: `${tipoTmdb}-${id}`, tmdbId: id, tipoTmdb, tipo: tipoTmdb === 'movie' ? 'Película' : 'Serie',
+          titulo: `${genero} ${i + 1}`, anio: 2025, fecha: '2025-01-15', generos: [genero], calificacion: 7,
+          sinopsis: `Sinopsis de ${genero} ${i + 1}.`, portada: null, poster: null, esDemostracion: false,
+        })
+      }
+    }
+  }
+
+  #catalogo(route, url) {
+    if (!this.catalogoGrande) return json(route, 200, { fuente: 'tmdb', resultados: CATALOGO })
+    const { paginas, porPagina, items } = this.catalogoGrande
+    const categoria = url.searchParams.get('categoria')
+    const pagina = Number(url.searchParams.get('pagina') ?? 1)
+    const lista = categoria ? items.filter((c) => c.generos.includes(categoria)) : items
+    const total = categoria ? paginas : paginas * 4
+    const inicio = Math.max(0, (pagina - 1) * porPagina - (pagina > 1 ? 1 : 0))
+    return json(route, 200, {
+      fuente: 'tmdb',
+      resultados: lista.slice(inicio, (pagina - 1) * porPagina + porPagina),
+      paginacion: { pagina, totalPaginas: total, totalResultados: lista.length, total: lista.length },
+    })
   }
 
   peticionesA(metodo, ruta) {
@@ -143,9 +182,7 @@ export class BackendFalso {
       Object.assign(this.perfilPrincipal, { nombre: body.nombre, apellido: body.apellido, edad: body.edad })
       return json(route, 200, this.usuario)
     }
-    if (ruta === '/api/catalogo' && metodo === 'GET') {
-      return json(route, 200, { fuente: 'tmdb', resultados: CATALOGO })
-    }
+    if (ruta === '/api/catalogo' && metodo === 'GET') return this.#catalogo(route, url)
     const detalle = ruta.match(/^\/api\/catalogo\/(movie|tv)\/(\d+)$/)
     if (detalle && metodo === 'GET') {
       const item = CATALOGO.find((c) => c.tipoTmdb === detalle[1] && c.tmdbId === Number(detalle[2]))

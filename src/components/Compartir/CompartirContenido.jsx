@@ -53,7 +53,7 @@ function FormularioCompartir({ contenido, onListo }) {
   if (grupos?.length === 0) {
     return (
       <p className="compartir__estado">
-        Todavía no tenés grupos. <a href="#grupos">Creá uno</a> para compartir recomendaciones.
+        Todavía no tenés grupos. <a href="/grupos">Creá uno</a> para compartir recomendaciones.
       </p>
     )
   }

@@ -494,3 +494,28 @@
     transition: none;
   }
 }
+
+/* Enlaces legales bajo los botones de acceso (visibles sin iniciar sesión). */
+.main-legal {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 10px;
+  margin-top: 16px;
+  color: rgb(255 255 255 / 80%);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.main-legal a {
+  color: #ffffff;
+  text-underline-offset: 3px;
+}
+
+.main-legal a:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid #ffffff;
+  outline-offset: 3px;
+}

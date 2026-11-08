@@ -18,7 +18,7 @@ function WaveGroup({ position }) {
   return (
     <div className={`wave-group wave-group--${position}`} aria-hidden="true">
       {waveLayers.map((layer) => (
-        <img
+        <img draggable={false}
           key={layer}
           className={`wave wave--${layer}`}
           src={cuadroEfecto}
@@ -94,10 +94,10 @@ function Rostro({ detection, onVideoReady, children }) {
       </div>
 
       <div className="decorations" aria-hidden="true">
-        <img className="decoration decoration--reel" src={rollo} alt="" />
-        <img className="decoration decoration--glasses" src={lentes} alt="" />
-        <img className="decoration decoration--ticket" src={ticket} alt="" />
-        <img className="decoration decoration--popcorn" src={palomitas} alt="" />
+        <img draggable={false} className="decoration decoration--reel" src={rollo} alt="" />
+        <img draggable={false} className="decoration decoration--glasses" src={lentes} alt="" />
+        <img draggable={false} className="decoration decoration--ticket" src={ticket} alt="" />
+        <img draggable={false} className="decoration decoration--popcorn" src={palomitas} alt="" />
       </div>
 
       <div className="rostro-scroll">
@@ -177,7 +177,7 @@ function Rostro({ detection, onVideoReady, children }) {
 
           {isActive && children}
 
-          <a className="rostro-button rostro-button--gallery" href="#galeria">
+          <a className="rostro-button rostro-button--gallery" href="/galeria">
             Explorar la galería
           </a>
         </section>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-import { hashDeRecomendaciones } from '../../lib/rutas.js'
+import { rutaDeRecomendaciones } from '../../lib/rutas.js'
 import { DESTACADAS_POR_ANIMO, registrarRecomendacionesDestacadas } from '../../services/biblioteca.js'
 import { obtenerRecomendaciones } from '../../services/recomendaciones.js'
 import { EMOTIONS } from './emotions.js'
@@ -47,7 +47,7 @@ function RecomendacionesRostro({ emocion, animoId }) {
       .catch(() => setHistorial('error'))
   }, [animoId, emocion, estado, resultados])
 
-  const enlace = hashDeRecomendaciones({ emocion, animoId })
+  const enlace = rutaDeRecomendaciones({ emocion, animoId })
 
   return (
     <section className="rostro-recs" aria-labelledby="rostro-recs-title">
@@ -78,7 +78,7 @@ function RecomendacionesRostro({ emocion, animoId }) {
           {resultados.slice(0, VISTA_PREVIA).map((item, index) => (
             <li key={item.id} style={{ '--rec-index': index }}>
               <a className="rostro-recs__card" href={enlace} title={item.titulo}>
-                {item.poster ? <img src={item.poster} alt={`Póster de ${item.titulo}`} loading="lazy" /> : <span aria-hidden="true">B</span>}
+                {item.poster ? <img draggable={false} src={item.poster} alt={`Póster de ${item.titulo}`} loading="lazy" /> : <span aria-hidden="true">B</span>}
                 <strong>{item.titulo}</strong>
               </a>
             </li>

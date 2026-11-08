@@ -58,6 +58,40 @@ export async function obtenerCatalogo(filtros = {}) {
 }
 
 /**
+ * Una página del catálogo con su paginación real (catalog-service → TMDB).
+ * Devuelve { resultados, pagina, totalPaginas }. La galería la usa para
+ * «Cargar más» sin traer todo el catálogo de golpe.
+ */
+export async function obtenerPaginaCatalogo({ categoria = 'Todos', pagina = 1 } = {}) {
+  const url = construirUrlCatalogo({ categoria, pagina })
+
+  let respuesta
+  try {
+    respuesta = await window.fetch(url, { method: 'GET', headers: { Accept: 'application/json' } })
+  } catch (error) {
+    if (import.meta.env?.DEV && error instanceof TypeError) {
+      console.warn('API Gateway no disponible en desarrollo local; se cargan contenidos de demostración.')
+      return { resultados: contenidosDemo, pagina: 1, totalPaginas: 1 }
+    }
+    throw error
+  }
+
+  if (!respuesta.ok) {
+    throw new Error(`Error al consultar el catálogo (HTTP ${respuesta.status}).`)
+  }
+
+  const cuerpo = await respuesta.json()
+  const resultados = Array.isArray(cuerpo?.resultados) ? cuerpo.resultados : Array.isArray(cuerpo) ? cuerpo : null
+  if (!resultados) {
+    throw new Error('El formato recibido desde /api/catalogo no contiene una lista de resultados.')
+  }
+  const paginaActual = Number(cuerpo?.paginacion?.pagina) || pagina
+  // Sin datos de paginación (respuesta antigua o lista simple) se asume una sola página.
+  const totalPaginas = Number(cuerpo?.paginacion?.totalPaginas) || paginaActual
+  return { resultados, pagina: paginaActual, totalPaginas }
+}
+
+/**
  * Obtiene el detalle enriquecido de una película o serie a través del API Gateway.
  */
 export async function obtenerDetalleCatalogo(tipoTmdb, tmdbId) {

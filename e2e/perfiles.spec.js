@@ -23,7 +23,7 @@ async function cambiarDesdeMenu(page, nombre) {
 
 test('crear un perfil con nombre, apellido y edad y entrar con él', async ({ page, backend }) => {
   await page.goto('/')
-  await expect(page).toHaveURL(/#perfiles$/)
+  await expect(page).toHaveURL(/\/perfiles$/)
 
   await page.getByRole('button', { name: 'Agregar perfil' }).click()
   const formulario = page.getByRole('dialog', { name: 'Nuevo perfil' })
@@ -38,7 +38,7 @@ test('crear un perfil con nombre, apellido y edad y entrar con él', async ({ pa
   const lucia = backend.social.perfiles.find((p) => p.nombre === 'Lucía')
 
   await tarjeta.click()
-  await expect(page).toHaveURL(/#galeria$/)
+  await expect(page).toHaveURL(/\/galeria$/)
   // El menú de usuario muestra el perfil elegido y las peticiones viajan con su id.
   await expect(botonUsuario(page)).toContainText('Lucía Prueba')
   await expect.poll(() => backend.peticionesA('GET', '/api/favoritos').at(-1)?.perfil).toBe(lucia.id)
@@ -101,7 +101,7 @@ test('favoritos e historial emocional no se mezclan entre perfiles de la misma c
 test('administrar perfiles: editar y eliminar uno secundario; el principal no se elimina', async ({ page, backend }) => {
   const lucia = agregarPerfil(backend)
   page.on('dialog', (dialogo) => dialogo.accept())
-  await page.goto('/#perfiles')
+  await page.goto('/perfiles')
 
   await page.getByRole('button', { name: 'Administrar perfiles' }).click()
   await expect(page.getByRole('button', { name: 'Eliminar Majo Prueba' })).toHaveCount(0)
@@ -183,7 +183,7 @@ test('cuenta de Melanie: crear Sofía y Carlos, entrar como Sofía y volver a Me
 
   // Elegir Sofía en la pantalla de perfiles.
   await page.getByRole('button', { name: 'Entrar como Sofía Hernández' }).click()
-  await expect(page).toHaveURL(/#galeria$/)
+  await expect(page).toHaveURL(/\/galeria$/)
   await comprobarPerfil(sofia, melanie)
 
   // Volver a Melanie desde el menú de usuario.

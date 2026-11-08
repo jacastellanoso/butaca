@@ -3,6 +3,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import iconoEscanear from '../../../iconoescanearme.svg'
 import iconoRecomendaciones from '../../../iconomisreconocimientos.svg'
 import logoButaca from '../../../logobutacaoficial.svg'
+import { EVENTO_NAVEGACION } from '../../lib/rutas.js'
 import { IconoCorazon } from '../BotonFavorito/BotonFavorito.jsx'
 import CentroNotificaciones from '../Notificaciones/CentroNotificaciones.jsx'
 import './Encabezado.css'
@@ -39,12 +40,12 @@ function IconoGrupos() {
 
 // Opciones del menú principal. `clave` coincide con la pantalla o sección activa.
 const OPCIONES = [
-  { clave: 'galeria', href: '#galeria', etiqueta: 'Galería', icono: <IconoGaleria /> },
-  { clave: 'rostro', href: '#rostro', etiqueta: 'Escanearme', imagen: iconoEscanear },
-  { clave: 'recomendaciones', href: '#recomendaciones', etiqueta: 'Mis recomendaciones', imagen: iconoRecomendaciones },
-  { clave: 'grupos', href: '#grupos', etiqueta: 'Grupos', icono: <IconoGrupos /> },
-  { clave: 'dashboard', href: '#dashboard', etiqueta: 'Dashboard', icono: <IconoDashboard /> },
-  { clave: 'favoritos', href: '#favoritos', etiqueta: 'Favoritos', icono: <IconoCorazon lleno /> },
+  { clave: 'galeria', href: '/galeria', etiqueta: 'Galería', icono: <IconoGaleria /> },
+  { clave: 'rostro', href: '/rostro', etiqueta: 'Escanearme', imagen: iconoEscanear },
+  { clave: 'recomendaciones', href: '/recomendaciones', etiqueta: 'Mis recomendaciones', imagen: iconoRecomendaciones },
+  { clave: 'grupos', href: '/grupos', etiqueta: 'Grupos', icono: <IconoGrupos /> },
+  { clave: 'dashboard', href: '/dashboard', etiqueta: 'Dashboard', icono: <IconoDashboard /> },
+  { clave: 'favoritos', href: '/favoritos', etiqueta: 'Favoritos', icono: <IconoCorazon lleno /> },
 ]
 
 export function AvatarPerfil({ perfil, tamano = 'md' }) {
@@ -52,7 +53,7 @@ export function AvatarPerfil({ perfil, tamano = 'md' }) {
   return (
     <span className={`avatar-perfil avatar-perfil--${tamano}`} aria-hidden="true">
       {perfil?.avatar && !fallo ? (
-        <img src={perfil.avatar} alt="" referrerPolicy="no-referrer" onError={() => setFallo(true)} />
+        <img draggable={false} src={perfil.avatar} alt="" referrerPolicy="no-referrer" onError={() => setFallo(true)} />
       ) : (
         perfil?.inicial ?? 'B'
       )}
@@ -91,11 +92,11 @@ function Encabezado({ activa, perfil, cuenta, perfiles = [], onCambiarPerfil, on
     }
     document.addEventListener('keydown', cerrarConEscape)
     document.addEventListener('mousedown', cerrarAfuera)
-    window.addEventListener('hashchange', cerrarAlNavegar)
+    window.addEventListener(EVENTO_NAVEGACION, cerrarAlNavegar)
     return () => {
       document.removeEventListener('keydown', cerrarConEscape)
       document.removeEventListener('mousedown', cerrarAfuera)
-      window.removeEventListener('hashchange', cerrarAlNavegar)
+      window.removeEventListener(EVENTO_NAVEGACION, cerrarAlNavegar)
     }
   }, [])
 
@@ -117,8 +118,8 @@ function Encabezado({ activa, perfil, cuenta, perfiles = [], onCambiarPerfil, on
 
   return (
     <header className="app-header">
-      <a className="app-header__brand" href="#galeria" aria-label="Butaca: ir a la galería">
-        <img src={logoButaca} alt="Butaca" />
+      <a className="app-header__brand" draggable={false} href="/galeria" aria-label="Butaca: ir a la galería">
+        <img draggable={false} src={logoButaca} alt="Butaca" />
       </a>
 
       <button
@@ -144,7 +145,7 @@ function Encabezado({ activa, perfil, cuenta, perfiles = [], onCambiarPerfil, on
             href={href}
             aria-current={claveActiva === clave ? 'page' : undefined}
           >
-            <span className="app-header__icon">{imagen ? <img src={imagen} alt="" aria-hidden="true" /> : icono}</span>
+            <span className="app-header__icon">{imagen ? <img draggable={false} src={imagen} alt="" aria-hidden="true" /> : icono}</span>
             <span>{etiqueta}</span>
           </a>
         ))}
@@ -203,7 +204,7 @@ function Encabezado({ activa, perfil, cuenta, perfiles = [], onCambiarPerfil, on
                 ))}
               </div>
             )}
-            <a className="app-header__menu-item" href="#perfiles">
+            <a className="app-header__menu-item" href="/perfiles">
               {otrosPerfiles.length > 0 ? 'Administrar perfiles' : 'Cambiar perfil'}
             </a>
             <button

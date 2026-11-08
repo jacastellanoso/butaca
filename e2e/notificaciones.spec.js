@@ -55,7 +55,7 @@ test('marcar una notificación como leída descuenta el indicador', async ({ pag
 
   // El enlace lleva al grupo donde se compartió.
   await panel(page).getByRole('link', { name: 'Abrir grupo' }).click()
-  await expect(page).toHaveURL(new RegExp(`#grupos/${grupo.id}$`))
+  await expect(page).toHaveURL(new RegExp(`/grupos/${grupo.id}$`))
 })
 
 test('la recomendación del día pertenece al perfil activo', async ({ page, backend }) => {

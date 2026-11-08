@@ -114,7 +114,7 @@ for (const telefono of TELEFONOS) {
       await expect(continuar).toBeInViewport()
       await continuar.tap()
 
-      await expect(page).toHaveURL(/#perfiles$/)
+      await expect(page).toHaveURL(/\/perfiles$/)
       expect(backend.peticionesA('PUT', '/api/usuarios').at(-1).body).toEqual({ nombre: 'Ana', apellido: 'García', edad: 31 })
     })
 
@@ -158,7 +158,7 @@ for (const telefono of TELEFONOS) {
       for (let i = 0; i < 4; i++) await deslizar(page, -300)
       await expect(continuar).toBeInViewport({ ratio: 1 })
       await tocar(page, continuar)
-      await expect(page).toHaveURL(/#perfiles$/)
+      await expect(page).toHaveURL(/\/perfiles$/)
       expect(backend.peticionesA('PUT', '/api/usuarios').at(-1).body).toEqual({ nombre: 'Ana', apellido: 'García', edad: 31 })
       // Al salir del formulario se restaura el bloqueo de scroll del resto de la app.
       expect(await page.evaluate(() => document.documentElement.classList.contains('pagina-desplazable'))).toBe(false)
@@ -204,7 +204,7 @@ for (const telefono of TELEFONOS) {
       await continuar.scrollIntoViewIfNeeded()
       await expect(continuar).toBeInViewport({ ratio: 1 })
       await continuar.tap()
-      await expect(page).toHaveURL(/#perfiles$/)
+      await expect(page).toHaveURL(/\/perfiles$/)
       expect(backend.peticionesA('PUT', '/api/usuarios').at(-1).body).toEqual({ nombre: 'Ana', apellido: 'García', edad: 31 })
     })
 
@@ -218,7 +218,7 @@ for (const telefono of TELEFONOS) {
       await formulario.getByRole('button', { name: 'Cancelar' }).tap()
 
       await page.getByRole('button', { name: 'Entrar como Majo Prueba' }).tap()
-      await expect(page).toHaveURL(/#galeria$/)
+      await expect(page).toHaveURL(/\/galeria$/)
       expect(await sinScrollHorizontal(page)).toBe(true)
 
       const campana = page.getByRole('button', { name: /^Notificaciones/ })

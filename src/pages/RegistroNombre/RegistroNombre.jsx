@@ -54,7 +54,7 @@ function RegistroNombre({ onGuardar, onCerrarSesion }) {
   return (
     <main className="registro-nombre" ref={contenedor}>
       <section className="registro-nombre__card" aria-labelledby="registro-titulo">
-        <img src={logoButaca} alt="Butaca" />
+        <img draggable={false} src={logoButaca} alt="Butaca" />
         <p className="registro-nombre__eyebrow">Tu experiencia comienza aquí</p>
         <h1 id="registro-titulo">Queremos conocerte</h1>
         <p>Decinos cómo te llamás y tu edad antes de realizar el reconocimiento facial.</p>

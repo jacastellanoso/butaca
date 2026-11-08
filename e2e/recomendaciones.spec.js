@@ -11,7 +11,7 @@ const recomendacionesGet = (backend) => backend.peticionesA('GET', '/api/recomen
 test('Mis recomendaciones se recupera sola si el servicio responde 502 mientras despierta', async ({ page, backend }) => {
   await entrarComo(page)
   backend.fallarVeces('/api/recomendaciones', 502, 1)
-  await page.goto('/#recomendaciones/emocion/happy')
+  await page.goto('/recomendaciones/emocion/happy')
 
   await expect(page.getByRole('heading', { name: 'Risas garantizadas' })).toBeVisible({ timeout: 15_000 })
   await expect(page.getByText('No pudimos obtener tus recomendaciones')).toHaveCount(0)
@@ -21,7 +21,7 @@ test('Mis recomendaciones se recupera sola si el servicio responde 502 mientras 
 test('si el servicio sigue sin responder, se muestra el error con reintento', async ({ page, backend }) => {
   await entrarComo(page)
   backend.fallar('/api/recomendaciones', 503)
-  await page.goto('/#recomendaciones/emocion/happy')
+  await page.goto('/recomendaciones/emocion/happy')
 
   const alerta = page.getByRole('alert').filter({ hasText: 'No pudimos obtener tus recomendaciones' })
   await expect(alerta).toBeVisible({ timeout: 30_000 })
@@ -42,7 +42,7 @@ test('Mis recomendaciones usa el último ánimo del perfil activo', async ({ pag
   }
   backend.animos.push(animo)
   await entrarComo(page)
-  await page.goto('/#recomendaciones')
+  await page.goto('/recomendaciones')
 
   await expect(page.getByText('Tu ánimo: Tristeza')).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Risas garantizadas' })).toBeVisible()

@@ -1,7 +1,7 @@
 import '../Galeria/GaleriaPrincipal.css'
 import './Dashboard.css'
 import Footer from '../../components/Footer/Footer.jsx'
-import { hashDeSeccion, SECCIONES_DASHBOARD } from '../../lib/rutas.js'
+import { rutaDeSeccion, SECCIONES_DASHBOARD } from '../../lib/rutas.js'
 import SeccionEmociones from './secciones/SeccionEmociones.jsx'
 import SeccionFavoritos from './secciones/SeccionFavoritos.jsx'
 import SeccionHistorial from './secciones/SeccionHistorial.jsx'
@@ -16,8 +16,8 @@ const PESTANAS = {
 
 /**
  * Tablero del usuario: emociones, recomendaciones, historial y favoritos.
- * La sección activa sale del hash (#dashboard, #recomendaciones, #historial,
- * #favoritos), así cada una se puede abrir desde el encabezado o compartir.
+ * La sección activa sale de la ruta (/dashboard, /recomendaciones, /historial,
+ * /favoritos), así cada una se puede abrir desde el encabezado o compartir.
  */
 function Dashboard({ encabezado, perfil, seccion = 'emociones', emocion, animoId }) {
   return (
@@ -38,7 +38,7 @@ function Dashboard({ encabezado, perfil, seccion = 'emociones', emocion, animoId
             <a
               key={clave}
               className="dashboard-tab"
-              href={hashDeSeccion(clave)}
+              href={rutaDeSeccion(clave)}
               aria-current={seccion === clave ? 'page' : undefined}
             >
               {PESTANAS[clave]}

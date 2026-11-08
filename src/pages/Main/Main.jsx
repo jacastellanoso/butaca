@@ -32,7 +32,7 @@ function WaveGroup({ position = 'center' }) {
   return (
     <div className={`wave-group wave-group--${position}`} aria-hidden="true">
       {waveLayers.map((layer) => (
-        <img
+        <img draggable={false}
           key={layer}
           className={`wave wave--${layer}`}
           src={cuadroEfecto}
@@ -60,7 +60,7 @@ function AccessButton({
         disabled={disabled}
         aria-busy={isLoading}
       >
-        <img src={icon} alt="" aria-hidden="true" />
+        <img draggable={false} src={icon} alt="" aria-hidden="true" />
         <span>{isLoading ? `Conectando con ${provider}` : `Continuar con ${provider}`}</span>
       </button>
     </div>
@@ -94,10 +94,10 @@ function Main() {
       </div>
 
       <div className="decorations" aria-hidden="true">
-        <img className="decoration decoration--reel" src={rollo} alt="" />
-        <img className="decoration decoration--glasses" src={lentes} alt="" />
-        <img className="decoration decoration--ticket" src={ticket} alt="" />
-        <img className="decoration decoration--popcorn" src={palomitas} alt="" />
+        <img draggable={false} className="decoration decoration--reel" src={rollo} alt="" />
+        <img draggable={false} className="decoration decoration--glasses" src={lentes} alt="" />
+        <img draggable={false} className="decoration decoration--ticket" src={ticket} alt="" />
+        <img draggable={false} className="decoration decoration--popcorn" src={palomitas} alt="" />
       </div>
 
       <div className="central-scene">
@@ -110,7 +110,7 @@ function Main() {
 
           <div className="title-composition" aria-hidden="true">
             {textLayers.map(({ source, label }, index) => (
-              <img
+              <img draggable={false}
                 key={label}
                 className="title-layer"
                 src={source}
@@ -144,6 +144,12 @@ function Main() {
               {authError}
             </p>
           )}
+
+          <nav className="main-legal" aria-label="Información legal">
+            <a href="/privacidad">Privacidad</a>
+            <span aria-hidden="true">·</span>
+            <a href="/terminos">Términos y condiciones</a>
+          </nav>
         </section>
       </div>
     </main>

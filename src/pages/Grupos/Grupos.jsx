@@ -7,7 +7,7 @@ import Footer from '../../components/Footer/Footer.jsx'
 import { EVENTO_GRUPOS } from '../../components/Notificaciones/CentroNotificaciones.jsx'
 import { useFavoritos } from '../../context/favoritosContexto.js'
 import { useDetalleContenido } from '../../hooks/useDetalleContenido.js'
-import { hashDeGrupo } from '../../lib/rutas.js'
+import { navegar, rutaDeGrupo } from '../../lib/rutas.js'
 import {
   cancelarInvitacion,
   compartirRecomendacion,
@@ -149,7 +149,7 @@ function FormCompartir({ grupo, onCompartido }) {
       <h3>Compartir una recomendación</h3>
       {opciones.length === 0 ? (
         <p className="grupos-ayuda">
-          Guardá películas o series en <a href="#favoritos">tus favoritos</a> o usá «Compartir» en el detalle de cualquier título.
+          Guardá películas o series en <a href="/favoritos">tus favoritos</a> o usá «Compartir» en el detalle de cualquier título.
         </p>
       ) : (
         <>
@@ -215,15 +215,15 @@ function DetalleGrupo({ grupoId, onCambio }) {
 
   if (estado === 'loading') return <EstadoPanel estado="loading" titulo="Cargando grupo" filas={3} />
   if (estado === 'error') {
-    return <EstadoPanel estado="error" titulo="No pudimos abrir el grupo" mensaje={error} onRetry={cargar} accion={<a className="dash-button dash-button--ghost" href="#grupos">Volver a mis grupos</a>} />
+    return <EstadoPanel estado="error" titulo="No pudimos abrir el grupo" mensaje={error} onRetry={cargar} accion={<a className="dash-button dash-button--ghost" href="/grupos">Volver a mis grupos</a>} />
   }
 
   const esPropietario = grupo.rol === 'propietario'
   const salirOEliminar = esPropietario
     ? () => window.confirm(`¿Eliminar el grupo «${grupo.nombre}» para todos sus integrantes?`) &&
-      ejecutar(() => eliminarGrupo(grupo.id), () => { window.location.hash = '#grupos' })
+      ejecutar(() => eliminarGrupo(grupo.id), () => { navegar('/grupos') })
     : () => window.confirm(`¿Salir del grupo «${grupo.nombre}»?`) &&
-      ejecutar(() => quitarMiembro(grupo.id, grupo.miembros.find((m) => m.esYo).usuarioId), () => { window.location.hash = '#grupos' })
+      ejecutar(() => quitarMiembro(grupo.id, grupo.miembros.find((m) => m.esYo).usuarioId), () => { navegar('/grupos') })
 
   return (
     <div className="grupo-detalle">
@@ -332,7 +332,7 @@ function InvitacionesRecibidas({ invitaciones, onRespondida }) {
       // La campana y la lista de grupos se actualizan con el mismo evento.
       window.dispatchEvent(new Event(EVENTO_GRUPOS))
       onRespondida()
-      if (aceptar && grupoId) window.location.assign(hashDeGrupo(grupoId))
+      if (aceptar && grupoId) navegar(rutaDeGrupo(grupoId))
     } catch (fallo) {
       setError(fallo.message)
     } finally {
@@ -419,7 +419,7 @@ function Grupos({ encabezado, grupoId }) {
           <aside className="dash-section grupos-lista" aria-labelledby="grupos-lista-titulo">
             <h2 id="grupos-lista-titulo">Tus grupos</h2>
             <InvitacionesRecibidas invitaciones={invitaciones} onRespondida={cargar} />
-            <FormCrearGrupo onCreado={(grupo) => { cargar(); window.location.hash = hashDeGrupo(grupo.id) }} />
+            <FormCrearGrupo onCreado={(grupo) => { cargar(); navegar(rutaDeGrupo(grupo.id)) }} />
             {estado === 'loading' && <EstadoPanel estado="loading" titulo="Cargando grupos" filas={2} />}
             {estado === 'error' && <EstadoPanel estado="error" titulo="No pudimos cargar tus grupos" mensaje={error} onRetry={cargar} />}
             {estado === 'ready' && grupos.length === 0 && (
@@ -429,7 +429,7 @@ function Grupos({ encabezado, grupoId }) {
               <ul className="grupos-items">
                 {grupos.map((g) => (
                   <li key={g.id}>
-                    <a href={hashDeGrupo(g.id)} aria-current={g.id === grupoId ? 'page' : undefined}>
+                    <a href={rutaDeGrupo(g.id)} aria-current={g.id === grupoId ? 'page' : undefined}>
                       <strong>{g.nombre}</strong>
                       <small>{g.miembros} {g.miembros === 1 ? 'integrante' : 'integrantes'} · {g.rol === 'propietario' ? 'Creador' : 'Integrante'}</small>
                     </a>

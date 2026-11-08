@@ -25,6 +25,15 @@ body {
   overflow: hidden;
 }
 
+/* Imágenes de la interfaz (logos, portadas, avatares, decoraciones): no se
+   arrastran ni se seleccionan por accidente con el mouse o el dedo. Cada <img>
+   lleva además draggable={false}. No afecta al texto, botones ni scroll. */
+img {
+  -webkit-user-drag: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
 button,
 input,
 textarea,

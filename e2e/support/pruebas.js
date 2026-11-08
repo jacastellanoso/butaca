@@ -41,9 +41,9 @@ export function menu(page, nombre) {
  */
 export async function entrarComo(page, nombre = 'Majo Prueba') {
   await page.goto('/')
-  await expect(page).toHaveURL(/#perfiles$/)
+  await expect(page).toHaveURL(/\/perfiles$/)
   await page.getByRole('button', { name: `Entrar como ${nombre}` }).click()
-  await expect(page).toHaveURL(/#galeria$/)
+  await expect(page).toHaveURL(/\/galeria$/)
 }
 
 /** El botón del menú de usuario muestra el perfil activo. */

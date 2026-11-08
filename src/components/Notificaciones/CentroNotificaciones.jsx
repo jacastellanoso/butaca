@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 
-import { hashDeGrupo } from '../../lib/rutas.js'
+import { EVENTO_NAVEGACION, navegar, rutaDeGrupo } from '../../lib/rutas.js'
 import { obtenerUltimoAnimo } from '../../services/emociones.js'
 import { responderInvitacion } from '../../services/grupos.js'
 import {
@@ -32,9 +32,9 @@ const formatoFecha = new Intl.DateTimeFormat('es', { day: 'numeric', month: 'sho
 function destino(notificacion) {
   const { tipo, datos = {} } = notificacion
   if (['recomendacion-compartida', 'invitacion-aceptada', 'miembro-salio'].includes(tipo) && datos.grupoId) {
-    return hashDeGrupo(datos.grupoId)
+    return rutaDeGrupo(datos.grupoId)
   }
-  if (tipo === 'recomendacion-del-dia') return '#recomendaciones'
+  if (tipo === 'recomendacion-del-dia') return '/recomendaciones'
   return null
 }
 
@@ -111,11 +111,11 @@ function CentroNotificaciones({ perfilId }) {
     const cerrarAlNavegar = () => setAbierto(false)
     document.addEventListener('keydown', cerrarConEscape)
     document.addEventListener('mousedown', cerrarAfuera)
-    window.addEventListener('hashchange', cerrarAlNavegar)
+    window.addEventListener(EVENTO_NAVEGACION, cerrarAlNavegar)
     return () => {
       document.removeEventListener('keydown', cerrarConEscape)
       document.removeEventListener('mousedown', cerrarAfuera)
-      window.removeEventListener('hashchange', cerrarAlNavegar)
+      window.removeEventListener(EVENTO_NAVEGACION, cerrarAlNavegar)
     }
   }, [abierto])
 
@@ -152,7 +152,7 @@ function CentroNotificaciones({ perfilId }) {
       const { grupoId } = await responderInvitacion(notificacion.datos.invitacionId, aceptar)
       await cargar()
       window.dispatchEvent(new Event(EVENTO_GRUPOS))
-      if (aceptar && grupoId) window.location.assign(hashDeGrupo(grupoId))
+      if (aceptar && grupoId) navegar(rutaDeGrupo(grupoId))
     } catch (fallo) {
       setError(fallo.message)
       await cargar()
@@ -209,10 +209,13 @@ function CentroNotificaciones({ perfilId }) {
                     key={notificacion.id}
                     className={`notificacion notificacion--${notificacion.tipo}${notificacion.leida ? '' : ' notificacion--nueva'}`}
                   >
-                    {notificacion.datos?.poster && <img className="notificacion__poster" src={notificacion.datos.poster} alt="" loading="lazy" />}
+                    {notificacion.datos?.poster && <img draggable={false} className="notificacion__poster" src={notificacion.datos.poster} alt="" loading="lazy" />}
                     <div className="notificacion__cuerpo">
-                      <span className="notificacion__tipo">{TIPOS_NOTIFICACION[notificacion.tipo] ?? 'Aviso'}</span>
-                      <strong>{notificacion.titulo}</strong>
+                      <span className="notificacion__meta">
+                        <span className="notificacion__tipo">{TIPOS_NOTIFICACION[notificacion.tipo] ?? 'Aviso'}</span>
+                        {!notificacion.leida && <span className="notificacion__nueva">Nueva</span>}
+                      </span>
+                      <strong className="notificacion__titulo">{notificacion.titulo}</strong>
                       <p>{notificacion.mensaje}</p>
                       <time dateTime={notificacion.creadoEn}>{formatoFecha.format(new Date(notificacion.creadoEn))}</time>
 
@@ -236,8 +239,16 @@ function CentroNotificaciones({ perfilId }) {
                       )}
                     </div>
                     {!notificacion.leida && !pendiente && (
-                      <button type="button" className="notificacion__leer" onClick={() => leer(notificacion)} aria-label={`Marcar como leída: ${notificacion.titulo}`}>
-                        <span aria-hidden="true">✓</span>
+                      <button
+                        type="button"
+                        className="notificacion__leer"
+                        onClick={() => leer(notificacion)}
+                        aria-label={`Marcar como leída: ${notificacion.titulo}`}
+                        title="Marcar como leída"
+                      >
+                        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                          <path d="M9.2 16.2 5.5 12.5a1 1 0 0 0-1.4 1.4l4.4 4.4a1 1 0 0 0 1.4 0l9.9-9.9a1 1 0 1 0-1.4-1.4z" />
+                        </svg>
                       </button>
                     )}
                   </li>

@@ -39,7 +39,7 @@ function DetalleContenido({ contenido, onClose }) {
         </button>
         <div className="content-detail__poster">
           {contenido.portada ? (
-            <img src={contenido.portada} alt={`Portada de ${contenido.titulo}`} />
+            <img draggable={false} src={contenido.portada} alt={`Portada de ${contenido.titulo}`} />
           ) : (
             <span aria-hidden="true">B</span>
           )}

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
-import logoButaca from '../../../logobutacaoficial.svg'
+// En Perfiles el fondo es azul: variante blanca del logo (mismo SVG, solo cambia el color).
+import logoButaca from '../../../logobutacablanco.svg'
 import cuadroEfecto from '../../assets/decorations/cuadroefecto.svg'
 import { AvatarPerfil } from '../../components/Encabezado/Encabezado.jsx'
 import '../../components/Encabezado/Encabezado.css'
@@ -129,11 +130,11 @@ function Perfiles({ perfiles, activoId, estado = 'ready', mensajeError, onReinte
   return (
     <main className="perfiles-page">
       <div className="perfiles-waves" aria-hidden="true">
-        <img className="perfiles-wave perfiles-wave--left" src={cuadroEfecto} alt="" />
-        <img className="perfiles-wave perfiles-wave--right" src={cuadroEfecto} alt="" />
+        <img draggable={false} className="perfiles-wave perfiles-wave--left" src={cuadroEfecto} alt="" />
+        <img draggable={false} className="perfiles-wave perfiles-wave--right" src={cuadroEfecto} alt="" />
       </div>
 
-      <img className="perfiles-logo" src={logoButaca} alt="Butaca" />
+      <img draggable={false} className="perfiles-logo" src={logoButaca} alt="Butaca" />
 
       <section className="perfiles-content" aria-labelledby="perfiles-title">
         <h1 id="perfiles-title" className="perfiles-title">

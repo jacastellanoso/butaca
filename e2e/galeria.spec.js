@@ -45,3 +45,96 @@ test('si el catálogo no responde se muestra un error con reintento', async ({ p
   await expect(page.getByRole('button', { name: 'Reintentar' })).toBeVisible()
   await expect(page.getByRole('button', { name: /Ver detalles de/ })).toHaveCount(0)
 })
+const tarjetas = (page) => page.getByRole('region', { name: 'Películas y series' }).getByRole('button', { name: /Ver detalles de/ })
+
+async function nombresDeTarjetas(page) {
+  return tarjetas(page).evaluateAll((botones) => botones.map((b) => b.getAttribute('aria-label')))
+}
+
+test('«Cargar más» agrega la página siguiente sin perder ni repetir títulos hasta el final', async ({ page, backend }) => {
+  backend.catalogoPaginado({ paginas: 3, porPagina: 6 })
+  // Respuesta lenta para ver el indicador de carga.
+  await page.route('**/api/catalogo?*pagina=2*', async (route) => {
+    await new Promise((r) => setTimeout(r, 400))
+    await route.fallback()
+  })
+  await entrarComo(page)
+
+  await expect(tarjetas(page)).toHaveCount(6)
+  const pagina1 = await nombresDeTarjetas(page)
+  const cargarMas = page.getByRole('button', { name: 'Cargar más' })
+  await cargarMas.click()
+  await expect(page.getByRole('button', { name: 'Cargando más títulos…' })).toBeDisabled()
+  // La página 2 trae 7 títulos y uno repite la página 1: solo se agregan los 6 nuevos.
+  await expect(tarjetas(page)).toHaveCount(12)
+  const tras2 = await nombresDeTarjetas(page)
+  expect(tras2.slice(0, 6)).toEqual(pagina1)
+  expect(new Set(tras2).size).toBe(tras2.length)
+  expect(backend.peticiones.filter((p) => p.ruta === '/api/catalogo').map((p) => new URLSearchParams(p.query).get('pagina')))
+    .toEqual([null, '2'])
+
+  // Se pide solo una página por clic, nunca todo el catálogo.
+  for (let i = 3; i <= 12; i++) {
+    if (!(await cargarMas.isVisible())) break
+    await cargarMas.click()
+    await expect(page.getByRole('button', { name: /Cargando más títulos/ })).toHaveCount(0)
+  }
+  await expect(cargarMas).toHaveCount(0)
+  await expect(page.getByText('Ya viste todos los títulos disponibles.')).toBeVisible()
+  const finales = await nombresDeTarjetas(page)
+  expect(new Set(finales).size).toBe(finales.length)
+  expect(finales.length).toBe(4 * 18) // 4 géneros × 18 títulos, sin duplicados
+})
+
+test('«Cargar más» respeta la categoría elegida y conserva lo cargado al volver a «Todos»', async ({ page, backend }) => {
+  backend.catalogoPaginado({ paginas: 2, porPagina: 6 })
+  await entrarComo(page)
+  await page.getByRole('button', { name: 'Cargar más' }).click()
+  await expect(tarjetas(page)).toHaveCount(12)
+
+  await page.getByRole('button', { name: 'Terror', exact: true }).click()
+  await expect(tarjetas(page)).toHaveCount(6)
+  await page.getByRole('button', { name: 'Cargar más' }).click()
+  await expect(tarjetas(page)).toHaveCount(12)
+  for (const nombre of await nombresDeTarjetas(page)) expect(nombre).toMatch(/Ver detalles de Terror \d+/)
+  await expect(page.getByText('Ya viste todos los títulos de Terror.')).toBeVisible()
+  const pedidosTerror = backend.peticiones
+    .filter((p) => p.ruta === '/api/catalogo' && new URLSearchParams(p.query).get('categoria') === 'Terror')
+    .map((p) => new URLSearchParams(p.query).get('pagina') ?? '1')
+  expect(pedidosTerror).toEqual(['1', '2'])
+
+  // Volver a «Todos» no recarga ni pierde las 12 tarjetas ya obtenidas.
+  const antes = backend.peticiones.length
+  await page.getByRole('button', { name: 'Todos', exact: true }).click()
+  await expect(tarjetas(page)).toHaveCount(12)
+  expect(backend.peticiones.slice(antes).filter((p) => p.ruta === '/api/catalogo')).toHaveLength(0)
+})
+
+test('si falla «Cargar más» se conservan los títulos y se puede reintentar', async ({ page, backend }) => {
+  backend.catalogoPaginado({ paginas: 3, porPagina: 6 })
+  await entrarComo(page)
+  await expect(tarjetas(page)).toHaveCount(6)
+  backend.fallarVeces('/api/catalogo', 502, 1)
+  await page.getByRole('button', { name: 'Cargar más' }).click()
+  await expect(page.getByRole('alert')).toHaveText('No pudimos cargar más títulos. Intentá de nuevo.')
+  await expect(tarjetas(page)).toHaveCount(6)
+  await page.getByRole('button', { name: 'Cargar más' }).click()
+  await expect(tarjetas(page)).toHaveCount(12)
+})
+
+test.describe('en un celular', () => {
+  test.use({ viewport: { width: 360, height: 640 }, isMobile: true, hasTouch: true })
+
+  test('«Cargar más» es visible al final de la galería y agrega títulos', async ({ page, backend }) => {
+    backend.catalogoPaginado({ paginas: 2, porPagina: 6 })
+    await entrarComo(page)
+    const cargarMas = page.getByRole('button', { name: 'Cargar más' })
+    await cargarMas.scrollIntoViewIfNeeded()
+    await expect(cargarMas).toBeInViewport({ ratio: 1 })
+    const caja = await cargarMas.boundingBox()
+    expect(caja.height).toBeGreaterThanOrEqual(44)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
+    await cargarMas.tap()
+    await expect(tarjetas(page)).toHaveCount(12)
+  })
+})

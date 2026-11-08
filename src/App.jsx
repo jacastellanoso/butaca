@@ -6,12 +6,13 @@ import FavoritosProvider from './context/FavoritosProvider.jsx'
 import { useRuta } from './hooks/useRuta.js'
 import { useSesion } from './hooks/useSesion.js'
 import { fijarPerfilActivo } from './lib/perfilActivo.js'
-import { reemplazarHash } from './lib/rutas.js'
+import { navegar, reemplazarRuta, RUTAS_PUBLICAS } from './lib/rutas.js'
 import { cerrarSesion } from './lib/supabase.js'
 import Dashboard from './pages/Dashboard/Dashboard.jsx'
 import GaleriaPrincipal from './pages/Galeria/GaleriaPrincipal.jsx'
 import Grupos from './pages/Grupos/Grupos.jsx'
 import Main from './pages/Main/Main.jsx'
+import PaginaLegal from './pages/Legal/PaginaLegal.jsx'
 import Perfiles from './pages/Perfiles/Perfiles.jsx'
 import RostroDeteccion from './pages/Rostro/RostroDeteccion.jsx'
 import RegistroNombre from './pages/RegistroNombre/RegistroNombre.jsx'
@@ -42,7 +43,7 @@ import './App.css'
 function PantallaSesion({ error, onRetry, onSalir, mensaje = 'Verificando tu sesión…' }) {
   return (
     <main className="app-splash" aria-busy={!error}>
-      <img className="app-splash__logo" src={logoButaca} alt="Butaca" />
+      <img draggable={false} className="app-splash__logo" src={logoButaca} alt="Butaca" />
       {error ? (
         <div className="app-splash__error" role="alert">
           <p>{error}</p>
@@ -110,7 +111,7 @@ function App() {
 
   // Después del login (o con una sesión previa válida) se sale de la bienvenida.
   useEffect(() => {
-    if (autenticado && !necesitaNombre && ruta.pantalla === 'inicio') reemplazarHash('#perfiles')
+    if (autenticado && !necesitaNombre && ruta.pantalla === 'inicio') reemplazarRuta('/perfiles')
   }, [autenticado, necesitaNombre, ruta.pantalla])
 
   const activarPerfil = useCallback((perfilId) => {
@@ -120,7 +121,7 @@ function App() {
 
   const seleccionarPerfil = useCallback((perfilId) => {
     activarPerfil(perfilId)
-    window.location.hash = '#galeria'
+    navegar('/galeria')
   }, [activarPerfil])
 
   const crear = useCallback(async (datos) => {
@@ -158,9 +159,11 @@ function App() {
     } catch {
       // Sin almacenamiento no hay nada que limpiar.
     }
-    reemplazarHash('')
+    reemplazarRuta('/')
   }, [])
 
+  // Privacidad y Términos se leen con o sin sesión (y sin esperar a validarla).
+  if (RUTAS_PUBLICAS.includes(ruta.pantalla)) return <PaginaLegal tipo={ruta.pantalla} />
   if (sesion.estado === 'cargando') return <PantallaSesion mensaje={sesion.mensaje ?? undefined} />
   if (sesion.estado === 'error') {
     return <PantallaSesion error={sesion.mensaje} onRetry={sesion.reintentar} onSalir={sesion.usuario ? salir : undefined} />
@@ -171,7 +174,7 @@ function App() {
     const guardarNombre = async (nombre, apellido, edad) => {
       const actualizado = await actualizarNombreUsuario(nombre, apellido, edad)
       setRegistroActualizado({ usuarioId, valor: actualizado })
-      reemplazarHash('#perfiles')
+      reemplazarRuta('/perfiles')
     }
     return <RegistroNombre onGuardar={guardarNombre} onCerrarSesion={salir} />
   }

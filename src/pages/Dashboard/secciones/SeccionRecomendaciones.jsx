@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import { useDetalleContenido } from '../../../hooks/useDetalleContenido.js'
-import { hashDeRecomendaciones } from '../../../lib/rutas.js'
+import { rutaDeRecomendaciones } from '../../../lib/rutas.js'
 import { completarGeneros } from '../../../services/detallesCatalogo.js'
 import { obtenerAnimo, obtenerUltimoAnimo } from '../../../services/emociones.js'
 import { obtenerRecomendaciones } from '../../../services/recomendaciones.js'
@@ -21,9 +21,9 @@ const TIPOS = [
 
 /**
  * Resuelve de dónde sale el ánimo:
- * - #recomendaciones/animo/:id → registro propio guardado con consentimiento.
- * - #recomendaciones/emocion/:e → emoción elegida o recién detectada, sin guardar.
- * - #recomendaciones → último ánimo guardado; si no hay, se invita a escanear.
+ * - /recomendaciones/animo/:id → registro propio guardado con consentimiento.
+ * - /recomendaciones/emocion/:e → emoción elegida o recién detectada, sin guardar.
+ * - /recomendaciones → último ánimo guardado; si no hay, se invita a escanear.
  */
 async function resolverOrigen({ emocion, animoId }) {
   if (animoId) {
@@ -111,7 +111,7 @@ function SeccionRecomendaciones({ emocion, animoId }) {
           <h2 id="dash-recomendaciones-title">Mis recomendaciones</h2>
           <p>Películas y series reales de TMDB elegidas por el servicio de recomendaciones según tu ánimo.</p>
         </div>
-        <a className="dash-button dash-button--primary" href="#rostro">Escanear de nuevo</a>
+        <a className="dash-button dash-button--primary" href="/rostro">Escanear de nuevo</a>
       </div>
 
       {emocionActual && (
@@ -136,7 +136,7 @@ function SeccionRecomendaciones({ emocion, animoId }) {
             <a
               key={clave}
               className="rec-chip"
-              href={hashDeRecomendaciones({ emocion: clave })}
+              href={rutaDeRecomendaciones({ emocion: clave })}
               aria-current={origen?.tipo === 'emocion' && emocionActual === clave ? 'true' : undefined}
             >
               <i style={{ background: COLORES_EMOCION[clave] }} aria-hidden="true" />
@@ -168,7 +168,7 @@ function SeccionRecomendaciones({ emocion, animoId }) {
           estado="empty"
           titulo="Todavía no sabemos cómo te sentís"
           mensaje="Escaneá tu rostro o elegí una emoción arriba para recibir recomendaciones."
-          accion={<a className="dash-button dash-button--primary" href="#rostro">Ir al escáner</a>}
+          accion={<a className="dash-button dash-button--primary" href="/rostro">Ir al escáner</a>}
         />
       )}
       {estado === 'ready' && resultados.length === 0 && (
