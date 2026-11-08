@@ -12,18 +12,19 @@ const historialSelect = {
 }
 
 export const historialService = {
-  async registrar(usuarioId, datos) {
+  async registrar(usuarioId, perfilId, datos) {
     return prisma.historialRecomendacion.create({
       data: {
         usuarioId,
+        perfilId,
         ...datos,
       },
       select: historialSelect,
     })
   },
 
-  async listar(usuarioId, { pagina, limite, emocion, tipo, desde, hasta, orden }) {
-    const where = { usuarioId }
+  async listar(usuarioId, perfilId, { pagina, limite, emocion, tipo, desde, hasta, orden }) {
+    const where = { usuarioId, perfilId }
     if (emocion) where.emocion = emocion
     if (tipo) where.tipo = tipo
     if (desde || hasta) {
@@ -54,11 +55,12 @@ export const historialService = {
     }
   },
 
-  async eliminar(usuarioId, id) {
+  async eliminar(usuarioId, perfilId, id) {
     const resultado = await prisma.historialRecomendacion.deleteMany({
       where: {
         id,
         usuarioId,
+        perfilId,
       },
     })
 

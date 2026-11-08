@@ -1,8 +1,14 @@
+import { gruposService } from '../services/grupos.service.js'
 import { usuariosService } from '../services/usuarios.service.js'
 
 export async function sincronizarUsuario(req, res) {
   try {
     const usuario = await usuariosService.sincronizar(req.user)
+    // Invitaciones a grupos enviadas a este correo antes de que la cuenta existiera.
+    // Un fallo aquí no impide iniciar sesión: se reintenta en la próxima sincronización.
+    await gruposService.vincularInvitaciones(req.user).catch((fallo) => {
+      console.error(`[auth-service] No se pudieron vincular invitaciones: ${fallo?.code ?? 'sin código'}`)
+    })
     return res.status(200).json(usuario)
   } catch {
     // No enviar ni registrar el error de Prisma: podría contener datos privados.

@@ -5,11 +5,13 @@ import {
   listarHistorial,
   registrarHistorial,
 } from '../controllers/historial.controller.js'
+import { perfilActivo } from '../middlewares/perfilActivo.js'
 import { requireAuth } from '../middlewares/requireAuth.js'
 
 export const historialRouter = Router()
 
-historialRouter.use(requireAuth)
+// Favoritos e historial pertenecen al perfil activo, no a toda la cuenta.
+historialRouter.use(requireAuth, perfilActivo)
 
 historialRouter.get('/', listarHistorial)
 historialRouter.post('/', registrarHistorial)

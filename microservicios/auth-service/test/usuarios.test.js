@@ -49,6 +49,10 @@ const update = mock.fn(async ({ where, data, select }) => {
   return seleccionar(usuario, select)
 })
 prisma.usuario = { upsert, findUnique, update }
+// Sin invitaciones a grupos pendientes para estos correos (se prueban en social.test.js).
+const originalInvitacionGrupo = prisma.invitacionGrupo
+const invitacionesPendientes = mock.fn(async () => [])
+prisma.invitacionGrupo = { findMany: invitacionesPendientes }
 const { app } = await import('../src/app.js')
 let server
 let baseUrl
@@ -76,6 +80,7 @@ after(async () => {
   } finally {
     getUser.mock.restore()
     prisma.usuario = originalUsuario
+    prisma.invitacionGrupo = originalInvitacionGrupo
   }
 })
 

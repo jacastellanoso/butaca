@@ -13,6 +13,7 @@ const upstreamServer = createServer((req, res) => {
       method: req.method,
       url: req.url,
       authorization: req.headers.authorization,
+      ...(req.headers['x-butaca-perfil'] && { perfil: req.headers['x-butaca-perfil'] }),
       body: Buffer.concat(chunks).toString('utf8'),
     }
 
@@ -181,4 +182,26 @@ test('las rutas de favoritos e historial llegan a library-service con su autoriz
     authorization: 'Bearer token-de-prueba',
     body: '',
   })
+})
+test('grupos, invitaciones y notificaciones se dirigen a auth-service', async () => {
+  // En esta suite auth-service apunta a un puerto cerrado: el 502 identifica el destino.
+  for (const [method, ruta] of [
+    ['GET', '/api/grupos'],
+    ['POST', '/api/grupos/00000000-0000-4000-8000-000000000001/recomendaciones'],
+    ['PUT', '/api/invitaciones/00000000-0000-4000-8000-000000000002'],
+    ['PATCH', '/api/notificaciones/00000000-0000-4000-8000-000000000003'],
+  ]) {
+    const res = await fetch(`${baseUrl}${ruta}`, { method, headers: { Authorization: 'Bearer token-de-prueba' } })
+    assert.equal(res.status, 502, ruta)
+    assert.equal((await res.json()).service, 'auth-service', ruta)
+  }
+})
+
+test('el encabezado del perfil activo se reenvía sin cambios al microservicio', async () => {
+  const perfil = '0a000000-0000-4000-8000-00000000000a'
+  const res = await fetch(`${baseUrl}/api/favoritos`, {
+    headers: { Authorization: 'Bearer token-de-prueba', 'X-Butaca-Perfil': perfil },
+  })
+  assert.equal(res.status, 200)
+  assert.equal(receivedRequest.perfil, perfil)
 })

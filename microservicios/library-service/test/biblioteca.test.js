@@ -36,9 +36,10 @@ const uuid = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`
 
 function cumple(registro, where = {}) {
   return Object.entries(where).every(([campo, condicion]) => {
-    if (campo === 'usuarioId_tmdbId_tipo' && condicion && typeof condicion === 'object') {
+    if (campo === 'usuarioId_perfilId_tmdbId_tipo' && condicion && typeof condicion === 'object') {
       return (
         registro.usuarioId === condicion.usuarioId &&
+        registro.perfilId === condicion.perfilId &&
         registro.tmdbId === condicion.tmdbId &&
         registro.tipo === condicion.tipo
       )
@@ -84,7 +85,7 @@ const favCreate = mock.fn(async ({ data, select }) => {
     throw Object.assign(new Error(`Foreign key constraint violated: ${SECRETO}`), { code: 'P2003' })
   }
   const duplicado = favoritos.find(
-    (r) => r.usuarioId === data.usuarioId && r.tmdbId === data.tmdbId && r.tipo === data.tipo,
+    (r) => r.usuarioId === data.usuarioId && r.perfilId === data.perfilId && r.tmdbId === data.tmdbId && r.tipo === data.tipo,
   )
   if (duplicado) {
     throw Object.assign(new Error(`Unique constraint failed: ${SECRETO}`), { code: 'P2002' })
@@ -142,6 +143,22 @@ const histDeleteMany = mock.fn(async ({ where }) => {
   return { count: inicial - historial.length }
 })
 
+// Perfiles de cada cuenta: principal y uno secundario de usuario-a.
+const PERFILES = [
+  { id: '0a000000-0000-4000-8000-00000000000a', propietarioId: 'usuario-a', esPrincipal: true },
+  { id: '0a000000-0000-4000-8000-0000000000a2', propietarioId: 'usuario-a', esPrincipal: false },
+  { id: '0b000000-0000-4000-8000-00000000000b', propietarioId: 'usuario-b', esPrincipal: true },
+]
+const PRINCIPAL = { 'usuario-a': PERFILES[0].id, 'usuario-b': PERFILES[2].id }
+const SECUNDARIO_A = PERFILES[1].id
+const originalPerfil = prisma.perfil
+prisma.perfil = {
+  findFirst: mock.fn(async ({ where }) => {
+    const perfil = PERFILES.find((p) => Object.entries(where).every(([k, v]) => p[k] === v))
+    return perfil ? { id: perfil.id } : null
+  }),
+}
+
 const originalFavorito = prisma.favorito
 const originalHistorial = prisma.historialRecomendacion
 
@@ -188,6 +205,7 @@ function semillaFavorito(usuarioId, tmdbId, tipo, titulo, fecha, extra = {}) {
   return {
     id: uuid(++secuencia),
     usuarioId,
+    perfilId: PRINCIPAL[usuarioId],
     tmdbId,
     tipo,
     titulo,
@@ -201,6 +219,7 @@ function semillaHistorial(usuarioId, emocion, tmdbId, tipo, titulo, fecha, extra
   return {
     id: uuid(++secuencia),
     usuarioId,
+    perfilId: PRINCIPAL[usuarioId],
     emocion,
     tmdbId,
     tipo,
@@ -249,6 +268,7 @@ after(async () => {
     getUser.mock.restore()
     prisma.favorito = originalFavorito
     prisma.historialRecomendacion = originalHistorial
+    prisma.perfil = originalPerfil
   }
 })
 
@@ -400,6 +420,7 @@ test('POST /api/favoritos crea un favorito nuevo con 201 usando el usuario del t
   assert.equal(favCreate.mock.callCount(), 1)
   const { data } = favCreate.mock.calls[0].arguments[0]
   assert.equal(data.usuarioId, 'usuario-a')
+  assert.equal(data.perfilId, PRINCIPAL['usuario-a'])
 })
 
 test('POST /api/favoritos es idempotente y responde 200 si (usuarioId, tmdbId, tipo) ya existía', async () => {
@@ -527,7 +548,7 @@ test('GET /api/favoritos devuelve solo los favoritos del usuario autenticado del
   assert.ok(body.resultados.every((r) => !('usuarioId' in r)))
 
   const { where, orderBy } = favFindMany.mock.calls[0].arguments[0]
-  assert.deepEqual(where, { usuarioId: 'usuario-a' })
+  assert.deepEqual(where, { usuarioId: 'usuario-a', perfilId: PRINCIPAL['usuario-a'] })
   assert.deepEqual(orderBy, [{ creadoEn: 'desc' }, { id: 'desc' }])
 })
 
@@ -720,7 +741,7 @@ test('GET /api/historial devuelve únicamente los registros del usuario autentic
   assert.ok(body.resultados.every((r) => !('usuarioId' in r)))
 
   const { where, orderBy } = histFindMany.mock.calls[0].arguments[0]
-  assert.deepEqual(where, { usuarioId: 'usuario-a' })
+  assert.deepEqual(where, { usuarioId: 'usuario-a', perfilId: PRINCIPAL['usuario-a'] })
   assert.deepEqual(orderBy, [{ creadoEn: 'desc' }, { id: 'desc' }])
 })
 
@@ -835,4 +856,40 @@ test('GET /health es público y no invoca Supabase ni Prisma', async () => {
   assert.equal((await res.json()).status, 'ok')
   assert.equal(getUser.mock.callCount(), 0)
   sinLlamadasAPrisma()
+})
+// ── Perfiles de una misma cuenta ─────────────────────────────────────────
+
+test('favoritos e historial se separan por perfil dentro de la misma cuenta', async () => {
+  const otroPerfil = { 'X-Butaca-Perfil': SECUNDARIO_A }
+  const existente = favoritos.find((f) => f.usuarioId === 'usuario-a')
+
+  // El mismo título puede ser favorito en otro perfil de la cuenta: se crea uno nuevo.
+  const res = await consultar('favoritos', 'POST', {
+    headers: otroPerfil,
+    body: { tmdbId: existente.tmdbId, tipo: existente.tipo, titulo: existente.titulo },
+  })
+  assert.equal(res.status, 201)
+  const nuevo = await res.json()
+  assert.notEqual(nuevo.id, existente.id)
+
+  const delSecundario = await (await consultar('favoritos', 'GET', { headers: otroPerfil })).json()
+  assert.deepEqual(delSecundario.resultados.map((f) => f.id), [nuevo.id])
+  const delPrincipal = await (await consultar('favoritos', 'GET')).json()
+  assert.ok(!delPrincipal.resultados.some((f) => f.id === nuevo.id))
+
+  // Un perfil no puede borrar favoritos de otro perfil de la misma cuenta.
+  assert.equal((await consultar('favoritos', 'DELETE', { ruta: `/${existente.id}`, headers: otroPerfil })).status, 404)
+  assert.ok(favoritos.some((f) => f.id === existente.id))
+
+  const historialSecundario = await (await consultar('historial', 'GET', { headers: otroPerfil })).json()
+  assert.deepEqual(historialSecundario.resultados, [])
+})
+
+test('un perfil de otra cuenta se rechaza con 403 en favoritos e historial', async () => {
+  for (const recurso of ['favoritos', 'historial']) {
+    const res = await consultar(recurso, 'GET', { headers: { 'X-Butaca-Perfil': PRINCIPAL['usuario-b'] } })
+    assert.equal(res.status, 403)
+  }
+  assert.equal(favFindMany.mock.callCount(), 0)
+  assert.equal(histFindMany.mock.callCount(), 0)
 })

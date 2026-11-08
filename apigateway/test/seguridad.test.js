@@ -72,6 +72,19 @@ test('cors: el preflight permitido declara métodos y encabezados, y no llega al
   assert.equal(falso.recibidas.length, antes)
 })
 
+test('cors: permite el encabezado del perfil activo', async () => {
+  const res = await fetch(`${base}/api/favoritos`, {
+    method: 'OPTIONS',
+    headers: {
+      Origin: PERMITIDO,
+      'Access-Control-Request-Method': 'GET',
+      'Access-Control-Request-Headers': 'authorization,x-butaca-perfil',
+    },
+  })
+  assert.equal(res.status, 204)
+  assert.match(res.headers.get('access-control-allow-headers'), /X-Butaca-Perfil/i)
+})
+
 test('cors: permite PUT para actualizar nombre y apellido', async () => {
   const res = await fetch(`${base}/api/usuarios`, {
     method: 'OPTIONS',

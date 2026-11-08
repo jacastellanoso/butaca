@@ -11,9 +11,11 @@ function elementoValido(item, tipo) {
     item.esDemostracion === false
 }
 
-export async function obtenerRecomendaciones({ emocion, animoId, tipo }, { consultar, config, authorization }) {
+export async function obtenerRecomendaciones({ emocion, animoId, tipo }, { consultar, config, authorization, perfil }) {
   if (animoId) {
-    const animo = await consultar(config.emotionsServiceUrl, `/api/animos/${animoId}`, authorization, true)
+    // El ánimo debe pertenecer al perfil activo: emotions-service lo verifica con X-Butaca-Perfil.
+    const extra = perfil ? { 'X-Butaca-Perfil': perfil } : {}
+    const animo = await consultar(config.emotionsServiceUrl, `/api/animos/${animoId}`, authorization, true, extra)
     if (!animo || typeof animo.id !== 'string' || animo.id.toLowerCase() !== animoId.toLowerCase() || !esEmocionValida(animo.emocion)) {
       throw new DependencyError(502, 'Respuesta inválida del servicio de emociones.')
     }

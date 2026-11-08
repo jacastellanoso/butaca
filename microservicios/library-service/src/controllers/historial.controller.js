@@ -19,7 +19,7 @@ export async function listarHistorial(req, res) {
   }
 
   try {
-    const respuesta = await historialService.listar(req.user.id, datos)
+    const respuesta = await historialService.listar(req.user.id, req.perfilId, datos)
     return res.json(respuesta)
   } catch (fallo) {
     registrarFallo('consultar', fallo)
@@ -37,7 +37,7 @@ export async function registrarHistorial(req, res) {
   }
 
   try {
-    const registro = await historialService.registrar(req.user.id, datos)
+    const registro = await historialService.registrar(req.user.id, req.perfilId, datos)
     return res.status(201).json(registro)
   } catch (fallo) {
     if (fallo?.code === 'P2003') {
@@ -61,7 +61,7 @@ export async function eliminarHistorial(req, res) {
   }
 
   try {
-    const eliminado = await historialService.eliminar(req.user.id, req.params.id)
+    const eliminado = await historialService.eliminar(req.user.id, req.perfilId, req.params.id)
     if (!eliminado) {
       return res.status(404).json(noEncontrado)
     }

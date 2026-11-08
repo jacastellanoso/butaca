@@ -5,9 +5,9 @@ import { env } from './env.js'
 export const services = [
   {
     name: 'auth-service',
-    description: 'Sesiones de Supabase e información del usuario',
+    description: 'Sesiones, usuarios, perfiles, grupos, invitaciones y notificaciones',
     target: env.authServiceUrl,
-    paths: ['/api/sesiones', '/api/usuarios', '/api/perfiles', '/api/invitaciones'],
+    paths: ['/api/sesiones', '/api/usuarios', '/api/perfiles', '/api/invitaciones', '/api/grupos', '/api/notificaciones'],
   },
   {
     name: 'emotions-service',

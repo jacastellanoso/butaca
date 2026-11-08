@@ -76,6 +76,22 @@ const findFirst = mock.fn(async ({ where, select }) => {
 // El delegado de Prisma es un Proxy: se sustituye completo, como en auth-service.
 const originalAnimo = prisma.animo
 prisma.animo = { create, findMany, count, findFirst }
+
+// Perfiles de cada cuenta: principal y uno secundario de usuario-a.
+const PERFILES = [
+  { id: '0a000000-0000-4000-8000-00000000000a', propietarioId: 'usuario-a', esPrincipal: true },
+  { id: '0a000000-0000-4000-8000-0000000000a2', propietarioId: 'usuario-a', esPrincipal: false },
+  { id: '0b000000-0000-4000-8000-00000000000b', propietarioId: 'usuario-b', esPrincipal: true },
+]
+const PRINCIPAL = { 'usuario-a': PERFILES[0].id, 'usuario-b': PERFILES[2].id }
+const SECUNDARIO_A = PERFILES[1].id
+const originalPerfil = prisma.perfil
+prisma.perfil = {
+  findFirst: mock.fn(async ({ where }) => {
+    const perfil = PERFILES.find((p) => Object.entries(where).every(([k, v]) => p[k] === v))
+    return perfil ? { id: perfil.id } : null
+  }),
+}
 const operaciones = [create, findMany, count, findFirst]
 const { app } = await import('../src/app.js')
 
@@ -89,7 +105,7 @@ before(async () => {
 
 function semilla(usuarioId, emocion, fecha, extra = {}) {
   return {
-    id: uuid(++secuencia), usuarioId, emocion, confianza: 0.8, origen: 'deteccion',
+    id: uuid(++secuencia), usuarioId, perfilId: PRINCIPAL[usuarioId], emocion, confianza: 0.8, origen: 'deteccion',
     consentimientoHistorial: true, consentimientoVersion: CONSENTIMIENTO_HISTORIAL_VERSION,
     consentimientoEn: new Date(fecha), creadoEn: new Date(fecha), ...extra,
   }
@@ -122,6 +138,7 @@ after(async () => {
   } finally {
     getUser.mock.restore()
     prisma.animo = originalAnimo
+    prisma.perfil = originalPerfil
   }
 })
 
@@ -221,9 +238,11 @@ test('POST autorizado guarda con el usuario del token y evidencia de consentimie
   const { data } = create.mock.calls[0].arguments[0]
   assert.deepEqual(Object.keys(data).sort(), [
     'confianza', 'consentimientoEn', 'consentimientoHistorial', 'consentimientoVersion',
-    'emocion', 'origen', 'usuarioId',
+    'emocion', 'origen', 'perfilId', 'usuarioId',
   ])
   assert.equal(data.usuarioId, 'usuario-a')
+  // Sin encabezado X-Butaca-Perfil se guarda en el perfil principal de la cuenta.
+  assert.equal(data.perfilId, PRINCIPAL['usuario-a'])
   assert.ok(data.consentimientoEn instanceof Date)
 })
 
@@ -326,7 +345,7 @@ test('GET devuelve solo el historial autorizado propio, del más reciente al má
   assert.ok(body.resultados.every((r) => !('usuarioId' in r)))
 
   const { where, orderBy } = findMany.mock.calls[0].arguments[0]
-  assert.deepEqual(where, { usuarioId: 'usuario-a', consentimientoHistorial: true })
+  assert.deepEqual(where, { usuarioId: 'usuario-a', perfilId: PRINCIPAL['usuario-a'], consentimientoHistorial: true })
   assert.deepEqual(orderBy, [{ creadoEn: 'desc' }, { id: 'desc' }])
 })
 
@@ -402,7 +421,7 @@ test('cada usuario ve exclusivamente sus registros aunque pida los de otro', asy
   const ajeno = await consultar('GET', { token: 'token-b', ruta: `/${uuid(1)}` })
   assert.equal(ajeno.status, 404)
   assert.deepEqual(findFirst.mock.calls[0].arguments[0].where, {
-    id: uuid(1), usuarioId: 'usuario-b', consentimientoHistorial: true,
+    id: uuid(1), usuarioId: 'usuario-b', perfilId: PRINCIPAL['usuario-b'], consentimientoHistorial: true,
   })
 })
 
@@ -412,6 +431,32 @@ test('un registro guardado por un usuario no aparece en el historial de otro', a
   assert.ok(!historialA.resultados.some((r) => r.id === creado.id))
   assert.equal((await consultar('GET', { token: 'token-a', ruta: `/${creado.id}` })).status, 404)
   assert.equal((await consultar('GET', { token: 'token-b', ruta: `/${creado.id}` })).status, 200)
+})
+
+// ── Perfiles de una misma cuenta ─────────────────────────────────────────
+
+test('cada perfil de la cuenta tiene su propio historial emocional', async () => {
+  const otroPerfil = { 'X-Butaca-Perfil': SECUNDARIO_A }
+  const creado = await (await consultar('POST', { body: valido, headers: otroPerfil })).json()
+  assert.equal(create.mock.calls[0].arguments[0].data.perfilId, SECUNDARIO_A)
+
+  const delSecundario = await (await consultar('GET', { headers: otroPerfil })).json()
+  assert.deepEqual(delSecundario.resultados.map((r) => r.id), [creado.id])
+
+  // El perfil principal no ve el registro del secundario, y viceversa.
+  const delPrincipal = await (await consultar('GET')).json()
+  assert.ok(!delPrincipal.resultados.some((r) => r.id === creado.id))
+  assert.equal(delPrincipal.resultados.length, 3)
+  assert.equal((await consultar('GET', { ruta: `/${creado.id}` })).status, 404)
+  assert.equal((await consultar('GET', { ruta: `/${uuid(1)}`, headers: otroPerfil })).status, 404)
+})
+
+test('un perfil de otra cuenta o con formato inválido se rechaza sin consultar ánimos', async () => {
+  const ajeno = await consultar('GET', { headers: { 'X-Butaca-Perfil': PRINCIPAL['usuario-b'] } })
+  assert.equal(ajeno.status, 403)
+  const invalido = await consultar('POST', { body: valido, headers: { 'X-Butaca-Perfil': 'perfil-1' } })
+  assert.equal(invalido.status, 400)
+  sinLlamadasAPrisma()
 })
 
 // ── Errores de base de datos ─────────────────────────────────────────────
