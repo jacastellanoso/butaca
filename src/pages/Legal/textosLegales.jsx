@@ -1,26 +1,43 @@
-// Borradores de la Política de privacidad y de los Términos y condiciones.
+// Política de privacidad y Términos y condiciones de Butaca (proyecto académico).
 //
-// Describen lo que la aplicación hace HOY según el código (pf25). No son
-// textos aprobados: todo lo marcado con <Pendiente> debe completarse o
-// confirmarse en la revisión legal antes de publicarlos como definitivos.
-// No se inventan razón social, correos, plazos de conservación ni
-// certificaciones de seguridad.
+// Describen lo que la aplicación hace HOY según el código. No identifican a
+// una sociedad ni inventan nombres, correos o direcciones: el responsable es
+// el equipo del proyecto y el canal de contacto es su repositorio público.
+// Revisión interna pendiente (no se publica aquí; ver IARECURSO.md):
+// - identificar a la persona o institución responsable si el proyecto pasa a
+//   uso real fuera del ámbito académico, con un canal privado de contacto;
+// - la edad mínima de 18 años es una política propuesta del proyecto: el
+//   registro todavía acepta edades desde 5 años (ver IARECURSO.md).
 
-import Pendiente from './Pendiente.jsx'
+import Contacto from './Contacto.jsx'
 
 export const ACTUALIZADO = '8 de noviembre de 2026'
+
+export const INTRO = {
+  privacidad: (
+    <>
+      Butaca es un proyecto académico desarrollado por un equipo de estudiantes. Esta política explica qué información
+      usa la aplicación, para qué y qué podés hacer con ella. Describe el funcionamiento actual de Butaca.
+    </>
+  ),
+  terminos: (
+    <>
+      Butaca es un proyecto académico desarrollado por un equipo de estudiantes con fines de aprendizaje y
+      demostración. Estos términos regulan el uso de la aplicación tal como funciona actualmente.
+    </>
+  ),
+}
 
 export const PRIVACIDAD = [
   {
     id: 'responsable',
     titulo: 'Quién es responsable',
     contenido: (
-      <>
-        <p>
-          Butaca es una aplicación web para descubrir películas y series según cómo te sentís. El responsable del
-          tratamiento de tus datos es <Pendiente>nombre o razón social del responsable y país</Pendiente>.
-        </p>
-      </>
+      <p>
+        El responsable de Butaca y del tratamiento de la información descrita en esta política es el equipo de estudiantes
+        que desarrolla el proyecto. Butaca no es un servicio comercial ni pertenece a una empresa. Para cualquier consulta
+        podés contactar al equipo <Contacto />.
+      </p>
     ),
   },
   {
@@ -30,13 +47,14 @@ export const PRIVACIDAD = [
       <>
         <p>Según cómo uses Butaca, tratamos estos datos:</p>
         <ul>
-          <li><strong>Datos de tu cuenta:</strong> el identificador y el correo electrónico que nos entrega Google o GitHub al iniciar sesión, y, si el proveedor los comparte, tu nombre público y la dirección de tu foto de perfil.</li>
+          <li><strong>Datos de tu cuenta:</strong> el identificador y el correo electrónico que nos entrega Google o GitHub al iniciar sesión y, si el proveedor los comparte, tu nombre público y la dirección de tu foto de perfil.</li>
           <li><strong>Datos de registro:</strong> el nombre, el apellido y la edad que escribís en «Queremos conocerte».</li>
           <li><strong>Perfiles:</strong> el nombre, el apellido y la edad de cada perfil que crees dentro de tu cuenta.</li>
-          <li><strong>Emociones guardadas:</strong> solo cuando lo autorizás, la emoción detectada, el nivel de confianza del análisis, su origen y la fecha.</li>
-          <li><strong>Actividad en Butaca:</strong> favoritos, historial de recomendaciones y las notificaciones que recibís.</li>
+          <li><strong>Emociones guardadas:</strong> solo cuando lo autorizás, la emoción resultante del análisis, su nivel de confianza, su origen y la fecha.</li>
+          <li><strong>Actividad en Butaca:</strong> favoritos, historial de recomendaciones y notificaciones.</li>
           <li><strong>Grupos:</strong> los grupos que creás o integrás, los correos que invitás y las recomendaciones que compartís.</li>
         </ul>
+        <p>Butaca no recopila datos de pago ni muestra publicidad.</p>
       </>
     ),
   },
@@ -45,51 +63,48 @@ export const PRIVACIDAD = [
     titulo: 'Uso de nombres, correos y perfiles',
     contenido: (
       <>
-        <p>Usamos tu correo para identificar tu cuenta y para vincular las invitaciones a grupos que te envíen a esa dirección.</p>
+        <p>Usamos tu correo para identificar tu cuenta y para vincular las invitaciones a grupos enviadas a esa dirección.</p>
         <p>
           El nombre de tu perfil se muestra dentro de la aplicación y, cuando participás en un grupo, lo ven las demás
           personas del grupo junto con lo que compartís. Las personas de tus grupos también pueden ver el correo con el que
           ingresaste.
         </p>
         <p>
-          Cada perfil de una cuenta tiene sus propios favoritos, historial, emociones y recomendaciones. Quien usa la
-          cuenta principal puede crear, editar y eliminar los perfiles adicionales.
+          Cada perfil de una cuenta tiene sus propios favoritos, historial, emociones y recomendaciones. La persona titular
+          de la cuenta puede crear, editar y eliminar los perfiles adicionales.
         </p>
       </>
     ),
   },
   {
     id: 'edad',
-    titulo: 'Tratamiento de la edad',
+    titulo: 'Edad y perfiles de menores',
     contenido: (
       <>
         <p>
-          Pedimos la edad (entre 5 y 120 años) de la cuenta y de cada perfil para ofrecer contenido apropiado para cada
-          etapa. Se guarda junto con el perfil y no se comparte con otras personas.
+          Para crear una cuenta propia en Butaca se requiere tener 18 años o más. Es la política del proyecto para el uso de
+          la aplicación.
         </p>
         <p>
-          Butaca admite perfiles de menores dentro de la cuenta de una persona adulta. <Pendiente>definir la edad mínima
-          para crear una cuenta propia y el mecanismo de consentimiento de madres, padres o tutores según la normativa
-          aplicable</Pendiente>.
+          La persona adulta titular de una cuenta puede crear perfiles para otras personas de su hogar, incluidos menores de
+          edad, y es responsable de su uso. Pedimos la edad de cada perfil para ofrecer contenido apropiado para su etapa;
+          se guarda junto con el perfil y no se comparte con otras personas.
         </p>
       </>
     ),
   },
   {
     id: 'camara',
-    titulo: 'Cámara y reconocimiento de emociones',
+    titulo: 'Cámara y análisis de expresiones',
     contenido: (
       <>
         <p>La cámara se usa solo cuando entrás en «Escanearme» y aceptás el permiso del navegador.</p>
         <ul>
-          <li>El análisis de la expresión facial se hace <strong>en tu propio navegador</strong>. Las imágenes y los fotogramas de la cámara <strong>no se envían</strong> a nuestros servidores ni se guardan.</li>
-          <li>El resultado es una de siete emociones (por ejemplo, alegría o tristeza) con un nivel de confianza. No identificamos personas ni creamos plantillas biométricas de tu rostro.</li>
-          <li>Ese resultado se guarda en tu historial solo si dejás marcada la autorización de guardado en esa pantalla. Si la desmarcás, el resultado se usa una sola vez para recomendarte títulos y no se guarda.</li>
+          <li>El análisis de la expresión facial se hace <strong>en tu propio navegador</strong>. Las imágenes y los fotogramas de la cámara <strong>no se envían</strong> a los servidores de Butaca ni se guardan.</li>
+          <li>Butaca <strong>no identifica a las personas</strong> ni realiza reconocimiento biométrico: no compara rostros ni crea plantillas de tu cara. Solo estima cuál de siete expresiones (por ejemplo, alegría o sorpresa) se parece más a la tuya y con qué confianza.</li>
+          <li>Ese resultado es una guía para recomendar películas y series, <strong>no un diagnóstico</strong> ni una evaluación de tu estado de ánimo o de tu salud.</li>
+          <li>El resultado se guarda en tu historial solo si dejás marcada la autorización de guardado en esa pantalla. Si la desmarcás, se usa una sola vez para recomendarte títulos y no se guarda.</li>
         </ul>
-        <p>
-          <Pendiente>la casilla de autorización aparece marcada de forma predeterminada; confirmar si debe empezar
-          desmarcada para cumplir con el consentimiento expreso requerido</Pendiente>.
-        </p>
       </>
     ),
   },
@@ -99,12 +114,12 @@ export const PRIVACIDAD = [
     contenido: (
       <>
         <p>
-          Guardamos tus favoritos y el historial de recomendaciones para mostrártelos y mejorar lo que te sugerimos. Las
-          recomendaciones se generan a partir de la emoción elegida o detectada y del catálogo de películas y series.
+          Guardamos tus favoritos y el historial de recomendaciones para mostrártelos cuando quieras consultarlos. Las
+          recomendaciones se eligen relacionando la emoción analizada o seleccionada con géneros de películas y series.
         </p>
         <p>
-          Para mostrarte recomendaciones recientes, el navegador también guarda una copia local en tu dispositivo. El
-          perfil que elegís se recuerda solo mientras la pestaña está abierta.
+          Tu navegador también guarda en tu dispositivo la sesión iniciada, algunas recomendaciones recientes y el perfil
+          elegido mientras la pestaña está abierta. Butaca no usa cookies de publicidad ni de seguimiento.
         </p>
       </>
     ),
@@ -113,14 +128,12 @@ export const PRIVACIDAD = [
     id: 'grupos',
     titulo: 'Grupos e intercambio de recomendaciones',
     contenido: (
-      <>
-        <ul>
-          <li>Podés invitar a otras personas escribiendo su correo. Si todavía no tienen cuenta, la invitación queda guardada y se vincula cuando ingresan con ese correo.</li>
-          <li>Lo que compartís en un grupo (título, mensaje opcional, nombre del perfil que compartió y fecha) lo ven las personas del grupo; si lo enviás a una sola persona, solo lo ven vos y esa persona.</li>
-          <li>Tus favoritos, tu historial y tus emociones <strong>no</strong> se comparten con los grupos: solo se comparte lo que elegís enviar.</li>
-          <li>Quien crea un grupo puede quitar integrantes o eliminar el grupo, y cualquier integrante puede salir.</li>
-        </ul>
-      </>
+      <ul>
+        <li>Podés invitar a otras personas escribiendo su correo. Si todavía no tienen cuenta, la invitación queda guardada y se vincula cuando ingresan con ese correo.</li>
+        <li>Lo que compartís en un grupo (título, mensaje opcional, nombre del perfil que compartió y fecha) lo ven las personas del grupo; si lo enviás a una sola persona, solo lo ven vos y esa persona.</li>
+        <li>Tus favoritos, tu historial y tus emociones <strong>no</strong> se comparten con los grupos: solo se comparte lo que elegís enviar.</li>
+        <li>Quien crea un grupo puede quitar integrantes o eliminar el grupo, y cualquier integrante puede salir.</li>
+      </ul>
     ),
   },
   {
@@ -135,7 +148,7 @@ export const PRIVACIDAD = [
           <li><strong>Render:</strong> aloja la aplicación y sus servicios.</li>
           <li><strong>The Movie Database (TMDB):</strong> provee la información y las imágenes de películas y series. Butaca no le envía tus datos personales.</li>
         </ul>
-        <p><Pendiente>confirmar ubicación de los servidores, transferencias internacionales y acuerdos de tratamiento con cada proveedor</Pendiente>.</p>
+        <p>Estos proveedores pueden procesar la información en servidores ubicados fuera de tu país.</p>
       </>
     ),
   },
@@ -145,12 +158,13 @@ export const PRIVACIDAD = [
     contenido: (
       <>
         <p>
-          Cada petición con datos personales exige una sesión válida, y cada servicio verifica que el perfil consultado
-          pertenezca a tu cuenta antes de entregar o guardar información. Las conexiones con la aplicación usan HTTPS.
+          La información se conserva mientras tu cuenta esté activa o hasta que solicites su eliminación. Cada petición con
+          datos personales exige una sesión válida, y cada servicio verifica que el perfil consultado pertenezca a tu cuenta
+          antes de entregar o guardar información. Las conexiones con la aplicación usan HTTPS.
         </p>
         <p>
-          Ningún sistema es completamente seguro: no podemos garantizar que la información nunca se vea afectada.
-          <Pendiente>plazo de conservación de los datos y procedimiento ante incidentes de seguridad</Pendiente>.
+          Ningún sistema es completamente seguro, por lo que no podemos garantizar que la información nunca se vea
+          afectada. Si detectás un problema de seguridad, avisanos <Contacto />.
         </p>
       </>
     ),
@@ -161,13 +175,13 @@ export const PRIVACIDAD = [
     contenido: (
       <>
         <p>
-          Podés acceder a tu información y corregirla desde la aplicación: editar tu nombre, apellido y edad en tus
+          Podés consultar y corregir tu información desde la aplicación: editar el nombre, el apellido y la edad de tus
           perfiles, quitar favoritos, borrar registros del historial de recomendaciones, eliminar perfiles adicionales y
           salir de grupos o eliminar los que creaste.
         </p>
         <p>
-          Según la normativa aplicable, también podés tener derecho a solicitar acceso, rectificación, oposición,
-          portabilidad o eliminación de tus datos. <Pendiente>normativa aplicable y plazos de respuesta</Pendiente>.
+          También podés pedir acceso a tus datos, su corrección o su eliminación. Atenderemos la solicitud en la medida en
+          que lo permitan las herramientas del proyecto.
         </p>
       </>
     ),
@@ -176,22 +190,19 @@ export const PRIVACIDAD = [
     id: 'eliminacion',
     titulo: 'Cómo solicitar la eliminación de tus datos',
     contenido: (
-      <>
-        <p>
-          Hoy la aplicación no tiene una opción para eliminar la cuenta completa ni las emociones guardadas. Para
-          solicitarlo, escribinos al contacto de privacidad indicando el correo con el que ingresás. Al eliminar una cuenta
-          se borran también sus perfiles, emociones, favoritos, historial, grupos propios y notificaciones.
-        </p>
-        <p><Pendiente>canal oficial de solicitud y plazo de atención</Pendiente>.</p>
-      </>
+      <p>
+        Hoy la aplicación no tiene una opción para eliminar la cuenta completa ni las emociones guardadas. Podés
+        solicitarlo <Contacto />. Al eliminar una cuenta se borran también sus perfiles, emociones, favoritos, historial,
+        grupos propios y notificaciones.
+      </p>
     ),
   },
   {
     id: 'contacto',
-    titulo: 'Contacto de privacidad',
+    titulo: 'Contacto',
     contenido: (
       <p>
-        Para consultas sobre esta política o sobre tus datos: <Pendiente>correo o formulario oficial de privacidad</Pendiente>.
+        Para consultas sobre esta política o sobre tus datos, contactá al equipo del proyecto <Contacto />.
       </p>
     ),
   },
@@ -200,8 +211,8 @@ export const PRIVACIDAD = [
     titulo: 'Cambios en esta política',
     contenido: (
       <p>
-        Si cambiamos esta política, publicaremos la nueva versión en esta página con su fecha de actualización.
-        <Pendiente>definir cómo se avisará de cambios importantes</Pendiente>.
+        Si cambiamos esta política, publicaremos la nueva versión en esta página con su fecha de actualización. Si el
+        cambio es importante, lo indicaremos también dentro de la aplicación.
       </p>
     ),
   },
@@ -213,10 +224,10 @@ export const TERMINOS = [
     titulo: 'Qué es Butaca',
     contenido: (
       <p>
-        Butaca es una aplicación web que recomienda películas y series según la emoción que elegís o que detecta el
-        análisis de tu expresión facial, y que permite guardar favoritos, administrar perfiles y compartir
-        recomendaciones en grupos. Al usar Butaca aceptás estos términos. El servicio es prestado por
-        <Pendiente>nombre o razón social del titular</Pendiente>.
+        Butaca es una aplicación web que recomienda películas y series según la expresión analizada con la cámara o la
+        emoción que elegís, y que permite guardar favoritos, administrar perfiles y compartir recomendaciones en grupos. Es
+        un proyecto académico sin fines comerciales, desarrollado y mantenido por un equipo de estudiantes. Al usar Butaca
+        aceptás estos términos.
       </p>
     ),
   },
@@ -226,9 +237,10 @@ export const TERMINOS = [
     contenido: (
       <ul>
         <li>Para usar Butaca iniciás sesión con una cuenta de Google o GitHub y completás tu nombre, apellido y edad.</li>
+        <li>Para crear una cuenta propia se requiere tener <strong>18 años o más</strong>.</li>
+        <li>La persona titular puede crear perfiles para otras personas de su hogar, incluidos menores de edad, y es responsable de su uso.</li>
         <li>Los datos que ingreses deben ser verdaderos y mantenerse actualizados.</li>
-        <li>Sos responsable de la actividad que ocurra en tu cuenta y en los perfiles que crees dentro de ella, incluidos los perfiles de menores a tu cargo.</li>
-        <li><Pendiente>edad mínima para crear una cuenta propia y reglas para perfiles de menores</Pendiente>.</li>
+        <li>Sos responsable de la actividad que ocurra en tu cuenta y en sus perfiles.</li>
       </ul>
     ),
   },
@@ -237,9 +249,9 @@ export const TERMINOS = [
     titulo: 'Responsabilidad de las personas usuarias',
     contenido: (
       <p>
-        Te comprometés a usar Butaca de buena fe, a respetar a las demás personas y a no usar la aplicación para fines
-        ilegales o que afecten a terceros. El análisis de emociones es una herramienta orientativa para recomendar
-        contenido: no es un diagnóstico ni una evaluación psicológica o médica.
+        Te comprometés a usar Butaca de buena fe, a respetar a las demás personas y a no usarla para fines ilegales o que
+        afecten a terceros. El análisis de expresiones es una herramienta orientativa para recomendar contenido: no es un
+        diagnóstico ni una evaluación psicológica o médica, y no debe usarse para tomar decisiones sobre la salud.
       </p>
     ),
   },
@@ -262,7 +274,7 @@ export const TERMINOS = [
       <p>
         La información, las sinopsis y las imágenes de películas y series provienen de The Movie Database (TMDB). Butaca
         utiliza la API de TMDB, pero no está respaldada ni certificada por TMDB. No garantizamos que esa información sea
-        completa o exacta, ni la disponibilidad de los títulos en plataformas de streaming. Las recomendaciones son
+        completa o exacta ni la disponibilidad de los títulos en plataformas de streaming. Las recomendaciones son
         sugerencias y no implican ninguna obligación de compra o suscripción.
       </p>
     ),
@@ -276,8 +288,8 @@ export const TERMINOS = [
         <ul>
           <li>Acceder o intentar acceder a cuentas, perfiles o datos de otras personas.</li>
           <li>Eludir las medidas de seguridad, sobrecargar los servicios o automatizar su uso de forma abusiva.</li>
-          <li>Copiar, revender o explotar comercialmente el servicio sin autorización.</li>
-          <li>Usar la cámara o el análisis de emociones con otra persona sin su conocimiento y consentimiento.</li>
+          <li>Usar Butaca con fines comerciales o revender el servicio.</li>
+          <li>Usar la cámara o el análisis de expresiones con otra persona sin su conocimiento y consentimiento.</li>
         </ul>
       </>
     ),
@@ -287,10 +299,10 @@ export const TERMINOS = [
     titulo: 'Propiedad intelectual',
     contenido: (
       <p>
-        El nombre, el logo, el diseño y el código de Butaca pertenecen a sus titulares <Pendiente>titularidad y licencia
-        del proyecto</Pendiente>. Las marcas, los títulos y las imágenes de películas y series pertenecen a sus
-        respectivos propietarios. Los mensajes que escribís siguen siendo tuyos; nos permitís mostrarlos a las personas
-        con las que los compartís.
+        El nombre, el logo, el diseño y el código de Butaca fueron creados por el equipo del proyecto como parte de su
+        trabajo académico. Las marcas, los títulos y las imágenes de películas y series pertenecen a sus respectivos
+        propietarios. Los mensajes que escribís siguen siendo tuyos; nos permitís mostrarlos a las personas con las que los
+        compartís.
       </p>
     ),
   },
@@ -299,9 +311,10 @@ export const TERMINOS = [
     titulo: 'Disponibilidad y cambios del servicio',
     contenido: (
       <p>
-        Butaca puede tener interrupciones o demoras; por ejemplo, el primer ingreso después de un tiempo sin uso puede
-        tardar mientras se activan los servicios. Podemos modificar, suspender o discontinuar funciones. Si cambiamos
-        estos términos, publicaremos la nueva versión en esta página con su fecha.
+        Por ser un proyecto académico, Butaca puede tener interrupciones o demoras; por ejemplo, el primer ingreso después de
+        un tiempo sin uso puede tardar mientras se activan los servicios. El equipo puede modificar, suspender o
+        discontinuar funciones, o la aplicación completa, por ejemplo al finalizar el proyecto. Si cambiamos estos términos,
+        publicaremos la nueva versión en esta página con su fecha.
       </p>
     ),
   },
@@ -310,10 +323,10 @@ export const TERMINOS = [
     titulo: 'Limitación de responsabilidad',
     contenido: (
       <p>
-        Butaca se ofrece «tal como está». En la medida permitida por la ley, no somos responsables por daños indirectos
-        derivados del uso del servicio, de la información de terceros o de la imposibilidad temporal de usarlo. Nada de
-        esto limita los derechos que la ley te reconoce como persona consumidora. <Pendiente>revisión de esta cláusula según
-        la jurisdicción aplicable</Pendiente>.
+        Butaca se ofrece «tal como está», sin garantías de funcionamiento continuo ni de resultados. En la medida permitida
+        por la normativa aplicable, el equipo del proyecto no es responsable por daños derivados del uso de la aplicación,
+        de la información de terceros o de la imposibilidad temporal de usarla. Nada de lo anterior limita los derechos que
+        la ley te reconoce.
       </p>
     ),
   },
@@ -322,7 +335,7 @@ export const TERMINOS = [
     titulo: 'Suspensión y baja',
     contenido: (
       <p>
-        Podemos suspender el acceso de quien incumpla estos términos. Podés dejar de usar Butaca cuando quieras y
+        El equipo puede suspender el acceso de quien incumpla estos términos. Podés dejar de usar Butaca cuando quieras y
         solicitar la eliminación de tu cuenta como se explica en la Política de privacidad.
       </p>
     ),
@@ -332,10 +345,10 @@ export const TERMINOS = [
     titulo: 'Contacto y disposiciones generales',
     contenido: (
       <>
-        <p>Consultas sobre estos términos: <Pendiente>correo o canal oficial de contacto</Pendiente>.</p>
+        <p>Para consultas sobre estos términos podés contactar al equipo del proyecto <Contacto />.</p>
         <p>
-          Estos términos se rigen por las leyes de <Pendiente>país o jurisdicción</Pendiente>. Si alguna cláusula no fuera
-          válida, el resto seguirá vigente.
+          Estos términos se interpretan conforme a la normativa aplicable. Si alguna cláusula no fuera válida, el resto
+          seguirá vigente.
         </p>
       </>
     ),

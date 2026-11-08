@@ -32,6 +32,14 @@ test('detecta la emoción, recomienda y guarda solo con autorización', async ({
 
   // Desde pf25 las recomendaciones de la emoción aparecen al completar el guardado.
   await expect(page.getByRole('heading', { name: 'Para tu alegría' })).toBeVisible()
+  // Cada escaneo muestra como máximo tres recomendaciones, sin repetir, aunque haya más.
+  const tarjetasRecs = page.locator('.rostro-recs__row li')
+  await expect(tarjetasRecs).toHaveCount(3)
+  const titulosRecs = await tarjetasRecs.allTextContents()
+  expect(new Set(titulosRecs).size).toBe(3)
+  await expect(page.getByText(/no una evaluación de cómo te sentís/)).toBeVisible()
+  // Esas tres quedan en el historial de recomendaciones para consultarlas después.
+  await expect.poll(() => backend.peticionesA('POST', '/api/historial').length).toBe(3)
 
   // Al backend viajan solo la emoción y su confianza: nunca una imagen.
   const [post] = backend.peticionesA('POST', '/api/animos')

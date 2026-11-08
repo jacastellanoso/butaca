@@ -854,6 +854,14 @@
 }
 
 .rostro-recs__message,
+.rostro-recs__aviso {
+  margin: -2px 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.45;
+  opacity: 0.85;
+}
+
 .rostro-recs__note {
   margin: 0;
   font-size: 12px;

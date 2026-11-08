@@ -1,6 +1,6 @@
 import logoBlanco from '../../../logobutacablanco.svg'
 import Footer from '../../components/Footer/Footer.jsx'
-import { ACTUALIZADO, PRIVACIDAD, TERMINOS } from './textosLegales.jsx'
+import { ACTUALIZADO, INTRO, PRIVACIDAD, TERMINOS } from './textosLegales.jsx'
 import './PaginaLegal.css'
 
 const PAGINAS = {
@@ -25,10 +25,7 @@ function PaginaLegal({ tipo }) {
           <p className="legal-eyebrow">Información legal</p>
           <h1 id="legal-titulo">{pagina.titulo}</h1>
           <p className="legal-fecha">Última actualización: {ACTUALIZADO}</p>
-          <p className="legal-borrador" role="note">
-            <strong>Borrador para revisión legal.</strong> Este texto describe el funcionamiento actual de Butaca y todavía
-            no fue aprobado. Los datos marcados como pendientes deben completarse antes de su publicación definitiva.
-          </p>
+          <p className="legal-intro">{INTRO[tipo] ?? INTRO.privacidad}</p>
 
           <nav className="legal-indice" aria-label="Contenido">
             <ol>

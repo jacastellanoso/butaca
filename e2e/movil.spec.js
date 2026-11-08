@@ -226,9 +226,58 @@ for (const telefono of TELEFONOS) {
       await campana.tap()
       const panel = page.getByRole('region', { name: 'Centro de notificaciones' })
       await expect(panel).toBeInViewport()
+      // El panel queda debajo del encabezado: no tapa el logo ni la navegación.
+      const finEncabezado = await page.locator('.app-header').evaluate((el) => el.getBoundingClientRect().bottom)
+      expect((await panel.boundingBox()).y).toBeGreaterThanOrEqual(finEncabezado - 1)
+      await campana.tap()
 
-      await page.getByRole('button', { name: 'Abrir menú' }).tap()
-      await expect(page.getByRole('navigation', { name: 'Navegación principal' }).getByRole('link', { name: 'Grupos' })).toBeVisible()
+      // Navegación compacta: una sola fila horizontal con las siete opciones, sin menú desplegable.
+      const nav = page.getByRole('navigation', { name: 'Navegación principal' })
+      const opciones = ['Galería', 'Escanearme', 'Mis recomendaciones', 'Grupos', 'Dashboard', 'Favoritos', 'Perfiles']
+      const cajas = []
+      for (const nombre of opciones) {
+        const enlace = nav.getByRole('link', { name: nombre, exact: true })
+        await expect(enlace).toBeAttached()
+        cajas.push(await enlace.evaluate((el) => el.getBoundingClientRect().toJSON()))
+      }
+      expect(new Set(cajas.map((c) => Math.round(c.top))).size).toBe(1)
+      for (const caja of cajas) expect(caja.height).toBeGreaterThanOrEqual(40)
+      expect(await nav.evaluate((el) => getComputedStyle(el).overflowX)).toBe('auto')
+      await expect(page.getByRole('button', { name: /^(Abrir|Cerrar) menú$/ })).toHaveCount(0)
+      expect(await sinScrollHorizontal(page)).toBe(true)
+
+      // Se desliza horizontalmente hasta «Perfiles» y se puede tocar «Grupos».
+      await nav.evaluate((el) => el.scrollTo({ left: el.scrollWidth }))
+      await expect(nav.getByRole('link', { name: 'Perfiles', exact: true })).toBeInViewport({ ratio: 1 })
+      const grupos = nav.getByRole('link', { name: 'Grupos', exact: true })
+      await grupos.scrollIntoViewIfNeeded()
+      await grupos.tap()
+      await expect(page).toHaveURL(/\/grupos$/)
+      await expect(grupos).toHaveAttribute('aria-current', 'page')
+    })
+
+    test('el pie de página es compacto: menú en cuadrícula con íconos y enlaces legales visibles', async ({ page }) => {
+      await page.goto('/')
+      await page.getByRole('button', { name: 'Entrar como Majo Prueba' }).tap()
+      const pie = page.locator('.site-footer')
+      await pie.scrollIntoViewIfNeeded()
+      const enlaces = pie.locator('.site-footer__menu a')
+      await expect(enlaces).toHaveCount(7)
+      const cajas = await enlaces.evaluateAll((lista) => lista.map((el) => el.getBoundingClientRect().toJSON()))
+      // Cuadrícula de dos o tres columnas (no una lista vertical de siete filas).
+      const filas = new Set(cajas.map((c) => Math.round(c.top))).size
+      expect(filas).toBeLessThanOrEqual(4)
+      for (const caja of cajas) expect(caja.height).toBeGreaterThanOrEqual(40)
+      expect(await pie.locator('.site-footer__icon').count()).toBe(7)
+      const legal = page.getByRole('list', { name: 'Información legal' })
+      for (const nombre of ['Privacidad', 'Términos y condiciones']) {
+        const enlace = legal.getByRole('link', { name: nombre })
+        await enlace.scrollIntoViewIfNeeded()
+        await expect(enlace).toBeInViewport()
+        expect((await enlace.boundingBox()).height).toBeGreaterThanOrEqual(40)
+      }
+      expect(await sinScrollHorizontal(page)).toBe(true)
+      expect((await pie.boundingBox()).height).toBeLessThan(telefono.height * 1.25)
     })
   })
 }

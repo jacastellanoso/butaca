@@ -5,7 +5,9 @@ import { DESTACADAS_POR_ANIMO, registrarRecomendacionesDestacadas } from '../../
 import { obtenerRecomendaciones } from '../../services/recomendaciones.js'
 import { EMOTIONS } from './emotions.js'
 
-const VISTA_PREVIA = 6
+// Cada escaneo muestra como máximo tres recomendaciones, diversas (recommendations-service
+// alterna géneros). La galería y «Ver todas» no tienen este límite.
+const VISTA_PREVIA = 3
 
 /**
  * Recomendaciones para la emoción recién detectada (pf20).
@@ -55,6 +57,9 @@ function RecomendacionesRostro({ emocion, animoId }) {
         <h2 id="rostro-recs-title">Para tu {EMOTIONS[emocion]?.label.toLowerCase() ?? 'ánimo'}</h2>
         <a className="rostro-recs__all" href={enlace}>Ver todas</a>
       </div>
+      <p className="rostro-recs__aviso">
+        Elegidas según la expresión que analizamos: es una guía para recomendarte qué ver, no una evaluación de cómo te sentís.
+      </p>
 
       {estado === 'loading' && (
         <div className="rostro-recs__calculating" aria-busy="true" aria-label="Calculando tu experiencia Butaca">

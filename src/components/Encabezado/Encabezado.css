@@ -326,50 +326,6 @@
   font-size: 20px;
 }
 
-/* Botón hamburguesa (solo en pantallas medianas y chicas) */
-
-.app-header__toggle {
-  display: none;
-  width: 44px;
-  height: 44px;
-  flex: 0 0 auto;
-  place-items: center;
-  border: 0;
-  border-radius: 50%;
-  color: #ffffff;
-  background: var(--header-blue);
-  cursor: pointer;
-}
-
-.app-header__toggle-bars,
-.app-header__toggle-bars::before,
-.app-header__toggle-bars::after {
-  display: block;
-  width: 18px;
-  height: 2.5px;
-  border-radius: 2px;
-  background: currentColor;
-}
-
-.app-header__toggle-bars {
-  position: relative;
-}
-
-.app-header__toggle-bars::before,
-.app-header__toggle-bars::after {
-  position: absolute;
-  left: 0;
-  content: '';
-}
-
-.app-header__toggle-bars::before {
-  top: -6px;
-}
-
-.app-header__toggle-bars::after {
-  top: 6px;
-}
-
 .app-header a:focus-visible,
 .app-header button:focus-visible {
   outline: 3px solid #0470f6;
@@ -409,39 +365,64 @@
   }
 }
 
-@media (max-width: 1180px) {
-  .app-header__toggle {
-    display: grid;
-    order: 3;
-  }
+/* En escritorio, Perfiles está en el menú de usuario. */
+.app-header__link--perfiles {
+  display: none;
+}
 
-  .app-header__user {
-    order: 2;
+/* Pantallas medianas y chicas: sin menú desplegable. La navegación es una
+   segunda fila horizontal, compacta y desplazable con el dedo, con los mismos
+   íconos del encabezado. Así no aparece el panel blanco de 334 px que tapaba
+   el comienzo de la galería. */
+@media (max-width: 1180px) {
+  .app-header {
+    flex-wrap: wrap;
+    row-gap: 6px;
+    padding-bottom: 6px;
   }
 
   .app-header__nav {
-    position: absolute;
-    top: 100%;
-    right: 0;
-    left: 0;
-    display: none;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 4px;
-    padding: 10px clamp(14px, 2.5vw, 34px) 16px;
-    background: #ffffff;
-    box-shadow: 0 14px 24px rgb(0 25 120 / 18%);
+    display: flex;
+    order: 10;
+    width: calc(100% + 2 * clamp(14px, 2.5vw, 34px));
+    flex: 0 0 auto;
+    margin: 0 calc(-1 * clamp(14px, 2.5vw, 34px));
+    padding: 2px clamp(14px, 2.5vw, 34px) 4px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-padding-inline: clamp(14px, 2.5vw, 34px);
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+    gap: 6px;
+    /* Degradado en los bordes: indica que hay más opciones al deslizar. */
+    mask-image: linear-gradient(90deg, transparent 0, #000 12px, #000 calc(100% - 18px), transparent 100%);
   }
 
-  .app-header__nav--abierta {
-    display: flex;
-    animation: app-header-menu 160ms ease both;
+  .app-header__nav::-webkit-scrollbar {
+    display: none;
   }
 
   .app-header__link {
-    min-height: 48px;
-    padding: 6px 14px 6px 8px;
-    font-size: 15px;
+    min-height: 40px;
+    flex: 0 0 auto;
+    padding: 4px 12px 4px 5px;
+    border: 1px solid #dbe8fb;
+    font-size: 13px;
+    scroll-snap-align: start;
+  }
+
+  .app-header__link--perfiles {
+    display: inline-flex;
+  }
+
+  .app-header__icon,
+  .app-header__icon img {
+    width: 28px;
+    height: 28px;
+  }
+
+  .app-header__link:hover {
+    transform: none;
   }
 }
 

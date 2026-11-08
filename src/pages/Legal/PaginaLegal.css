@@ -69,15 +69,15 @@
   font-weight: 600;
 }
 
-.legal-borrador {
-  margin: 20px 0 0;
+.legal-intro {
+  margin: 18px 0 0;
   padding: 14px 16px;
-  border-left: 4px solid #eda100;
+  border-left: 4px solid #0470f6;
   border-radius: 12px;
-  color: #5a3f00;
-  background: #fff6dc;
-  font-size: 14px;
-  line-height: 1.55;
+  color: #2b3a66;
+  background: #eef5ff;
+  font-size: 15px;
+  line-height: 1.6;
 }
 
 .legal-indice {
@@ -138,13 +138,6 @@
   margin-top: 6px;
 }
 
-.legal-pendiente {
-  padding: 1px 6px;
-  border-radius: 6px;
-  color: #6b3d00;
-  background: #ffe3a3;
-  font-weight: 700;
-}
 
 .legal-otra {
   margin: 28px 0 0;
@@ -152,6 +145,11 @@
   border-top: 1px solid #e3ebf8;
   color: #4a5a85;
   font-weight: 600;
+}
+
+.legal-seccion a {
+  color: #0470f6;
+  font-weight: 700;
 }
 
 .legal-otra a {

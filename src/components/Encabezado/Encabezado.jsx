@@ -1,52 +1,10 @@
 import { useEffect, useId, useRef, useState } from 'react'
 
-import iconoEscanear from '../../../iconoescanearme.svg'
-import iconoRecomendaciones from '../../../iconomisreconocimientos.svg'
 import logoButaca from '../../../logobutacaoficial.svg'
 import { EVENTO_NAVEGACION } from '../../lib/rutas.js'
-import { IconoCorazon } from '../BotonFavorito/BotonFavorito.jsx'
 import CentroNotificaciones from '../Notificaciones/CentroNotificaciones.jsx'
+import { OPCIONES } from './opcionesNavegacion.jsx'
 import './Encabezado.css'
-
-function IconoGaleria() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <rect x="3" y="3" width="7.5" height="7.5" rx="2" />
-      <rect x="13.5" y="3" width="7.5" height="7.5" rx="2" />
-      <rect x="3" y="13.5" width="7.5" height="7.5" rx="2" />
-      <rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2" />
-    </svg>
-  )
-}
-
-function IconoDashboard() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <path d="M4 20V11M10 20V4M16 20v-6M22 20H2" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
-    </svg>
-  )
-}
-
-function IconoGrupos() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <circle cx="9" cy="8" r="3.4" />
-      <circle cx="17" cy="9.5" r="2.6" />
-      <path d="M2.8 19.5c.5-3.4 3.1-5.6 6.2-5.6s5.7 2.2 6.2 5.6Z" />
-      <path d="M15.6 14.2c2.6-.3 5 1.4 5.6 4.3h-4.4" />
-    </svg>
-  )
-}
-
-// Opciones del menú principal. `clave` coincide con la pantalla o sección activa.
-const OPCIONES = [
-  { clave: 'galeria', href: '/galeria', etiqueta: 'Galería', icono: <IconoGaleria /> },
-  { clave: 'rostro', href: '/rostro', etiqueta: 'Escanearme', imagen: iconoEscanear },
-  { clave: 'recomendaciones', href: '/recomendaciones', etiqueta: 'Mis recomendaciones', imagen: iconoRecomendaciones },
-  { clave: 'grupos', href: '/grupos', etiqueta: 'Grupos', icono: <IconoGrupos /> },
-  { clave: 'dashboard', href: '/dashboard', etiqueta: 'Dashboard', icono: <IconoDashboard /> },
-  { clave: 'favoritos', href: '/favoritos', etiqueta: 'Favoritos', icono: <IconoCorazon lleno /> },
-]
 
 export function AvatarPerfil({ perfil, tamano = 'md' }) {
   const [fallo, setFallo] = useState(false)
@@ -68,18 +26,15 @@ export function AvatarPerfil({ perfil, tamano = 'md' }) {
  * activa: 'galeria' | 'rostro' | 'recomendaciones' | 'grupos' | 'dashboard' | 'favoritos' | 'historial'
  */
 function Encabezado({ activa, perfil, cuenta, perfiles = [], onCambiarPerfil, onCerrarSesion }) {
-  const [menuAbierto, setMenuAbierto] = useState(false)
   const [usuarioAbierto, setUsuarioAbierto] = useState(false)
   const [cerrando, setCerrando] = useState(false)
   const [error, setError] = useState('')
-  const menuId = useId()
   const usuarioId = useId()
   const usuarioRef = useRef(null)
 
   useEffect(() => {
     const cerrarConEscape = (event) => {
       if (event.key === 'Escape') {
-        setMenuAbierto(false)
         setUsuarioAbierto(false)
       }
     }
@@ -87,7 +42,6 @@ function Encabezado({ activa, perfil, cuenta, perfiles = [], onCambiarPerfil, on
       if (!usuarioRef.current?.contains(event.target)) setUsuarioAbierto(false)
     }
     const cerrarAlNavegar = () => {
-      setMenuAbierto(false)
       setUsuarioAbierto(false)
     }
     document.addEventListener('keydown', cerrarConEscape)
@@ -122,22 +76,9 @@ function Encabezado({ activa, perfil, cuenta, perfiles = [], onCambiarPerfil, on
         <img draggable={false} src={logoButaca} alt="Butaca" />
       </a>
 
-      <button
-        className="app-header__toggle"
-        type="button"
-        aria-expanded={menuAbierto}
-        aria-controls={menuId}
-        onClick={() => setMenuAbierto((abierto) => !abierto)}
-      >
-        <span className="app-header__toggle-bars" aria-hidden="true" />
-        <span className="visually-hidden">{menuAbierto ? 'Cerrar menú' : 'Abrir menú'}</span>
-      </button>
-
-      <nav
-        id={menuId}
-        className={`app-header__nav${menuAbierto ? ' app-header__nav--abierta' : ''}`}
-        aria-label="Navegación principal"
-      >
+      {/* En pantallas medianas y chicas es una fila horizontal desplazable debajo
+          del logo (sin menú desplegable que tape la página). */}
+      <nav className="app-header__nav" aria-label="Navegación principal">
         {OPCIONES.map(({ clave, href, etiqueta, icono, imagen }) => (
           <a
             key={clave}

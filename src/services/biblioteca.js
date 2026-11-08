@@ -45,7 +45,8 @@ export async function listarHistorialRecomendaciones(filtros = {}) {
 }
 
 // Cuántas recomendaciones se conservan por cada ánimo guardado.
-export const DESTACADAS_POR_ANIMO = 5
+// Igual a lo que se muestra tras cada escaneo (RecomendacionesRostro: máximo tres).
+export const DESTACADAS_POR_ANIMO = 3
 const CLAVE_REGISTRADAS = 'butaca:historial-registrado'
 
 function animosYaRegistrados() {

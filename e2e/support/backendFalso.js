@@ -16,12 +16,24 @@ import { SocialFalso } from './socialFalso.js'
 
 const EMOCIONES = ['neutral', 'happy', 'sad', 'angry', 'fearful', 'disgusted', 'surprised']
 
+// Emociones por género (simplificación de catalog-service/src/constants/emociones.js).
+const EMOCIONES_POR_GENERO = {
+  Acción: ['happy', 'angry', 'surprised'],
+  Comedia: ['neutral', 'happy'],
+  Drama: ['sad'],
+  Terror: ['fearful', 'disgusted'],
+}
+function emocionesDe(generos) {
+  return [...new Set(generos.flatMap((g) => EMOCIONES_POR_GENERO[g] ?? []))]
+}
+
 // Catálogo mínimo con la forma normalizada de catalog-service (pf14).
 export const CATALOGO = [
   { tmdbId: 101, tipoTmdb: 'movie', titulo: 'La gran butaca', anio: 2025, generos: ['Comedia'], calificacion: 7.8 },
   { tmdbId: 102, tipoTmdb: 'movie', titulo: 'Noche de terror', anio: 2024, generos: ['Terror'], calificacion: 6.4 },
   { tmdbId: 201, tipoTmdb: 'tv', titulo: 'Serie del ánimo', anio: 2026, generos: ['Drama'], calificacion: 8.6 },
 ].map((item) => ({
+  emociones: emocionesDe(item.generos),
   id: `${item.tipoTmdb}-${item.tmdbId}`,
   tipo: item.tipoTmdb === 'movie' ? 'Película' : 'Serie',
   fecha: `${item.anio}-01-15`,
@@ -37,6 +49,9 @@ const RECOMENDACIONES = {
   movie: [
     { tmdbId: 301, titulo: 'Risas garantizadas', fecha: '2025-03-01', calificacion: 7.1 },
     { tmdbId: 302, titulo: 'Un día brillante', fecha: '2024-07-20', calificacion: 6.9 },
+    { tmdbId: 303, titulo: 'Aventura en familia', fecha: '2023-05-02', calificacion: 7.4 },
+    { tmdbId: 304, titulo: 'Canción del verano', fecha: '2022-12-12', calificacion: 6.5 },
+    { tmdbId: 305, titulo: 'Volar alto', fecha: '2021-08-30', calificacion: 7.0 },
   ],
   tv: [{ tmdbId: 401, titulo: 'Temporada feliz', fecha: '2026-02-10', calificacion: 8.2 }],
 }
@@ -111,18 +126,26 @@ export class BackendFalso {
           id: `${tipoTmdb}-${id}`, tmdbId: id, tipoTmdb, tipo: tipoTmdb === 'movie' ? 'Película' : 'Serie',
           titulo: `${genero} ${i + 1}`, anio: 2025, fecha: '2025-01-15', generos: [genero], calificacion: 7,
           sinopsis: `Sinopsis de ${genero} ${i + 1}.`, portada: null, poster: null, esDemostracion: false,
+          emociones: emocionesDe([genero]),
         })
       }
     }
   }
 
   #catalogo(route, url) {
-    if (!this.catalogoGrande) return json(route, 200, { fuente: 'tmdb', resultados: CATALOGO })
-    const { paginas, porPagina, items } = this.catalogoGrande
+    // Filtros como catalog-service: categoría, emoción y búsqueda por nombre.
     const categoria = url.searchParams.get('categoria')
+    const emocion = url.searchParams.get('emocion')
+    const busqueda = (url.searchParams.get('busqueda') ?? '').toLowerCase()
+    const filtrar = (lista) => lista
+      .filter((c) => !categoria || c.generos.includes(categoria))
+      .filter((c) => !emocion || c.emociones.includes(emocion))
+      .filter((c) => !busqueda || c.titulo.toLowerCase().includes(busqueda))
+    if (!this.catalogoGrande) return json(route, 200, { fuente: 'tmdb', resultados: filtrar(CATALOGO) })
+    const { porPagina, items } = this.catalogoGrande
     const pagina = Number(url.searchParams.get('pagina') ?? 1)
-    const lista = categoria ? items.filter((c) => c.generos.includes(categoria)) : items
-    const total = categoria ? paginas : paginas * 4
+    const lista = filtrar(items)
+    const total = Math.max(1, Math.ceil(lista.length / porPagina))
     const inicio = Math.max(0, (pagina - 1) * porPagina - (pagina > 1 ? 1 : 0))
     return json(route, 200, {
       fuente: 'tmdb',

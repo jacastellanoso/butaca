@@ -35,11 +35,13 @@ test('contratos sobre HTTP con dependencias simuladas', async (t) => {
       if (mode === 'body-timeout') { res.writeHead(200); res.write('{'); return }
       if (mode === 'catalog-invalid-json') return res.end('{')
       if (mode === 'catalog-invalid-shape') return send(200, { resultados: {} })
-      if (mode === 'catalog-unavailable' || (mode === 'partial' && url.searchParams.get('categoria') === 'Acción')) return send(503, {})
+      if (mode === 'catalog-unavailable' || (mode === 'partial' && url.searchParams.get('pagina') === '2')) return send(503, {})
       const tipo = url.searchParams.get('tipo')
       return send(200, { fuente: 'tmdb', resultados: mode === 'empty' ? [] : [{
         tmdbId: 42, tipoTmdb: tipo, titulo: 'Contenido de prueba HTTP', descripcion: '',
         poster: null, fecha: null, calificacion: null, esDemostracion: false,
+        // catalog-service relaciona el título con la emoción pedida (constants/emociones.js).
+        emociones: [url.searchParams.get('emocion')], generos: ['Drama'],
       }] })
     }
     send(404, {})

@@ -24,3 +24,43 @@ export function combinarPagina(actuales, nuevos, categoria = 'Todos') {
 export function hayMasPaginas({ pagina, totalPaginas }) {
   return Number.isInteger(pagina) && Number.isInteger(totalPaginas) && pagina < totalPaginas
 }
+
+// ── Catálogo dormido en Render ───────────────────────────────────────────
+// Con el catálogo dormido, el gateway recibe de Render un 502 inmediato
+// mientras el servicio arranca (~15-60 s). Se reintenta con espera creciente
+// unos 70 s; después se muestra el error con «Reintentar». Un 500 o un 400
+// (configuración o consulta inválida) no se reintenta: se muestra enseguida.
+export const ESPERAS_CATALOGO_MS = [1500, 3000, 5000, 8000, 10000, 12000, 15000, 15000]
+
+export function esFalloTransitorio(error) {
+  if (!error) return false
+  if (error.codigo === 'sin-conexion') return true
+  return [408, 425, 429, 502, 503, 504].includes(error.status)
+}
+
+/**
+ * Pide una página reintentando solo los fallos transitorios.
+ * alEsperar(intento) avisa que el servicio está despertando.
+ */
+export async function pedirConReintentos(pedir, { esperar, alEsperar = () => {}, esperas = ESPERAS_CATALOGO_MS, cancelado = () => false }) {
+  let ultimo
+  for (let intento = 0; intento <= esperas.length; intento++) {
+    if (intento > 0) {
+      alEsperar(intento)
+      await esperar(esperas[intento - 1])
+      if (cancelado()) throw Object.assign(new Error('cancelado'), { codigo: 'cancelado' })
+    }
+    try {
+      return await pedir()
+    } catch (error) {
+      ultimo = error
+      if (!esFalloTransitorio(error)) throw error
+    }
+  }
+  throw ultimo
+}
+
+/** Clave de una combinación de filtros: cada una tiene su propia lista paginada. */
+export function claveFiltros({ categoria = 'Todos', emocion = null, busqueda = '' }) {
+  return JSON.stringify([categoria, emocion ?? '', busqueda.trim().toLowerCase()])
+}

@@ -117,13 +117,27 @@
 /* Lista: fondo celeste suave para que cada notificación se lea como una tarjeta. */
 .notificaciones__lista {
   display: grid;
+  min-height: 0; /* puede achicarse dentro del panel y desplazarse por sí sola */
+  align-content: start;
   gap: 10px;
   margin: 0;
-  padding: 12px;
+  padding: 12px 6px 12px 12px;
   overflow-y: auto;
   overscroll-behavior: contain;
+  /* Reserva el lugar de la barra: no tapa las tarjetas ni las corre al aparecer. */
+  scrollbar-gutter: stable;
+  scrollbar-color: #9cc4f5 transparent;
   background: #f1f6ff;
   list-style: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.notificaciones__lista::-webkit-scrollbar-thumb {
+  background-color: #9cc4f5;
+}
+
+.notificaciones__lista::-webkit-scrollbar-thumb:hover {
+  background-color: #0470f6;
 }
 
 /* Cada notificación: tarjeta blanca con borde suave, sombra y columnas que no se pisan. */
@@ -351,13 +365,14 @@
 }
 
 @media (max-width: 520px) {
+  /* Debajo del encabezado móvil (logo + fila de navegación, ~110 px). */
   .notificaciones__panel {
     position: fixed;
-    top: 72px;
+    top: 116px;
     right: 12px;
     left: 12px;
     width: auto;
-    max-height: calc(100dvh - 90px);
+    max-height: calc(100dvh - 132px);
   }
 }
 

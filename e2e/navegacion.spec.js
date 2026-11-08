@@ -98,7 +98,8 @@ test.describe('con sesión', () => {
 
     await page.getByRole('button', { name: 'Entrar como Majo Prueba' }).click()
     await expect(page.locator('.app-header__brand img')).toHaveAttribute('src', /logobutacaoficial/)
-    await expect(page.locator('.site-footer__logo')).toHaveAttribute('src', /logobutacaoficial/)
+    // El pie es azul oscuro: usa la misma variante blanca (antes se lograba con un filtro CSS).
+    await expect(page.locator('.site-footer__logo')).toHaveAttribute('src', /logobutacablanco/)
   })
 
   test('las imágenes de la interfaz no se pueden arrastrar', async ({ page }) => {
@@ -191,17 +192,67 @@ test.describe('con sesión', () => {
   })
 })
 
+test.describe('barras de desplazamiento', () => {
+  test.use({ conSesion: true })
+
+  test('el panel de notificaciones se desplaza solo, con barra delgada y sin barras dobles', async ({ page, backend }) => {
+    for (let i = 1; i <= 14; i++) {
+      backend.social.notificar(USUARIO_PRUEBA.id, 'invitacion-aceptada', `Aviso ${i}`, `Persona ${i} se unió a «Cine».`)
+    }
+    await entrarComo(page)
+    // Un único contenedor con scroll vertical: el documento no se desplaza.
+    const barras = await page.evaluate(() => ({
+      html: getComputedStyle(document.documentElement).overflowY,
+      body: getComputedStyle(document.body).overflowY,
+      galeria: getComputedStyle(document.querySelector('.gallery-page')).overflowY,
+      ancho: getComputedStyle(document.querySelector('.gallery-page')).scrollbarWidth,
+    }))
+    expect(barras.body).toBe('hidden')
+    expect(barras.galeria).toBe('auto')
+    expect(barras.ancho).toBe('thin')
+
+    await page.getByRole('button', { name: /^Notificaciones/ }).click()
+    const lista = page.locator('.notificaciones__lista')
+    const estado = await lista.evaluate((el) => ({
+      desplazable: el.scrollHeight > el.clientHeight,
+      overflow: getComputedStyle(el).overflowY,
+      gutter: getComputedStyle(el).scrollbarGutter,
+      ancho: getComputedStyle(el).scrollbarWidth,
+    }))
+    expect(estado).toEqual({ desplazable: true, overflow: 'auto', gutter: 'stable', ancho: 'thin' })
+
+    // Desplazar el panel con la rueda no mueve la galería de fondo.
+    const antes = await page.locator('.gallery-page').evaluate((el) => el.scrollTop)
+    const caja = await lista.boundingBox()
+    await page.mouse.move(caja.x + caja.width / 2, caja.y + caja.height / 2)
+    await page.mouse.wheel(0, 2000)
+    await expect.poll(() => lista.evaluate((el) => el.scrollTop)).toBeGreaterThan(0)
+    expect(await page.locator('.gallery-page').evaluate((el) => el.scrollTop)).toBe(antes)
+    // La última notificación se alcanza completa (la barra no la tapa).
+    await expect(lista.locator('.notificacion').last()).toBeInViewport({ ratio: 1 })
+  })
+})
+
 test.describe('sin sesión', () => {
   test('Privacidad y Términos se abren sin iniciar sesión, por URL y desde la pantalla de acceso', async ({ page }) => {
     await page.goto('/')
     await page.getByRole('navigation', { name: 'Información legal' }).getByRole('link', { name: 'Privacidad' }).click()
     await expect(page).toHaveURL(/\/privacidad$/)
     await expect(page.getByRole('heading', { level: 1, name: 'Política de privacidad' })).toBeVisible()
-    for (const seccion of ['Qué datos recopilamos', 'Tratamiento de la edad', 'Cámara y reconocimiento de emociones', 'Google, GitHub y otros servicios', 'Cómo solicitar la eliminación de tus datos', 'Contacto de privacidad']) {
-      await expect(page.getByRole('heading', { name: new RegExp(seccion) })).toBeVisible()
+    for (const seccion of ['Quién es responsable', 'Qué datos recopilamos', 'Edad y perfiles de menores', 'Cámara y análisis de expresiones', 'Google, GitHub y otros servicios', 'Cómo solicitar la eliminación de tus datos', 'Contacto']) {
+      await expect(page.getByRole('heading', { name: new RegExp(seccion) }).first()).toBeVisible()
     }
-    await expect(page.getByText('Borrador para revisión legal.')).toBeVisible()
-    await expect(page.locator('.legal-pendiente').first()).toBeVisible()
+    // Textos completos para un proyecto académico: sin marcas provisionales públicas.
+    const privacidad = await page.locator('.legal-card').innerText()
+    expect(privacidad).not.toMatch(/pendiente|borrador/i)
+    expect(privacidad).toContain('proyecto académico')
+    expect(privacidad).toContain('18 años o más')
+    expect(privacidad).toMatch(/no identifica a las personas/)
+    expect(privacidad).toMatch(/no un diagnóstico/)
+    // El contacto es el repositorio público real; no se inventan correos.
+    await expect(page.getByRole('link', { name: 'repositorio público del proyecto en GitHub' }).first())
+      .toHaveAttribute('href', 'https://github.com/jacastellanoso/butaca')
+    expect(privacidad).not.toMatch(/@[a-z0-9-]+\.[a-z]/i)
 
     await page.getByRole('link', { name: 'Términos y condiciones' }).last().click()
     await expect(page).toHaveURL(/\/terminos$/)
@@ -209,6 +260,9 @@ test.describe('sin sesión', () => {
     for (const seccion of ['Registro y uso de cuentas', 'Grupos e invitaciones', 'Propiedad intelectual', 'Limitación de responsabilidad']) {
       await expect(page.getByRole('heading', { name: new RegExp(seccion) })).toBeVisible()
     }
+    const terminos = await page.locator('.legal-card').innerText()
+    expect(terminos).not.toMatch(/pendiente|borrador/i)
+    expect(terminos).toContain('18 años o más')
     await page.reload()
     await expect(page.getByRole('heading', { level: 1, name: 'Términos y condiciones' })).toBeVisible()
 
@@ -224,7 +278,7 @@ test.describe('sin sesión', () => {
     await page.goto('/privacidad')
     await expect(page.getByRole('heading', { level: 1, name: 'Política de privacidad' })).toBeVisible()
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
-    const contacto = page.getByRole('heading', { name: /Contacto de privacidad/ })
+    const contacto = page.getByRole('heading', { name: /^\d+\. Contacto$/ })
     await contacto.scrollIntoViewIfNeeded()
     await expect(contacto).toBeInViewport()
     await contexto.close()

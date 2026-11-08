@@ -4,11 +4,12 @@ const API_GATEWAY_URL = (
   import.meta.env?.VITE_API_GATEWAY_URL ?? 'http://localhost:3000'
 ).replace(/\/$/, '')
 
-function construirUrlCatalogo({ tipo, categoria, busqueda, pagina } = {}) {
+function construirUrlCatalogo({ tipo, categoria, busqueda, emocion, pagina } = {}) {
   const params = new URLSearchParams()
 
   if (tipo && tipo !== 'all') params.set('tipo', tipo)
   if (categoria && categoria !== 'Todos') params.set('categoria', categoria)
+  if (emocion) params.set('emocion', emocion)
   if (busqueda && busqueda.trim()) params.set('busqueda', busqueda.trim())
   if (pagina && Number(pagina) > 1) params.set('pagina', String(pagina))
 
@@ -62,8 +63,8 @@ export async function obtenerCatalogo(filtros = {}) {
  * Devuelve { resultados, pagina, totalPaginas }. La galería la usa para
  * «Cargar más» sin traer todo el catálogo de golpe.
  */
-export async function obtenerPaginaCatalogo({ categoria = 'Todos', pagina = 1 } = {}) {
-  const url = construirUrlCatalogo({ categoria, pagina })
+export async function obtenerPaginaCatalogo({ categoria = 'Todos', emocion = null, busqueda = '', pagina = 1 } = {}) {
+  const url = construirUrlCatalogo({ categoria, emocion, busqueda, pagina })
 
   let respuesta
   try {
@@ -73,14 +74,21 @@ export async function obtenerPaginaCatalogo({ categoria = 'Todos', pagina = 1 } 
       console.warn('API Gateway no disponible en desarrollo local; se cargan contenidos de demostración.')
       return { resultados: contenidosDemo, pagina: 1, totalPaginas: 1 }
     }
-    throw error
+    // Sin respuesta (red caída o un 502 de Render sin CORS): se puede reintentar.
+    throw Object.assign(new Error('No pudimos conectar con el catálogo.'), { codigo: 'sin-conexion' })
   }
 
   if (!respuesta.ok) {
-    throw new Error(`Error al consultar el catálogo (HTTP ${respuesta.status}).`)
+    throw Object.assign(new Error(`Error al consultar el catálogo (HTTP ${respuesta.status}).`), { status: respuesta.status })
   }
 
-  const cuerpo = await respuesta.json()
+  let cuerpo
+  try {
+    cuerpo = await respuesta.json()
+  } catch {
+    // Render responde una página HTML mientras despierta el servicio.
+    throw Object.assign(new Error('El catálogo devolvió una respuesta inválida.'), { status: 502 })
+  }
   const resultados = Array.isArray(cuerpo?.resultados) ? cuerpo.resultados : Array.isArray(cuerpo) ? cuerpo : null
   if (!resultados) {
     throw new Error('El formato recibido desde /api/catalogo no contiene una lista de resultados.')
