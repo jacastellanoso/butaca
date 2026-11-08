@@ -22,28 +22,50 @@ test.describe('Sin sesión', () => {
 test.describe('Con sesión', () => {
   test.use({ conSesion: true })
 
-  test('una cuenta registrada entra directamente al reconocimiento facial', async ({ page, backend }) => {
+  // Flujo vigente: inicio de sesión → "¿Quién va a ver hoy?" → galería.
+  test('una cuenta registrada elige perfil y luego entra a la galería', async ({ page, backend }) => {
     await page.goto('/')
 
-    await expect(page).toHaveURL(/#rostro$/)
-    await expect(page.getByRole('navigation', { name: 'Navegación principal' })).toBeVisible()
+    await expect(page).toHaveURL(/#perfiles$/)
+    await expect(page.getByRole('heading', { name: /Quién va a ver hoy/ })).toBeVisible()
     // Al validar la sesión se sincroniza el usuario con auth-service.
     await expect.poll(() => backend.peticionesA('POST', '/api/usuarios').length).toBeGreaterThan(0)
+
+    await page.getByRole('button', { name: 'Entrar como Majo Prueba' }).click()
+    await expect(page).toHaveURL(/#galeria$/)
+    await expect(page.getByRole('navigation', { name: 'Navegación principal' })).toBeVisible()
   })
 
-  test('una cuenta nueva guarda nombre y apellido antes del reconocimiento', async ({ page, backend }) => {
+  test('una cuenta nueva guarda nombre, apellido y edad antes de elegir perfil', async ({ page, backend }) => {
     backend.usuario.nombre = null
     backend.usuario.apellido = null
+    backend.usuario.edad = null
     await page.goto('/')
 
     await expect(page.getByRole('heading', { name: 'Queremos conocerte' })).toBeVisible()
     await page.getByLabel('Nombre').fill('Ana')
     await page.getByLabel('Apellido').fill('García')
+    await page.getByLabel('Edad').fill('31')
     await page.getByRole('button', { name: 'Continuar al reconocimiento facial' }).click()
 
-    await expect(page).toHaveURL(/#rostro$/)
+    await expect(page).toHaveURL(/#perfiles$/)
     await expect.poll(() => backend.peticionesA('PUT', '/api/usuarios').at(-1)?.body)
-      .toEqual({ nombre: 'Ana', apellido: 'García' })
+      .toEqual({ nombre: 'Ana', apellido: 'García', edad: 31 })
+    // El perfil principal muestra los datos recién guardados.
+    await expect(page.getByRole('button', { name: 'Entrar como Ana García' })).toContainText('31 años')
+  })
+
+  test('el registro valida la edad antes de enviar', async ({ page, backend }) => {
+    backend.usuario.edad = null
+    await page.goto('/')
+
+    await page.getByLabel('Nombre').fill('Ana')
+    await page.getByLabel('Apellido').fill('García')
+    await page.getByLabel('Edad').fill('3')
+    await page.getByRole('button', { name: 'Continuar al reconocimiento facial' }).click()
+
+    await expect(page.getByRole('alert')).toHaveText('Ingresá una edad válida entre 5 y 120 años.')
+    expect(backend.peticionesA('PUT', '/api/usuarios')).toHaveLength(0)
   })
 
   test('cerrar sesión vuelve a la bienvenida y protege el dashboard', async ({ page }) => {

@@ -16,16 +16,22 @@ async function analizarRostro(page) {
 test('detecta la emoción, recomienda y guarda solo con autorización', async ({ page, backend }) => {
   await analizarRostro(page)
 
-  // Recomendaciones para la emoción detectada (sin guardar nada todavía).
-  await expect(page.getByRole('heading', { name: 'Para tu alegría' })).toBeVisible()
+  // Detectar no guarda nada por sí solo.
   expect(backend.peticionesA('POST', '/api/animos')).toHaveLength(0)
 
   // Guardar exige la casilla de autorización, separada del permiso de cámara.
+  // Desde pf25 la casilla aparece marcada: si se desmarca, no se puede guardar.
   const guardar = page.getByRole('button', { name: 'Guardar resultado' })
+  const autorizo = page.getByLabel(/Autorizo guardar esta emoción/)
+  await autorizo.uncheck()
   await expect(guardar).toBeDisabled()
-  await page.getByLabel(/Autorizo guardar esta emoción/).check()
+  expect(backend.peticionesA('POST', '/api/animos')).toHaveLength(0)
+  await autorizo.check()
   await guardar.click()
   await expect(page.getByText('Guardado en tu historial emocional.')).toBeVisible()
+
+  // Desde pf25 las recomendaciones de la emoción aparecen al completar el guardado.
+  await expect(page.getByRole('heading', { name: 'Para tu alegría' })).toBeVisible()
 
   // Al backend viajan solo la emoción y su confianza: nunca una imagen.
   const [post] = backend.peticionesA('POST', '/api/animos')
