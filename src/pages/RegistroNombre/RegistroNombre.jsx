@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 
 import logoButaca from '../../../logobutacaoficial.svg'
+import { useTecladoVirtual } from '../../hooks/useTecladoVirtual.js'
 import './RegistroNombre.css'
 
 // En celulares el teclado tarda en abrirse: después se desplaza el campo
@@ -17,6 +18,8 @@ function RegistroNombre({ onGuardar, onCerrarSesion }) {
   const [edad, setEdad] = useState('')
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
+  const contenedor = useRef(null)
+  useTecladoVirtual(contenedor)
 
   const enviar = async (event) => {
     event.preventDefault()
@@ -40,7 +43,7 @@ function RegistroNombre({ onGuardar, onCerrarSesion }) {
   }
 
   return (
-    <main className="registro-nombre">
+    <main className="registro-nombre" ref={contenedor}>
       <section className="registro-nombre__card" aria-labelledby="registro-titulo">
         <img src={logoButaca} alt="Butaca" />
         <p className="registro-nombre__eyebrow">Tu experiencia comienza aquí</p>

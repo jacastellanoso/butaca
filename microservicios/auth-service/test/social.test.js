@@ -198,15 +198,15 @@ test('una invitación a un correo sin cuenta se vincula cuando esa persona inici
   assert.equal(notificacionesDe('usuario-caro').length, 0)
 
   // Caro inicia sesión por primera vez: POST /api/usuarios la sincroniza.
-  const original = prisma.usuario.upsert
-  prisma.usuario.upsert = async ({ create }) => {
-    db.tablas.usuario.push({ ...create, nombre: null, apellido: null, edad: null, creadoEn: new Date() })
-    return { ...create, nombre: null, apellido: null, edad: null, creadoEn: new Date() }
+  const original = prisma.usuario.create
+  prisma.usuario.create = async ({ data }) => {
+    db.tablas.usuario.push({ ...data, nombre: null, apellido: null, edad: null, creadoEn: new Date() })
+    return { ...data, nombre: null, apellido: null, edad: null, creadoEn: new Date() }
   }
   try {
     assert.equal((await api('POST', '/api/usuarios', { token: 'token-caro' })).status, 200)
   } finally {
-    prisma.usuario.upsert = original
+    prisma.usuario.create = original
   }
   const avisos = await api('GET', '/api/notificaciones', { token: 'token-caro' })
   assert.equal(avisos.body.resultados[0].tipo, 'invitacion-grupo')

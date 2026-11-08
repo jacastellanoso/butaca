@@ -39,7 +39,7 @@ import './App.css'
 // favoritos, historial y notificaciones. Al cambiar de perfil se vuelve a
 // montar el contenido (key) para que nada del perfil anterior quede en pantalla.
 
-function PantallaSesion({ error, onRetry, mensaje = 'Verificando tu sesión…' }) {
+function PantallaSesion({ error, onRetry, onSalir, mensaje = 'Verificando tu sesión…' }) {
   return (
     <main className="app-splash" aria-busy={!error}>
       <img className="app-splash__logo" src={logoButaca} alt="Butaca" />
@@ -47,6 +47,9 @@ function PantallaSesion({ error, onRetry, mensaje = 'Verificando tu sesión…' 
         <div className="app-splash__error" role="alert">
           <p>{error}</p>
           <button type="button" onClick={onRetry}>Reintentar</button>
+          {onSalir && (
+            <button type="button" className="app-splash__salir" onClick={onSalir}>Cerrar sesión</button>
+          )}
         </div>
       ) : (
         <p className="app-splash__status" role="status">
@@ -158,8 +161,10 @@ function App() {
     reemplazarHash('')
   }, [])
 
-  if (sesion.estado === 'cargando') return <PantallaSesion />
-  if (sesion.estado === 'error') return <PantallaSesion error={sesion.mensaje} onRetry={sesion.reintentar} />
+  if (sesion.estado === 'cargando') return <PantallaSesion mensaje={sesion.mensaje ?? undefined} />
+  if (sesion.estado === 'error') {
+    return <PantallaSesion error={sesion.mensaje} onRetry={sesion.reintentar} onSalir={sesion.usuario ? salir : undefined} />
+  }
   if (!autenticado) return <Main />
 
   if (necesitaNombre) {

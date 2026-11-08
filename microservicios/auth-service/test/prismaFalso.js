@@ -61,6 +61,10 @@ function delegado(tabla, { defaults = () => ({}), unico } = {}) {
   return {
     findMany: async ({ where, select, orderBy, take } = {}) =>
       ordenar(tabla.filter((r) => cumple(r, where)), orderBy).slice(0, take ?? Infinity).map((r) => elegir(r, select)),
+    findUnique: async ({ where, select } = {}) => {
+      const registro = tabla.find((r) => cumple(r, where))
+      return registro ? elegir(registro, select) : null
+    },
     findFirst: async ({ where, select } = {}) => {
       const registro = tabla.find((r) => cumple(r, where))
       return registro ? elegir(registro, select) : null

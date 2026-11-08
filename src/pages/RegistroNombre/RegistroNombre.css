@@ -13,12 +13,16 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
+  /* --teclado-alto (useTecladoVirtual): lo que tapa el teclado virtual. Se
+     suma al relleno inferior para que Edad y el botón puedan subir por encima
+     del teclado; al cerrarlo vuelve a 0 y desaparece el espacio extra. */
   padding:
     max(24px, env(safe-area-inset-top))
     max(16px, env(safe-area-inset-right))
-    max(32px, env(safe-area-inset-bottom))
+    calc(max(32px, env(safe-area-inset-bottom)) + var(--teclado-alto, 0px))
     max(16px, env(safe-area-inset-left));
-  scroll-padding-block: 24px 96px;
+  scroll-padding-block: 24px calc(96px + var(--teclado-alto, 0px));
+  touch-action: pan-y;
   background: radial-gradient(circle at top, #1786ff, #0000a8 72%);
 }
 
