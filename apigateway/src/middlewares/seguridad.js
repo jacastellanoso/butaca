@@ -46,7 +46,7 @@ const permitidos = new Set(env.corsOrigins)
 
 export const portero = cors({
   origin: (origen, listo) => listo(null, !origen || permitidos.has(origen)),
-  methods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Authorization', 'Content-Type'],
   exposedHeaders: ['RateLimit', 'RateLimit-Policy', 'Retry-After'],
   credentials: false,

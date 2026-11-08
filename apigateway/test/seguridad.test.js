@@ -72,6 +72,21 @@ test('cors: el preflight permitido declara métodos y encabezados, y no llega al
   assert.equal(falso.recibidas.length, antes)
 })
 
+test('cors: permite PUT para actualizar nombre y apellido', async () => {
+  const res = await fetch(`${base}/api/usuarios`, {
+    method: 'OPTIONS',
+    headers: {
+      Origin: PERMITIDO,
+      'Access-Control-Request-Method': 'PUT',
+      'Access-Control-Request-Headers': 'authorization,content-type',
+    },
+  })
+
+  assert.equal(res.status, 204)
+  assert.match(res.headers.get('access-control-allow-methods'), /PUT/)
+  assert.equal(res.headers.get('access-control-allow-origin'), PERMITIDO)
+})
+
 test('cors: se descartan los encabezados CORS que agregue un microservicio', async () => {
   const res = await fetch(`${base}/api/catalogo`, { headers: { Origin: AJENO } })
 
