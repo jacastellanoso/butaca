@@ -12,6 +12,8 @@ import TarjetaPelicula from '../components/TarjetaPelicula.jsx'
 import { COLORES_EMOCION, EMOCIONES_ORDEN } from '../estadisticas.js'
 import { etiquetaEmocion, formatearFechaHora } from '../formato.js'
 
+const ESPERA_REINTENTO_MS = 2500
+
 const TIPOS = [
   { valor: 'movie', etiqueta: 'Películas' },
   { valor: 'tv', etiqueta: 'Series' },
@@ -61,7 +63,17 @@ function SeccionRecomendaciones({ emocion, animoId }) {
         }
 
         const parametros = nuevoOrigen.animo ? { animoId: nuevoOrigen.animo.id, tipo } : { emocion: nuevoOrigen.emocion, tipo }
-        const respuesta = await obtenerRecomendaciones(parametros)
+        let respuesta
+        try {
+          respuesta = await obtenerRecomendaciones(parametros)
+        } catch (fallo) {
+          // Un 502/503 suele ser transitorio (servicios gratuitos que despiertan
+          // en Render): se reintenta una sola vez antes de mostrar el error.
+          if (fallo?.codigo !== 'servicio-no-disponible') throw fallo
+          await new Promise((resolve) => window.setTimeout(resolve, ESPERA_REINTENTO_MS))
+          if (!activo) return
+          respuesta = await obtenerRecomendaciones(parametros)
+        }
         if (!activo) return
         setResultados(respuesta.resultados)
         setEstado('ready')

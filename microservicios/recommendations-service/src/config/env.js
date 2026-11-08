@@ -4,9 +4,11 @@ import 'dotenv/config'
 export const env = {
   serviceName: process.env.SERVICE_NAME ?? 'recommendations-service',
   port: Number(process.env.PORT) || 3024,
-  authServiceUrl: readUrl('AUTH_SERVICE_URL', 'http://auth-service:3021'),
-  emotionsServiceUrl: readUrl('EMOTIONS_SERVICE_URL', 'http://emotions-service:3022'),
-  catalogServiceUrl: readUrl('CATALOG_SERVICE_URL', 'http://catalog-service:3023'),
+  // Por defecto, servicios en esta misma máquina (npm run dev en cada carpeta),
+  // igual que el API Gateway. compose.yaml y render.yaml fijan sus propias URLs.
+  authServiceUrl: readUrl('AUTH_SERVICE_URL', 'http://localhost:3021'),
+  emotionsServiceUrl: readUrl('EMOTIONS_SERVICE_URL', 'http://localhost:3022'),
+  catalogServiceUrl: readUrl('CATALOG_SERVICE_URL', 'http://localhost:3023'),
   requestTimeoutMs: readTimeout('REQUEST_TIMEOUT_MS', 45_000),
   upstreamTimeoutMs: readTimeout('UPSTREAM_TIMEOUT_MS', 30_000),
 }
