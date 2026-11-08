@@ -117,3 +117,78 @@ test('administrar perfiles: editar y eliminar uno secundario; el principal no se
   await expect(page.getByRole('button', { name: 'Entrar como Lucía Prueba' })).toHaveCount(0)
   expect(backend.social.perfiles.some((p) => p.id === lucia.id)).toBe(false)
 })
+
+test('cuenta de Melanie: crear Sofía y Carlos, entrar como Sofía y volver a Melanie cambia toda la aplicación', async ({ page, backend }) => {
+  // La cuenta que inició sesión es Melanie Hernández (perfil principal).
+  Object.assign(backend.usuario, { nombre: 'Melanie', apellido: 'Hernández' })
+  Object.assign(backend.perfilPrincipal, { nombre: 'Melanie', apellido: 'Hernández' })
+  const melanie = backend.perfilPrincipal
+  const favorito = (perfilId, titulo, tmdbId) => ({
+    id: randomUUID(), tmdbId, tipo: 'movie', titulo, poster: null, creadoEn: new Date().toISOString(), perfilId,
+  })
+  backend.favoritos.push(favorito(melanie.id, 'Favorito de Melanie', 9001))
+
+  // Crear dos perfiles desde «¿Quién va a ver hoy?».
+  await page.goto('/')
+  for (const [nombre, apellido, edad] of [['Sofía', 'Hernández', '10'], ['Carlos', 'Hernández', '40']]) {
+    await page.getByRole('button', { name: 'Agregar perfil' }).click()
+    const formulario = page.getByRole('dialog', { name: 'Nuevo perfil' })
+    await formulario.getByLabel('Nombre').fill(nombre)
+    await formulario.getByLabel('Apellido').fill(apellido)
+    await formulario.getByLabel('Edad').fill(edad)
+    await formulario.getByRole('button', { name: 'Crear perfil' }).click()
+    await expect(page.getByRole('button', { name: `Entrar como ${nombre} ${apellido}` })).toBeVisible()
+  }
+  const sofia = backend.social.perfiles.find((p) => p.nombre === 'Sofía')
+  backend.favoritos.push(favorito(sofia.id, 'Favorito de Sofía', 9002))
+
+  /** Toda la aplicación corresponde al perfil indicado, no solo el texto del encabezado. */
+  async function comprobarPerfil(perfil, otro) {
+    const nombre = `${perfil.nombre} ${perfil.apellido}`
+    // Encabezado.
+    await expect(botonUsuario(page)).toContainText(nombre)
+    await expect(botonUsuario(page)).not.toContainText(`${otro.nombre} ${otro.apellido}`)
+    // Menú: perfil activo y, aparte, la cuenta que inició sesión.
+    await botonUsuario(page).click()
+    await expect(page.getByTestId('perfil-activo')).toHaveText(nombre)
+    await expect(page.getByTestId('cuenta-sesion')).toContainText('Cuenta: Melanie Hernández')
+    await page.keyboard.press('Escape')
+    // Galería: las peticiones viajan con el id real del perfil.
+    await menu(page, 'Galería').click()
+    await expect.poll(() => backend.peticionesA('GET', '/api/favoritos').at(-1)?.perfil).toBe(perfil.id)
+    // Favoritos propios, nunca los del otro perfil.
+    await menu(page, 'Favoritos').click()
+    await expect(page.getByRole('heading', { name: `Favorito de ${perfil.nombre}` })).toBeVisible()
+    await expect(page.getByRole('heading', { name: `Favorito de ${otro.nombre}` })).toHaveCount(0)
+    // Dashboard y emociones del perfil.
+    await menu(page, 'Dashboard').click()
+    await expect(page.getByRole('heading', { name: new RegExp(`Hola, ${perfil.nombre}`) })).toBeVisible()
+    await expect.poll(() => backend.peticionesA('GET', '/api/animos').at(-1)?.perfil).toBe(perfil.id)
+    // Recargar mantiene el perfil elegido (no vuelve al principal).
+    const desde = backend.peticiones.length
+    await page.reload()
+    await expect(botonUsuario(page)).toContainText(nombre)
+    await expect(page.getByRole('heading', { name: new RegExp(`Hola, ${perfil.nombre}`) })).toBeVisible()
+    // Ninguna petición con datos personales salió con el perfil equivocado tras recargar.
+    await menu(page, 'Favoritos').click()
+    await expect(page.getByRole('heading', { name: `Favorito de ${perfil.nombre}` })).toBeVisible()
+    const personales = backend.peticiones.slice(desde).filter((p) => /^\/api\/(favoritos|historial|animos)/.test(p.ruta))
+    expect(personales.length).toBeGreaterThan(0)
+    for (const p of personales) expect(p.perfil).toBe(perfil.id)
+  }
+
+  // Elegir Sofía en la pantalla de perfiles.
+  await page.getByRole('button', { name: 'Entrar como Sofía Hernández' }).click()
+  await expect(page).toHaveURL(/#galeria$/)
+  await comprobarPerfil(sofia, melanie)
+
+  // Volver a Melanie desde el menú de usuario.
+  await cambiarDesdeMenu(page, 'Melanie Hernández')
+  await comprobarPerfil(melanie, sofia)
+
+  // Y de nuevo a Sofía, desde «Administrar perfiles».
+  await botonUsuario(page).click()
+  await page.getByRole('link', { name: 'Administrar perfiles' }).click()
+  await page.getByRole('button', { name: 'Entrar como Sofía Hernández' }).click()
+  await comprobarPerfil(sofia, melanie)
+})

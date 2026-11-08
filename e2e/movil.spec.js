@@ -3,6 +3,7 @@ import { expect, test } from './support/pruebas.js'
 // Pantallas pequeñas con Chromium emulando un celular táctil. Se usan los
 // tamaños de iPhone sin cambiar de navegador (WebKit no está en CI).
 const TELEFONOS = [
+  { nombre: 'Android pequeño', width: 360, height: 640 },
   { nombre: 'iPhone SE (2.ª gen.)', width: 375, height: 667 },
   { nombre: 'iPhone SE (1.ª gen.)', width: 320, height: 568 },
   { nombre: 'iPhone 14 Pro', width: 393, height: 852 },
@@ -32,6 +33,49 @@ async function simularTecladoSuperpuesto(page) {
 
 test.use({ conSesion: true, isMobile: true, hasTouch: true, deviceScaleFactor: 2 })
 
+// Deslizamiento con el dedo: secuencia touchStart → touchMove → touchEnd por
+// CDP, la misma entrada que produce un celular. Si algún contenedor bloquea el
+// scroll, la página no se mueve (así se reprodujo el error de producción:
+// scrollY 0 y el botón cortado en 360 × 640). distanciaY < 0 desliza hacia
+// arriba (el contenido baja).
+async function deslizar(page, distanciaY) {
+  const cdp = await page.context().newCDPSession(page)
+  const { width, height } = page.viewportSize()
+  const x = Math.round(width / 2)
+  const inicio = distanciaY < 0 ? Math.round(height * 0.8) : Math.round(height * 0.2)
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y: inicio }] })
+  for (let paso = 1; paso <= 12; paso++) {
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: inicio + (distanciaY * paso) / 12 }] })
+    await page.waitForTimeout(16)
+  }
+  // El dedo se detiene antes de levantarse: sin inercia residual. Un toque
+  // durante la inercia (o el rebote al llegar al final) solo la frena y no
+  // presiona el botón, igual que en un celular.
+  for (let pausa = 0; pausa < 6; pausa++) {
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: inicio + distanciaY }] })
+    await page.waitForTimeout(25)
+  }
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+  await cdp.detach()
+  await page.waitForTimeout(300)
+}
+
+/** Toque con el dedo en el centro del elemento (misma vía CDP que deslizar). */
+async function tocar(page, locator) {
+  const caja = await locator.boundingBox()
+  const punto = { x: Math.round(caja.x + caja.width / 2), y: Math.round(caja.y + caja.height / 2) }
+  const cdp = await page.context().newCDPSession(page)
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [punto] })
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+  await cdp.detach()
+}
+
+async function esVisibleCompleto(locator) {
+  const caja = await locator.boundingBox()
+  const { height } = locator.page().viewportSize()
+  return Boolean(caja) && caja.y >= 0 && caja.y + caja.height <= height
+}
+
 const sinScrollHorizontal = (page) =>
   page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)
 
@@ -56,9 +100,7 @@ for (const telefono of TELEFONOS) {
       // Con el teclado abierto el área visible se achica: el contenedor permite
       // desplazarse y el campo enfocado y el botón siguen alcanzables.
       await page.setViewportSize({ width: telefono.width, height: Math.round(telefono.height * 0.55) })
-      const contenedor = page.locator('.registro-nombre')
-      expect(await contenedor.evaluate((el) => getComputedStyle(el).overflowY)).toBe('auto')
-      expect(await contenedor.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true)
+      expect(await page.evaluate(() => document.scrollingElement.scrollHeight > window.innerHeight)).toBe(true)
 
       await page.getByLabel('Nombre').fill('Ana')
       await page.getByLabel('Apellido').fill('García')
@@ -74,6 +116,52 @@ for (const telefono of TELEFONOS) {
 
       await expect(page).toHaveURL(/#perfiles$/)
       expect(backend.peticionesA('PUT', '/api/usuarios').at(-1).body).toEqual({ nombre: 'Ana', apellido: 'García', edad: 31 })
+    })
+
+    test('"Queremos conocerte" se desliza con el dedo hasta Continuar y de vuelta al título, sin teclado', async ({ page, backend }) => {
+      backend.usuario.nombre = null
+      backend.usuario.apellido = null
+      backend.usuario.edad = null
+      await page.goto('/')
+      const titulo = page.getByRole('heading', { name: 'Queremos conocerte' })
+      const continuar = page.getByRole('button', { name: 'Continuar al reconocimiento facial' })
+      await expect(titulo).toBeVisible()
+
+      // Ningún elemento padre bloquea el scroll: el documento es más alto que la pantalla y desplazable.
+      const estado = await page.evaluate(() => ({
+        alto: document.scrollingElement.scrollHeight, ventana: window.innerHeight,
+        overflow: ['html', 'body', '#root'].map((sel) => getComputedStyle(document.querySelector(sel)).overflowY),
+      }))
+      if (estado.alto > estado.ventana) expect(estado.overflow).not.toContain('hidden')
+      // En 360 × 640 y 375 × 667 el botón empieza cortado: la prueba exige desplazarse de verdad.
+      if (telefono.height <= 667) await expect(continuar).not.toBeInViewport({ ratio: 1 })
+
+      // Deslizar hacia arriba con el dedo (el contenido baja) hasta ver el botón completo.
+      for (let i = 0; i < 4 && !(await continuar.isVisible() && await esVisibleCompleto(continuar)); i++) {
+        await deslizar(page, -300)
+      }
+      await expect(continuar).toBeInViewport({ ratio: 1 })
+      // Queda espacio libre debajo del botón para presionarlo cómodamente.
+      const caja = await continuar.boundingBox()
+      expect(page.viewportSize().height - (caja.y + caja.height)).toBeGreaterThanOrEqual(16)
+
+      // Y deslizar en sentido contrario vuelve al título.
+      for (let i = 0; i < 4; i++) await deslizar(page, 300)
+      await expect(titulo).toBeInViewport({ ratio: 1 })
+      expect(await page.evaluate(() => window.scrollY)).toBe(0)
+
+      // Se completa el formulario y se presiona el botón tras volver a deslizar.
+      await page.getByLabel('Nombre').fill('Ana')
+      await page.getByLabel('Apellido').fill('García')
+      await page.getByLabel('Edad').fill('31')
+      await page.getByLabel('Edad').blur()
+      for (let i = 0; i < 4; i++) await deslizar(page, -300)
+      await expect(continuar).toBeInViewport({ ratio: 1 })
+      await tocar(page, continuar)
+      await expect(page).toHaveURL(/#perfiles$/)
+      expect(backend.peticionesA('PUT', '/api/usuarios').at(-1).body).toEqual({ nombre: 'Ana', apellido: 'García', edad: 31 })
+      // Al salir del formulario se restaura el bloqueo de scroll del resto de la app.
+      expect(await page.evaluate(() => document.documentElement.classList.contains('pagina-desplazable'))).toBe(false)
     })
 
     test('"Queremos conocerte" con el teclado superpuesto: se baja hasta Continuar y se vuelve a subir', async ({ page, backend }) => {
@@ -95,7 +183,7 @@ for (const telefono of TELEFONOS) {
       await page.getByLabel('Apellido').fill('García')
 
       // Desplazándose hasta el final, Edad y Continuar quedan por encima del teclado.
-      await contenedor.evaluate((el) => el.scrollTo(0, el.scrollHeight))
+      await page.evaluate(() => window.scrollTo(0, document.scrollingElement.scrollHeight))
       const visible = Math.round(telefono.height * 0.55)
       for (const elemento of [page.getByLabel('Edad'), page.getByRole('button', { name: 'Continuar al reconocimiento facial' })]) {
         const caja = await elemento.boundingBox()
@@ -105,7 +193,7 @@ for (const telefono of TELEFONOS) {
       await page.getByLabel('Edad').fill('31')
 
       // Y se puede volver a subir hasta el encabezado.
-      await contenedor.evaluate((el) => el.scrollTo(0, 0))
+      await page.evaluate(() => window.scrollTo(0, 0))
       await expect(titulo).toBeInViewport()
 
       // Teclado cerrado: desaparece el espacio extra y el formulario se envía.

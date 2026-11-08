@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import logoButaca from '../../../logobutacaoficial.svg'
 import { useTecladoVirtual } from '../../hooks/useTecladoVirtual.js'
@@ -20,6 +20,15 @@ function RegistroNombre({ onGuardar, onCerrarSesion }) {
   const [error, setError] = useState('')
   const contenedor = useRef(null)
   useTecladoVirtual(contenedor)
+
+  // index.css bloquea el scroll de body (las demás pantallas tienen su propio
+  // contenedor). Este formulario usa el scroll nativo del documento: es el que
+  // Chrome Android y Safari iPhone manejan mejor con el dedo y con el teclado.
+  useEffect(() => {
+    const raiz = document.documentElement
+    raiz.classList.add('pagina-desplazable')
+    return () => raiz.classList.remove('pagina-desplazable')
+  }, [])
 
   const enviar = async (event) => {
     event.preventDefault()

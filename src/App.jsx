@@ -202,6 +202,7 @@ function App() {
     <Encabezado
       activa={activa}
       perfil={perfilActivo}
+      cuenta={cuenta}
       perfiles={listaPerfiles ?? []}
       onCambiarPerfil={activarPerfil}
       onCerrarSesion={salir}

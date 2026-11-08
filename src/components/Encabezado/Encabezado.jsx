@@ -66,7 +66,7 @@ export function AvatarPerfil({ perfil, tamano = 'md' }) {
  * centro de notificaciones.
  * activa: 'galeria' | 'rostro' | 'recomendaciones' | 'grupos' | 'dashboard' | 'favoritos' | 'historial'
  */
-function Encabezado({ activa, perfil, perfiles = [], onCambiarPerfil, onCerrarSesion }) {
+function Encabezado({ activa, perfil, cuenta, perfiles = [], onCambiarPerfil, onCerrarSesion }) {
   const [menuAbierto, setMenuAbierto] = useState(false)
   const [usuarioAbierto, setUsuarioAbierto] = useState(false)
   const [cerrando, setCerrando] = useState(false)
@@ -172,10 +172,18 @@ function Encabezado({ activa, perfil, perfiles = [], onCambiarPerfil, onCerrarSe
             <div className="app-header__menu-profile">
               <AvatarPerfil perfil={perfil} tamano="lg" />
               <div>
-                <strong>{perfil?.nombre}</strong>
-                <span>{perfil?.email ?? (perfil?.edad ? `Perfil · ${perfil.edad} años` : 'Perfil activo')}</span>
+                <span className="app-header__menu-etiqueta">Perfil activo</span>
+                <strong data-testid="perfil-activo">{perfil?.nombre}</strong>
+                <span>{perfil?.edad ? `${perfil.edad} años` : perfil?.esPrincipal ? 'Perfil principal' : 'Perfil'}</span>
               </div>
             </div>
+            {/* La cuenta (quien inició sesión) es distinta del perfil que está mirando. */}
+            {cuenta && (
+              <p className="app-header__menu-cuenta" data-testid="cuenta-sesion">
+                Cuenta: <strong>{cuenta.nombre}</strong>
+                {cuenta.email && <span>{cuenta.email}</span>}
+              </p>
+            )}
             {otrosPerfiles.length > 0 && onCambiarPerfil && (
               <div className="app-header__menu-perfiles" role="group" aria-label="Cambiar de perfil">
                 <span className="app-header__menu-titulo">Cambiar a</span>
