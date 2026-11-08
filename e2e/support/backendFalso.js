@@ -62,6 +62,13 @@ export class BackendFalso {
     this.peticiones = []
     // Rutas que deben fallar: { '/api/catalogo': 502 }.
     this.fallas = {}
+    this.usuario = {
+      id: USUARIO_PRUEBA.id,
+      email: USUARIO_PRUEBA.email,
+      nombre: 'Majo',
+      apellido: 'Prueba',
+      creadoEn: '2026-10-01T12:00:00.000Z',
+    }
   }
 
   /** Simula que un microservicio está caído (el gateway respondería 502). */
@@ -106,7 +113,11 @@ export class BackendFalso {
     }
 
     if (ruta === '/api/usuarios' && metodo === 'POST') {
-      return json(route, 200, { id: USUARIO_PRUEBA.id, email: USUARIO_PRUEBA.email })
+      return json(route, 200, this.usuario)
+    }
+    if (ruta === '/api/usuarios' && metodo === 'PUT') {
+      this.usuario = { ...this.usuario, nombre: body.nombre, apellido: body.apellido }
+      return json(route, 200, this.usuario)
     }
     if (ruta === '/api/catalogo' && metodo === 'GET') {
       return json(route, 200, { fuente: 'tmdb', resultados: CATALOGO })

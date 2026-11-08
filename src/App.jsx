@@ -12,13 +12,13 @@ import GaleriaPrincipal from './pages/Galeria/GaleriaPrincipal.jsx'
 import Main from './pages/Main/Main.jsx'
 import Perfiles from './pages/Perfiles/Perfiles.jsx'
 import RostroDeteccion from './pages/Rostro/RostroDeteccion.jsx'
+import RegistroNombre from './pages/RegistroNombre/RegistroNombre.jsx'
 import {
   guardarPerfilActivo,
   limpiarPerfilActivo,
-  obtenerPerfilActivo,
   perfilDeCuenta,
 } from './services/perfiles.js'
-import { olvidarSincronizacion } from './services/usuarios.js'
+import { actualizarNombreUsuario, olvidarSincronizacion } from './services/usuarios.js'
 import './App.css'
 
 // Flujo (pf20): Inicio de sesión → Selección de perfil → Galería → Escáner →
@@ -51,15 +51,19 @@ function App() {
   // Se incrementa al elegir perfil para volver a leer sessionStorage.
   const [, setVersionPerfil] = useState(0)
 
-  const perfil = useMemo(() => perfilDeCuenta(sesion.usuario), [sesion.usuario])
-  const perfilActivo = usuarioId ? obtenerPerfilActivo(usuarioId) : null
+  const [registroActualizado, setRegistroActualizado] = useState(null)
+  const registro = registroActualizado?.usuarioId === usuarioId
+    ? registroActualizado.valor
+    : sesion.registro
+  const perfil = useMemo(() => perfilDeCuenta(sesion.usuario, registro), [sesion.usuario, registro])
   const autenticado = sesion.estado === 'autenticado'
-  const necesitaPerfil = autenticado && (!perfilActivo || ruta.pantalla === 'perfiles')
+  const necesitaNombre = autenticado && (!registro?.nombre || !registro?.apellido)
+  const necesitaPerfil = autenticado && ruta.pantalla === 'perfiles'
 
   // Después del login (o con una sesión previa válida) se sale de la bienvenida.
   useEffect(() => {
-    if (autenticado && !necesitaPerfil && ruta.pantalla === 'inicio') reemplazarHash('#galeria')
-  }, [autenticado, necesitaPerfil, ruta.pantalla])
+    if (autenticado && !necesitaNombre && !necesitaPerfil && ruta.pantalla === 'inicio') reemplazarHash('#rostro')
+  }, [autenticado, necesitaNombre, necesitaPerfil, ruta.pantalla])
 
   const seleccionarPerfil = useCallback((perfilId) => {
     guardarPerfilActivo(usuarioId, perfilId)
@@ -82,6 +86,15 @@ function App() {
   if (sesion.estado === 'cargando') return <PantallaSesion />
   if (sesion.estado === 'error') return <PantallaSesion error onRetry={sesion.reintentar} />
   if (!autenticado) return <Main />
+
+  if (necesitaNombre) {
+    const guardarNombre = async (nombre, apellido) => {
+      const actualizado = await actualizarNombreUsuario(nombre, apellido)
+      setRegistroActualizado({ usuarioId, valor: actualizado })
+      reemplazarHash('#rostro')
+    }
+    return <RegistroNombre onGuardar={guardarNombre} onCerrarSesion={salir} />
+  }
 
   if (necesitaPerfil) {
     return <Perfiles perfiles={[perfil]} onSeleccionar={seleccionarPerfil} onCerrarSesion={salir} />

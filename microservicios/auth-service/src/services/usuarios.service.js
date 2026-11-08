@@ -1,6 +1,6 @@
 import { prisma } from '../lib/prisma.js'
 
-const usuarioSelect = { id: true, email: true, creadoEn: true }
+const usuarioSelect = { id: true, email: true, nombre: true, apellido: true, creadoEn: true }
 
 export const usuariosService = {
   async sincronizar({ id, email }) {
@@ -15,6 +15,14 @@ export const usuariosService = {
   async obtener(id) {
     return prisma.usuario.findUnique({
       where: { id },
+      select: usuarioSelect,
+    })
+  },
+
+  async actualizarNombre(id, { nombre, apellido }) {
+    return prisma.usuario.update({
+      where: { id },
+      data: { nombre, apellido },
       select: usuarioSelect,
     })
   },

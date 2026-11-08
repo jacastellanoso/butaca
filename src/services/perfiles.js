@@ -23,13 +23,15 @@ function urlSegura(valor) {
 }
 
 /** Perfil principal de la cuenta a partir del usuario de Supabase Auth. */
-export function perfilDeCuenta(usuario) {
+export function perfilDeCuenta(usuario, registro) {
   if (!usuario?.id) return null
   const meta = usuario.user_metadata ?? {}
   const email = texto(usuario.email)
-  const nombre =
+  const nombreOAuth =
     texto(meta.full_name) ?? texto(meta.name) ?? texto(meta.user_name) ??
     texto(meta.preferred_username) ?? (email ? email.split('@')[0] : 'Mi perfil')
+  const nombreGuardado = [texto(registro?.nombre), texto(registro?.apellido)].filter(Boolean).join(' ')
+  const nombre = nombreGuardado || nombreOAuth
 
   return {
     id: usuario.id,

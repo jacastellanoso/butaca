@@ -14,15 +14,16 @@ export function useSesion() {
 
   const validar = useCallback(async () => {
     const resultado = await validarSesion(supabase)
-    setSesion({ estado: resultado.estado, usuario: resultado.usuario ?? null })
-
     if (resultado.estado === 'autenticado') {
-      // Crea o actualiza el registro local en Usuario; sin él, emociones y
-      // biblioteca responden 409. Un fallo aquí se reintenta en cada guardado.
-      sincronizarUsuario().catch((error) => {
-        console.warn('No se pudo sincronizar el usuario con auth-service.', error?.codigo ?? error)
-      })
+      try {
+        const registro = await sincronizarUsuario()
+        setSesion({ estado: 'autenticado', usuario: resultado.usuario, registro })
+      } catch {
+        setSesion({ estado: 'error', usuario: resultado.usuario, registro: null })
+      }
+      return
     }
+    setSesion({ estado: resultado.estado, usuario: resultado.usuario ?? null, registro: null })
   }, [])
 
   useEffect(() => {

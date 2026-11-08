@@ -22,16 +22,28 @@ test.describe('Sin sesión', () => {
 test.describe('Con sesión', () => {
   test.use({ conSesion: true })
 
-  test('pide elegir perfil y luego entra a la galería', async ({ page, backend }) => {
+  test('una cuenta registrada entra directamente al reconocimiento facial', async ({ page, backend }) => {
     await page.goto('/')
 
-    await expect(page.getByRole('heading', { name: /Quién va a ver hoy/ })).toBeVisible()
-    await page.getByRole('button', { name: /Majo Prueba/ }).click()
-
-    await expect(page).toHaveURL(/#galeria$/)
+    await expect(page).toHaveURL(/#rostro$/)
     await expect(page.getByRole('navigation', { name: 'Navegación principal' })).toBeVisible()
     // Al validar la sesión se sincroniza el usuario con auth-service.
     await expect.poll(() => backend.peticionesA('POST', '/api/usuarios').length).toBeGreaterThan(0)
+  })
+
+  test('una cuenta nueva guarda nombre y apellido antes del reconocimiento', async ({ page, backend }) => {
+    backend.usuario.nombre = null
+    backend.usuario.apellido = null
+    await page.goto('/')
+
+    await expect(page.getByRole('heading', { name: 'Queremos conocerte' })).toBeVisible()
+    await page.getByLabel('Nombre').fill('Ana')
+    await page.getByLabel('Apellido').fill('García')
+    await page.getByRole('button', { name: 'Continuar al reconocimiento facial' }).click()
+
+    await expect(page).toHaveURL(/#rostro$/)
+    await expect.poll(() => backend.peticionesA('PUT', '/api/usuarios').at(-1)?.body)
+      .toEqual({ nombre: 'Ana', apellido: 'García' })
   })
 
   test('cerrar sesión vuelve a la bienvenida y protege el dashboard', async ({ page }) => {

@@ -36,8 +36,9 @@ export function menu(page, nombre) {
 }
 
 /** Elige el perfil en "¿Quién va a ver hoy?" y espera la galería. */
-export async function entrarComo(page, nombre = 'Majo Prueba') {
+export async function entrarComo(page) {
   await page.goto('/')
-  await page.getByRole('button', { name: new RegExp(nombre) }).click()
+  await expect(page).toHaveURL(/#rostro$/)
+  await page.getByRole('navigation', { name: 'Navegación principal' }).getByRole('link', { name: 'Galería' }).click()
   await expect(page).toHaveURL(/#galeria$/)
 }

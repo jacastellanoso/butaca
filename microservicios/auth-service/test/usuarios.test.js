@@ -11,7 +11,7 @@ process.env.DIRECT_URL = process.env.DATABASE_URL
 
 const { supabase } = await import('../src/lib/supabase.js')
 const { prisma } = await import('../src/lib/prisma.js')
-const usuarioSelect = { id: true, email: true, creadoEn: true }
+const usuarioSelect = { id: true, email: true, nombre: true, apellido: true, creadoEn: true }
 const creadoEn = new Date('2026-10-01T12:00:00.000Z')
 const ajeno = { id: 'usuario-b', email: 'b@example.com', creadoEn }
 let registros
@@ -41,7 +41,14 @@ const findUnique = mock.fn(async ({ where, select }) => {
   const usuario = registros.get(where.id)
   return usuario ? seleccionar(usuario, select) : null
 })
-prisma.usuario = { upsert, findUnique }
+const update = mock.fn(async ({ where, data, select }) => {
+  const actual = registros.get(where.id)
+  if (!actual) throw new Error('No encontrado')
+  const usuario = { ...actual, ...data }
+  registros.set(where.id, usuario)
+  return seleccionar(usuario, select)
+})
+prisma.usuario = { upsert, findUnique, update }
 const { app } = await import('../src/app.js')
 let server
 let baseUrl
@@ -56,6 +63,7 @@ beforeEach(() => {
   getUser.mock.resetCalls()
   upsert.mock.resetCalls()
   findUnique.mock.resetCalls()
+  update.mock.resetCalls()
 })
 
 after(async () => {
@@ -162,6 +170,27 @@ test('cada token consulta y sincroniza su propio usuario', async () => {
   assert.equal(consulta.status, 200)
   assert.deepEqual(await consulta.json(), { ...ajeno, creadoEn: creadoEn.toISOString() })
   assert.deepEqual(findUnique.mock.calls[0].arguments[0].where, { id: 'usuario-b' })
+})
+
+test('PUT guarda nombre y apellido solo en el usuario autenticado', async () => {
+  registros.set('usuario-a', { id: 'usuario-a', email: 'a@example.com', nombre: null, apellido: null, creadoEn })
+  const res = await consultar('PUT', { body: { nombre: '  María  ', apellido: ' López ' } })
+
+  assert.equal(res.status, 200)
+  assert.deepEqual(await res.json(), {
+    id: 'usuario-a', email: 'a@example.com', nombre: 'María', apellido: 'López', creadoEn: creadoEn.toISOString(),
+  })
+  assert.deepEqual(update.mock.calls[0].arguments[0], {
+    where: { id: 'usuario-a' }, data: { nombre: 'María', apellido: 'López' }, select: usuarioSelect,
+  })
+  assert.deepEqual(registros.get('usuario-b'), ajeno)
+})
+
+test('PUT rechaza nombres vacíos o demasiado cortos sin consultar Prisma', async () => {
+  const res = await consultar('PUT', { body: { nombre: 'A', apellido: '' } })
+  assert.equal(res.status, 400)
+  assert.deepEqual(await res.json(), { error: 'Nombre y apellido deben tener entre 2 y 60 caracteres.' })
+  assert.equal(update.mock.callCount(), 0)
 })
 
 for (const method of ['GET', 'POST']) {
