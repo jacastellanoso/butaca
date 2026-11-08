@@ -11,7 +11,7 @@ export const supabase = isSupabaseConfigured
   ? createClient(supabaseUrl, supabasePublishableKey, {
       auth: {
         autoRefreshToken: true,
-        detectSessionInUrl: false,
+        detectSessionInUrl: true,
         flowType: 'pkce',
         persistSession: true,
       },
@@ -30,28 +30,32 @@ export function prepararSesionOAuth() {
 
   const url = new URL(window.location.href)
   const parametrosHash = new URLSearchParams(url.hash.replace(/^#/, ''))
-  const codigo = url.searchParams.get('code')
-  const accessToken = parametrosHash.get('access_token')
-  const refreshToken = parametrosHash.get('refresh_token')
+  const esRetornoOAuth = url.searchParams.has('code') || parametrosHash.has('access_token')
   const errorOAuth = url.searchParams.get('error_description') ?? parametrosHash.get('error_description')
 
-  if (!codigo && (!accessToken || !refreshToken) && !errorOAuth) return Promise.resolve()
+  if (!esRetornoOAuth && !errorOAuth) return Promise.resolve()
 
-  for (const parametro of ['code', 'error', 'error_code', 'error_description']) {
-    url.searchParams.delete(parametro)
+  const limpiarRetorno = () => {
+    const actual = new URL(window.location.href)
+    for (const parametro of ['code', 'error', 'error_code', 'error_description']) {
+      actual.searchParams.delete(parametro)
+    }
+    actual.hash = ''
+    window.history.replaceState(null, '', `${actual.pathname}${actual.search}`)
   }
-  url.hash = ''
-  window.history.replaceState(null, '', `${url.pathname}${url.search}`)
 
-  if (errorOAuth) return Promise.reject(new Error('El proveedor rechazó el inicio de sesión.'))
+  if (errorOAuth) {
+    limpiarRetorno()
+    return Promise.reject(new Error('El proveedor rechazó el inicio de sesión.'))
+  }
 
-  const operacion = codigo
-    ? supabase.auth.exchangeCodeForSession(codigo)
-    : supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
-
-  retornoOAuth = operacion
-    .then(({ error }) => {
-      if (error) throw error
+  // getSession espera la inicialización interna de Supabase. Esa inicialización
+  // conserva y usa el code_verifier de PKCE; no debemos intercambiar el código
+  // una segunda vez porque cada código OAuth solo puede utilizarse una vez.
+  retornoOAuth = supabase.auth.getSession()
+    .then(({ data, error }) => {
+      if (error || !data?.session) throw error ?? new Error('Supabase no creó una sesión.')
+      limpiarRetorno()
     })
     .finally(() => {
       retornoOAuth = null
