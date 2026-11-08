@@ -1,39 +1,63 @@
+/* "Queremos conocerte".
+   body tiene overflow: hidden (index.css): cada pantalla es su propio
+   contenedor con scroll. Aquí el alto es el del viewport dinámico (dvh) para
+   que el teclado del celular no tape campos ni el botón, y la tarjeta se
+   centra con márgenes automáticos: si no entra, se desplaza en lugar de
+   cortarse por arriba (lo que pasaba con place-items: center). */
 .registro-nombre {
-  display: grid;
-  min-height: 100svh;
-  place-items: center;
-  padding: 24px;
+  display: flex;
+  height: 100vh;
+  height: 100dvh;
+  flex-direction: column;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding:
+    max(24px, env(safe-area-inset-top))
+    max(16px, env(safe-area-inset-right))
+    max(32px, env(safe-area-inset-bottom))
+    max(16px, env(safe-area-inset-left));
+  scroll-padding-block: 24px 96px;
   background: radial-gradient(circle at top, #1786ff, #0000a8 72%);
 }
 
 .registro-nombre__card {
+  flex: 0 0 auto;
   width: min(100%, 520px);
-  padding: clamp(28px, 6vw, 48px);
+  margin: auto;
+  padding: clamp(24px, 6vw, 48px);
   border-radius: 28px;
   color: #10225f;
   background: #fff;
   box-shadow: 0 24px 70px rgb(0 0 70 / 35%);
 }
 
-.registro-nombre__card > img { width: 170px; }
-.registro-nombre__eyebrow { margin: 24px 0 6px; color: #0067df; font-weight: 800; }
-.registro-nombre__card h1 { margin: 0; font-size: clamp(32px, 7vw, 48px); }
+.registro-nombre__card > img { width: clamp(130px, 40vw, 170px); }
+.registro-nombre__eyebrow { margin: 20px 0 6px; color: #0067df; font-weight: 800; }
+.registro-nombre__card h1 { margin: 0; font-size: clamp(30px, 8vw, 48px); line-height: 1.1; overflow-wrap: anywhere; }
 .registro-nombre__card > p:not(.registro-nombre__eyebrow) { line-height: 1.6; }
 .registro-nombre__card form { display: grid; gap: 10px; margin-top: 24px; }
 .registro-nombre__card label { margin-top: 6px; font-weight: 750; }
 .registro-nombre__card input {
+  width: 100%;
+  min-width: 0;
   min-height: 48px;
   padding: 10px 14px;
   border: 2px solid #b9c8ea;
   border-radius: 12px;
   color: #10225f;
   background: #fff;
+  /* 16px como mínimo: iOS no hace zoom automático al enfocar el campo. */
   font: inherit;
+  font-size: max(16px, 1rem);
+  scroll-margin-block: 24px 120px;
 }
 .registro-nombre__card input:focus-visible { outline: 3px solid #65adff; outline-offset: 2px; border-color: #0067df; }
 .registro-nombre__card form button {
   min-height: 50px;
   margin-top: 14px;
+  padding: 12px 18px;
   border: 0;
   border-radius: 999px;
   color: #fff;
@@ -41,8 +65,24 @@
   font: inherit;
   font-weight: 800;
   cursor: pointer;
+  scroll-margin-block: 24px 40px;
 }
 .registro-nombre__card button:disabled { cursor: wait; opacity: .65; }
 .registro-nombre__error { margin: 6px 0 0; color: #a00028; font-weight: 700; }
 .registro-nombre__help { margin: -4px 0 2px; color: #53658f; font-size: 12px; line-height: 1.4; }
-.registro-nombre__salir { display: block; margin: 20px auto 0; border: 0; color: #334a89; background: transparent; text-decoration: underline; cursor: pointer; }
+.registro-nombre__salir {
+  display: block;
+  min-height: 44px;
+  margin: 12px auto 0;
+  border: 0;
+  color: #334a89;
+  background: transparent;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+@media (max-width: 380px) {
+  .registro-nombre__card { border-radius: 22px; }
+  .registro-nombre__eyebrow { margin-top: 14px; }
+  .registro-nombre__card form { margin-top: 16px; }
+}
