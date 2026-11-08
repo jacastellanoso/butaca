@@ -1209,8 +1209,9 @@ Esta verificación sustituye el bloqueo Docker anterior. Docker Desktop estaba i
 - Perfiles con nombre, apellido y edad por cuenta; datos (ánimos, favoritos, historial, recomendación del día) separados por perfil con `X-Butaca-Perfil` verificado en el servidor.
 - Grupos con invitaciones por correo, recomendaciones compartidas (con autor) y gestión de integrantes; centro de notificaciones con campana.
 - Correcciones: "Mis recomendaciones" en local (URLs de Docker en el `.env`), formulario "Queremos conocerte" en celulares y 8 pruebas E2E del PR #24.
-- Migración `20261109120000_perfiles_grupos_notificaciones` verificada en PostgreSQL local; su aplicación en Supabase requiere autorización. Detalle en la sección «Perfiles, grupos y notificaciones — pf25_MejorasVisuales».
-- Verificación: 426/426 unitarias e integración (7 paquetes), 32/32 E2E, lint y build sin errores, sin secretos.
+- Migración `20261109120000_perfiles_grupos_notificaciones` verificada en PostgreSQL local y aplicada en Supabase. Detalle en la sección «Perfiles, grupos y notificaciones — pf25_MejorasVisuales».
+- Migración aplicada en Supabase el 2026-11-08 con autorización, después de un respaldo lógico verificado (restaurado en PostgreSQL 17 local). Conteos sin cambios y versión desplegada anterior funcionando con la base migrada.
+- Verificación: 426/426 unitarias e integración (7 paquetes), 35/35 E2E, lint y build sin errores, sin secretos.
 
 ### 2026-11-04 — Integración continua con GitHub Actions (`pf24_GitHubActions`)
 
@@ -2004,12 +2005,13 @@ Cuando un check de GitHub Actions se marca en rojo (icono ✖), el desarrollador
 - Ubicación: `microservicios/auth-service/prisma/migrations/` (misma carpeta que las migraciones de pf25). Aditiva: no elimina tablas, columnas ni filas. Solo reemplaza el trigger de actualización del perfil principal y el índice único de `Favorito`.
 - Verificada en un PostgreSQL 17 local descartable: se aplicaron las 8 migraciones previas, datos de ejemplo y luego esta; se comprobaron relleno de `perfilId`, trigger de compatibilidad, FK compuesta, unicidad de favoritos por perfil, cascadas y unicidad de la recomendación del día. También se ejecutaron los servicios reales con Prisma contra esa base.
 - Orden seguro de despliegue: primero la migración (el código anterior sigue funcionando con ella) y después el código. `render.yaml` despliega esta rama automáticamente cuando el CI pasa.
+- **Aplicada en Supabase (2026-11-08)** con autorización del responsable: respaldo lógico previo con `pg_dump` 17 del esquema `public` (guardado fuera del repositorio y restaurado con éxito en un PostgreSQL 17 local: 10 usuarios, 11 perfiles, 8 ánimos, 3 favoritos, 20 historial, 8 migraciones); `prisma migrate status` mostraba solo esta pendiente; `prisma migrate deploy` desde auth-service: «All migrations have been successfully applied». Después: 9 migraciones terminadas, 0 fallidas, mismos conteos, 0 registros sin `perfilId`, y la versión desplegada anterior siguió respondiendo (401 con token inválido, catálogo 200).
 
 ### "Mis recomendaciones": causa del error
 
 - Local: `microservicios/recommendations-service/.env` usaba los nombres internos de Docker (`http://auth-service:3021`, …). Fuera de Docker no se resuelven → 503 → "El servicio no está disponible en este momento". Es el único servicio que llama a otros, por eso solo fallaba esa sección.
 - Corrección: valores por defecto `http://localhost:302x` (como el gateway), `.env.example` actualizado y `compose.yaml` fija los nombres de Docker para recommendations-service.
-- Producción (Render gratuito): la cadena gateway → recomendaciones → auth/emociones/catálogo responde bien (verificado con token inválido → 401 y el catálogo devuelve datos válidos en las 12 combinaciones). Un servicio dormido puede devolver 502/503 en el primer acceso: la sección reintenta una vez automáticamente antes de mostrar el error.
+- Producción (Render gratuito): la cadena gateway → recomendaciones → auth/emociones/catálogo es correcta (token inválido → 401; el catálogo devuelve datos válidos en las 12 combinaciones que usa recomendaciones). Pero tras ~15 min sin uso los servicios se duermen y tardan ~13 s en despertar; mientras tanto el gateway responde 502 (medido el 2026-11-08) y la sección mostraba el error. Ahora la sección reintenta hasta 3 veces (3, 6 y 10 s) ante 502/503 antes de mostrar el error; el botón Reintentar se conserva.
 
 ### Formulario "Queremos conocerte" en celulares
 
@@ -2019,4 +2021,4 @@ Cuando un check de GitHub Actions se marca en rojo (icono ✖), el desarrollador
 
 - Causa de 8/10 fallos: el usuario simulado no tenía `edad` (la app quedaba en "Queremos conocerte") y el flujo vigente pasa por "¿Quién va a ver hoy?" (`#perfiles`), no por `#rostro`. Se corrigieron `backendFalso.js` (edad, perfiles, separación por perfil, grupos y notificaciones en `socialFalso.js`) y `entrarComo`.
 - `rostro.spec.js` se adaptó al flujo de pf25 (casilla de autorización premarcada y recomendaciones tras guardar) manteniendo sus garantías: sin autorización no se guarda y solo viajan emoción y confianza.
-- Nuevas: `perfiles.spec.js`, `grupos.spec.js`, `notificaciones.spec.js`, `movil.spec.js` (iPhone SE 1.ª y 2.ª gen. e iPhone 14 Pro).
+- Nuevas: `perfiles.spec.js`, `grupos.spec.js`, `notificaciones.spec.js`, `recomendaciones.spec.js` (recuperación ante 502, error persistente y ánimo del perfil activo) y `movil.spec.js` (iPhone SE 1.ª y 2.ª gen. e iPhone 14 Pro).

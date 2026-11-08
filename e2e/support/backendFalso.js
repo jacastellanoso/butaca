@@ -63,6 +63,8 @@ export class BackendFalso {
     this.peticiones = []
     // Rutas que deben fallar: { '/api/catalogo': 502 }.
     this.fallas = {}
+    // Fallas que se resuelven solas: { '/api/recomendaciones': { status: 502, veces: 1 } }.
+    this.fallasTemporales = {}
     this.usuario = {
       id: USUARIO_PRUEBA.id,
       email: USUARIO_PRUEBA.email,
@@ -83,6 +85,11 @@ export class BackendFalso {
   /** Simula que un microservicio está caído (el gateway respondería 502). */
   fallar(prefijo, status = 502) {
     this.fallas[prefijo] = status
+  }
+
+  /** Simula un servicio dormido (Render gratuito): falla `veces` y luego responde. */
+  fallarVeces(prefijo, status = 502, veces = 1) {
+    this.fallasTemporales[prefijo] = { status, veces }
   }
 
   peticionesA(metodo, ruta) {
@@ -115,6 +122,11 @@ export class BackendFalso {
 
     const falla = Object.entries(this.fallas).find(([prefijo]) => ruta.startsWith(prefijo))
     if (falla) return json(route, falla[1], { error: 'El servicio solicitado no está disponible temporalmente.' })
+    const temporal = Object.entries(this.fallasTemporales).find(([prefijo, f]) => ruta.startsWith(prefijo) && f.veces > 0)
+    if (temporal) {
+      temporal[1].veces -= 1
+      return json(route, temporal[1].status, { error: 'El servicio solicitado no está disponible temporalmente.' })
+    }
 
     // Igual que requireAuth en cada microservicio (el catálogo es público).
     const conToken = request.headers().authorization === `Bearer ${TOKEN_PRUEBA}`

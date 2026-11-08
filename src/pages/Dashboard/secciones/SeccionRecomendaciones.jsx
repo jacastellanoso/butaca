@@ -12,7 +12,7 @@ import TarjetaPelicula from '../components/TarjetaPelicula.jsx'
 import { COLORES_EMOCION, EMOCIONES_ORDEN } from '../estadisticas.js'
 import { etiquetaEmocion, formatearFechaHora } from '../formato.js'
 
-const ESPERA_REINTENTO_MS = 2500
+const ESPERAS_REINTENTO_MS = [3000, 6000, 10000]
 
 const TIPOS = [
   { valor: 'movie', etiqueta: 'Películas' },
@@ -51,30 +51,37 @@ function SeccionRecomendaciones({ emocion, animoId }) {
     setEstado('loading')
     setError('')
 
+    // Ánimo + recomendaciones. Ante 502/503 (en Render gratuito los servicios
+    // dormidos tardan ~13 s en despertar y el gateway responde 502 mientras
+    // tanto) se reintenta con esperas crecientes antes de mostrar el error.
+    const consultar = async () => {
+      const nuevoOrigen = await resolverOrigen({ emocion, animoId })
+      if (nuevoOrigen.tipo === 'ninguno') return { nuevoOrigen, respuesta: null }
+      const parametros = nuevoOrigen.animo ? { animoId: nuevoOrigen.animo.id, tipo } : { emocion: nuevoOrigen.emocion, tipo }
+      return { nuevoOrigen, respuesta: await obtenerRecomendaciones(parametros) }
+    }
+
     ;(async () => {
       try {
-        const nuevoOrigen = await resolverOrigen({ emocion, animoId })
+        let resultado
+        for (let reintento = 0; ; reintento += 1) {
+          try {
+            resultado = await consultar()
+            break
+          } catch (fallo) {
+            if (fallo?.codigo !== 'servicio-no-disponible' || reintento >= ESPERAS_REINTENTO_MS.length) throw fallo
+            await new Promise((resolve) => window.setTimeout(resolve, ESPERAS_REINTENTO_MS[reintento]))
+            if (!activo) return
+          }
+        }
         if (!activo) return
+        const { nuevoOrigen, respuesta } = resultado
         setOrigen(nuevoOrigen)
         if (nuevoOrigen.tipo === 'ninguno') {
           setResultados([])
           setEstado('sin-animo')
           return
         }
-
-        const parametros = nuevoOrigen.animo ? { animoId: nuevoOrigen.animo.id, tipo } : { emocion: nuevoOrigen.emocion, tipo }
-        let respuesta
-        try {
-          respuesta = await obtenerRecomendaciones(parametros)
-        } catch (fallo) {
-          // Un 502/503 suele ser transitorio (servicios gratuitos que despiertan
-          // en Render): se reintenta una sola vez antes de mostrar el error.
-          if (fallo?.codigo !== 'servicio-no-disponible') throw fallo
-          await new Promise((resolve) => window.setTimeout(resolve, ESPERA_REINTENTO_MS))
-          if (!activo) return
-          respuesta = await obtenerRecomendaciones(parametros)
-        }
-        if (!activo) return
         setResultados(respuesta.resultados)
         setEstado('ready')
 
