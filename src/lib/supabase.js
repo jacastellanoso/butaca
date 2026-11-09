@@ -1,0 +1,47 @@
+import { createClient } from '@supabase/supabase-js'
+
+// import.meta.env existe con Vite; en las pruebas de Node no hay configuración.
+const supabaseUrl = import.meta.env?.VITE_SUPABASE_URL
+const supabasePublishableKey = import.meta.env?.VITE_SUPABASE_PUBLISHABLE_KEY
+
+export const isSupabaseConfigured = Boolean(
+  supabaseUrl && supabasePublishableKey,
+)
+
+export const supabase = isSupabaseConfigured
+  ? createClient(supabaseUrl, supabasePublishableKey, {
+      auth: {
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+        flowType: 'pkce',
+        persistSession: true,
+      },
+    })
+  : null
+
+export async function signInWithOAuth(provider) {
+  if (!supabase) {
+    throw new Error('Falta configurar la conexión con Supabase.')
+  }
+
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider,
+    options: {
+      redirectTo: window.location.origin,
+      skipBrowserRedirect: false,
+    },
+  })
+
+  if (error) {
+    throw error
+  }
+
+  return data
+}
+
+/** Cierra la sesión solo en este navegador; el estado local lo limpia quien llama. */
+export async function cerrarSesion() {
+  if (!supabase) return
+  const { error } = await supabase.auth.signOut({ scope: 'local' })
+  if (error) throw error
+}

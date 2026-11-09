@@ -1,0 +1,49 @@
+export class DependencyError extends Error {
+  // despertar: URL pública de /health de una dependencia dormida en Render.
+  constructor(status, message, despertar = null) { super(message); this.status = status; this.despertar = despertar }
+}
+
+/**
+ * Un servicio dormido en Render no despierta con peticiones desde otro servicio
+ * de Render: responde 502 con x-render-routing. Se devuelve su /health público
+ * para que el navegador lo despierte (X-Butaca-Despertar).
+ */
+export function urlParaDespertar(baseUrl, response) {
+  if (![502, 503, 504].includes(response.status) || !response.headers.get('x-render-routing')) return null
+  try {
+    const url = new URL('/health', baseUrl)
+    return url.protocol === 'https:' ? url.href : null
+  } catch {
+    return null
+  }
+}
+
+// El plazo cubre también el body; nunca seguir redirecciones con el Bearer.
+export function crearCliente({ fetchImpl, config, signal }) {
+  // extraHeaders: hoy solo X-Butaca-Perfil, para que emotions-service filtre por el perfil activo.
+  return async function consultar(baseUrl, path, authorization, protectedResource = false, extraHeaders = {}) {
+    try {
+      const response = await fetchImpl(new URL(path, baseUrl), {
+        headers: authorization
+          ? { Accept: 'application/json', Authorization: authorization, ...extraHeaders }
+          : { Accept: 'application/json' },
+        redirect: 'error',
+        signal: AbortSignal.any([signal, AbortSignal.timeout(config.upstreamTimeoutMs)]),
+      })
+      if (response.status === 401 && protectedResource) throw new DependencyError(401, 'Sesión inválida o expirada.')
+      if (response.status === 403 && protectedResource) throw new DependencyError(403, 'El perfil indicado no pertenece a tu cuenta.')
+      if (response.status === 404 && protectedResource) throw new DependencyError(404, 'El registro emocional no existe.')
+      if ([429, 500, 502, 503, 504].includes(response.status)) {
+        throw new DependencyError(503, 'Un servicio necesario no está disponible.', urlParaDespertar(baseUrl, response))
+      }
+      if (response.status !== 200 || !response.headers.get('content-type')?.includes('application/json')) {
+        throw new DependencyError(502, 'Respuesta inválida de un servicio necesario.')
+      }
+      return await response.json()
+    } catch (error) {
+      if (error instanceof DependencyError) throw error
+      if (error instanceof SyntaxError) throw new DependencyError(502, 'Respuesta JSON inválida de un servicio necesario.')
+      throw new DependencyError(503, 'Un servicio necesario no está disponible o excedió el tiempo límite.')
+    }
+  }
+}

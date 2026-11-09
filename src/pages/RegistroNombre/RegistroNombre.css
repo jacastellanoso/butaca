@@ -1,0 +1,107 @@
+/* "Queremos conocerte".
+   index.css bloquea el scroll de body (overflow: hidden) y fija html, body y
+   #root al 100 % del alto: con la tarjeta más alta que la pantalla nada se
+   podía desplazar (pasaba en Android aun con el teclado cerrado). Mientras
+   esta pantalla está montada, RegistroNombre agrega .pagina-desplazable a
+   <html> y el DOCUMENTO pasa a tener altura flexible y scroll vertical real.
+   La pantalla ocupa como mínimo el alto visible (dvh) y crece con su
+   contenido; la tarjeta se centra con margin: auto sin cortarse por arriba. */
+html.pagina-desplazable,
+html.pagina-desplazable body,
+html.pagina-desplazable #root {
+  height: auto;
+  min-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+html.pagina-desplazable {
+  /* Fondo azul también al estirar la página en el borde (rebote de iOS). */
+  background: #0000a8;
+}
+
+.registro-nombre {
+  box-sizing: border-box;
+  display: flex;
+  min-height: 100vh;
+  min-height: 100dvh;
+  flex-direction: column;
+  /* --teclado-alto (useTecladoVirtual): lo que tapa el teclado virtual en
+     iOS. Se suma al relleno inferior para que Edad y el botón puedan subir
+     por encima del teclado; al cerrarlo vuelve a 0. */
+  padding:
+    max(24px, env(safe-area-inset-top))
+    max(16px, env(safe-area-inset-right))
+    calc(max(48px, env(safe-area-inset-bottom) + 24px) + var(--teclado-alto, 0px))
+    max(16px, env(safe-area-inset-left));
+  background: radial-gradient(circle at top, #1786ff, #0000a8 72%);
+}
+
+html.pagina-desplazable {
+  scroll-padding-block: 24px 120px;
+}
+
+.registro-nombre__card {
+  flex: 0 0 auto;
+  width: min(100%, 520px);
+  margin: auto;
+  padding: clamp(24px, 6vw, 48px);
+  border-radius: 28px;
+  color: #10225f;
+  background: #fff;
+  box-shadow: 0 24px 70px rgb(0 0 70 / 35%);
+}
+
+.registro-nombre__card > img { width: clamp(130px, 40vw, 170px); }
+.registro-nombre__eyebrow { margin: 20px 0 6px; color: #0067df; font-weight: 800; }
+.registro-nombre__card h1 { margin: 0; font-size: clamp(30px, 8vw, 48px); line-height: 1.1; overflow-wrap: anywhere; }
+.registro-nombre__card > p:not(.registro-nombre__eyebrow) { line-height: 1.6; }
+.registro-nombre__card form { display: grid; gap: 10px; margin-top: 24px; }
+.registro-nombre__card label { margin-top: 6px; font-weight: 750; }
+.registro-nombre__card input {
+  width: 100%;
+  min-width: 0;
+  min-height: 48px;
+  padding: 10px 14px;
+  border: 2px solid #b9c8ea;
+  border-radius: 12px;
+  color: #10225f;
+  background: #fff;
+  /* 16px como mínimo: iOS no hace zoom automático al enfocar el campo. */
+  font: inherit;
+  font-size: max(16px, 1rem);
+  scroll-margin-block: 24px 120px;
+}
+.registro-nombre__card input:focus-visible { outline: 3px solid #65adff; outline-offset: 2px; border-color: #0067df; }
+.registro-nombre__card form button {
+  min-height: 50px;
+  margin-top: 14px;
+  padding: 12px 18px;
+  border: 0;
+  border-radius: 999px;
+  color: #fff;
+  background: #0067df;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+  scroll-margin-block: 24px 40px;
+}
+.registro-nombre__card button:disabled { cursor: wait; opacity: .65; }
+.registro-nombre__error { margin: 6px 0 0; color: #a00028; font-weight: 700; }
+.registro-nombre__help { margin: -4px 0 2px; color: #53658f; font-size: 12px; line-height: 1.4; }
+.registro-nombre__salir {
+  display: block;
+  min-height: 44px;
+  margin: 12px auto 0;
+  border: 0;
+  color: #334a89;
+  background: transparent;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+@media (max-width: 380px) {
+  .registro-nombre__card { border-radius: 22px; }
+  .registro-nombre__eyebrow { margin-top: 14px; }
+  .registro-nombre__card form { margin-top: 16px; }
+}

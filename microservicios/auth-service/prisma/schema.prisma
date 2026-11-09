@@ -1,0 +1,177 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Usuario {
+  id                         String               @id
+  email                      String?
+  nombre                     String?
+  apellido                   String?
+  edad                       Int?
+  datosJson                  Json                 @default("{}")
+  creadoEn                   DateTime             @default(now())
+  animos                     Animo[]
+  favoritos                  Favorito[]
+  perfiles                   Perfil[]
+  invitacionesEnviadas       InvitacionPerfil[]   @relation("InvitacionesEnviadas")
+  invitacionesRecibidas      InvitacionPerfil[]   @relation("InvitacionesRecibidas")
+  gruposPropios              Grupo[]
+  membresias                 MiembroGrupo[]
+  invitacionesGrupoEnviadas  InvitacionGrupo[]    @relation("InvitacionesGrupoEnviadas")
+  invitacionesGrupoRecibidas InvitacionGrupo[]    @relation("InvitacionesGrupoRecibidas")
+  recomendacionesAutor       RecomendacionGrupo[] @relation("RecomendacionesAutor")
+  recomendacionesRecibidas   RecomendacionGrupo[] @relation("RecomendacionesDestinatario")
+  notificaciones             Notificacion[]
+}
+
+// Perfiles de visualización dentro de una misma cuenta. El principal se crea
+// por trigger al registrar el Usuario y copia su nombre, apellido y edad.
+model Perfil {
+  id                   String               @id @default(uuid())
+  propietarioId        String
+  nombre               String
+  apellido             String?
+  edad                 Int?
+  avatar               String?
+  esPrincipal          Boolean              @default(false)
+  creadoEn             DateTime             @default(now())
+  propietario          Usuario              @relation(fields: [propietarioId], references: [id], onDelete: Cascade)
+  recomendacionesGrupo RecomendacionGrupo[]
+  notificaciones       Notificacion[]
+
+  @@unique([id, propietarioId])
+  @@index([propietarioId])
+}
+
+// Vínculos de amistad de pf25. Se conserva la tabla con sus datos, pero la API
+// ahora comparte recomendaciones mediante grupos (Grupo / InvitacionGrupo).
+model InvitacionPerfil {
+  id             String   @id @default(uuid())
+  remitenteId    String
+  destinatarioId String
+  estado         String   @default("pendiente")
+  creadoEn       DateTime @default(now())
+  remitente      Usuario  @relation("InvitacionesEnviadas", fields: [remitenteId], references: [id], onDelete: Cascade)
+  destinatario   Usuario  @relation("InvitacionesRecibidas", fields: [destinatarioId], references: [id], onDelete: Cascade)
+
+  @@unique([remitenteId, destinatarioId])
+  @@index([destinatarioId, estado])
+}
+
+model Grupo {
+  id              String               @id @default(uuid())
+  nombre          String
+  descripcion     String?
+  propietarioId   String
+  creadoEn        DateTime             @default(now())
+  propietario     Usuario              @relation(fields: [propietarioId], references: [id], onDelete: Cascade)
+  miembros        MiembroGrupo[]
+  invitaciones    InvitacionGrupo[]
+  recomendaciones RecomendacionGrupo[]
+
+  @@index([propietarioId])
+}
+
+model MiembroGrupo {
+  id        String   @id @default(uuid())
+  grupoId   String
+  usuarioId String
+  // 'propietario' | 'miembro'
+  rol       String   @default("miembro")
+  creadoEn  DateTime @default(now())
+  grupo     Grupo    @relation(fields: [grupoId], references: [id], onDelete: Cascade)
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@unique([grupoId, usuarioId])
+  @@index([usuarioId])
+}
+
+model InvitacionGrupo {
+  id             String    @id @default(uuid())
+  grupoId        String
+  remitenteId    String
+  email          String
+  destinatarioId String?
+  // 'pendiente' | 'aceptada' | 'rechazada' | 'cancelada'
+  estado         String    @default("pendiente")
+  creadoEn       DateTime  @default(now())
+  respondidoEn   DateTime?
+  grupo          Grupo     @relation(fields: [grupoId], references: [id], onDelete: Cascade)
+  remitente      Usuario   @relation("InvitacionesGrupoEnviadas", fields: [remitenteId], references: [id], onDelete: Cascade)
+  destinatario   Usuario?  @relation("InvitacionesGrupoRecibidas", fields: [destinatarioId], references: [id], onDelete: Cascade)
+
+  @@unique([grupoId, email])
+  @@index([destinatarioId, estado])
+  @@index([email])
+}
+
+model RecomendacionGrupo {
+  id             String   @id @default(uuid())
+  grupoId        String
+  autorId        String
+  autorPerfilId  String?
+  // Nombre del perfil que compartió, congelado al momento de compartir.
+  autorNombre    String
+  // null: para todo el grupo; definido: solo para ese integrante.
+  destinatarioId String?
+  tmdbId         Int
+  tipo           String
+  titulo         String
+  poster         String?
+  mensaje        String?
+  creadoEn       DateTime @default(now())
+  grupo          Grupo    @relation(fields: [grupoId], references: [id], onDelete: Cascade)
+  autor          Usuario  @relation("RecomendacionesAutor", fields: [autorId], references: [id], onDelete: Cascade)
+  autorPerfil    Perfil?  @relation(fields: [autorPerfilId], references: [id])
+  destinatario   Usuario? @relation("RecomendacionesDestinatario", fields: [destinatarioId], references: [id], onDelete: Cascade)
+
+  @@index([grupoId, creadoEn])
+}
+
+model Notificacion {
+  id        String   @id @default(uuid())
+  usuarioId String
+  perfilId  String?
+  tipo      String
+  titulo    String
+  mensaje   String
+  datos     Json     @default("{}")
+  clave     String?
+  leida     Boolean  @default(false)
+  creadoEn  DateTime @default(now())
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  perfil    Perfil?  @relation(fields: [perfilId], references: [id], onDelete: Cascade)
+
+  @@unique([usuarioId, clave])
+  @@index([usuarioId, leida, creadoEn])
+}
+
+model Animo {
+  id        String   @id @default(uuid())
+  usuarioId String
+  perfilId  String?
+  emocion   String
+  confianza Float?
+  creadoEn  DateTime @default(now())
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+}
+
+model Favorito {
+  id        String   @id @default(uuid())
+  usuarioId String
+  perfilId  String?
+  tmdbId    Int
+  tipo      String
+  titulo    String
+  poster    String?
+  creadoEn  DateTime @default(now())
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@unique([usuarioId, perfilId, tmdbId, tipo])
+}

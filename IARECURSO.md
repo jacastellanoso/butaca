@@ -1,0 +1,2069 @@
+# IARECURSO — Guía permanente de desarrollo de Butaca
+
+> **Consulta obligatoria:** toda persona o asistente de IA debe leer este archivo antes de crear, editar, mover o eliminar código del proyecto. Después de cada cambio se debe actualizar esta guía para mantenerla alineada con la implementación real.
+
+## Validación de entradas — pf22_Zod (2026-11-03)
+
+### Objetivo y alcance
+
+Migrar las validaciones manuales de entradas de negocio a Zod sin cambiar contratos HTTP.
+Rama `pf22_Zod`, basada en `fbd45775c05fee821b33f9e615ebc7e600878830` de `dev`, con pf21_Testing integrada.
+Esta sección describe el estado actual de Zod; las referencias históricas a `pf15_Zod`
+y a validaciones pendientes que aparecen más abajo corresponden a etapas anteriores.
+
+Se instaló `zod` como dependencia de producción `^4.6.7` (resuelta a **4.6.7**)
+en los cuatro servicios siguientes. Cada paquete conserva su propio manifiesto y lockfile.
+No se modificaron frontend, Gateway, auth-service, controladores, rutas, servicios,
+configuración, archivos de entorno, esquemas Prisma, migraciones ni pruebas existentes.
+
+### Esquemas y archivos
+
+| Servicio | Archivo en `src/validators/` | Esquemas |
+|---|---|---|
+| emotions-service | `animos.validator.js` | Consentimiento, nuevo ánimo, confianza, consulta de historial e identificador |
+| catalog-service | `catalogo.validator.js` | Consulta de catálogo, identificador TMDB y parámetros de detalle |
+| recommendations-service | `recomendaciones.validator.js` | Parámetros conocidos de texto y consulta por emoción o ánimo |
+| library-service | `biblioteca.validator.js` | Identificador, contenido compartido, nuevo favorito, nuevo historial y consultas paginadas |
+
+Cada servicio incorpora `test/validadores.test.js`. También se actualizaron únicamente
+sus respectivos `package.json` y `package-lock.json`, además de esta guía.
+Las funciones públicas anteriores se conservan. Los adaptadores usan `safeParse`
+y devuelven el primer mensaje existente, sin publicar objetos `ZodError`.
+
+### Compatibilidad conservada
+
+- Se mantienen tipos de datos, campos requeridos, defaults, límites, normalizaciones,
+  valores nulos y prioridad de errores. Los cuerpos JSON no convierten cadenas en números.
+- Emociones exige `consentimientoHistorial === true` antes de validar emoción, origen
+  y confianza; su ausencia o valor incorrecto mantiene **403**. Detección requiere
+  confianza numérica finita entre 0 y 1; confirmada permite confianza ausente o nula.
+- Recomendaciones exige exactamente uno entre `emocion` y `animoId`, con `movie`
+  por defecto, y rechaza claves desconocidas y parámetros no textuales/repetidos.
+- Los demás esquemas seleccionan campos conocidos e ignoran los ajenos como antes.
+  Las consultas preservan también las claves opcionales cuyo valor es `undefined`.
+- Se conserva el formato UUID hexadecimal anterior, incluyendo versiones que un
+  validador UUID más estricto podría rechazar. Biblioteca sigue exigiendo una cadena.
+- Las fechas siguen la interpretación previa de `new Date`, incluyendo su zona horaria;
+  no se endurecieron a ISO estricto. Se conserva `desde <= hasta`.
+- Solo catálogo recorta espacios en enteros de query. Emociones y biblioteca mantienen
+  su rechazo de espacios, decimales y notación exponencial. Las repeticiones de campos
+  conocidos siguen rechazándose.
+- Catálogo conserva búsqueda vacía como `null`, máximo 120 caracteres, páginas 1–500
+  e identificadores TMDB 1–999999999. Biblioteca conserva título y póster recortados,
+  opcionales nulos y redondeo de calificación a un decimal.
+- No se cambió el orden de autenticación ni el parseo JSON. Se mantienen **400**, **403**,
+  **404** para identificadores inválidos en los recursos protegidos existentes y **413**
+  por cuerpos mayores de 10 KB en emociones/biblioteca. Favoritos conserva `201`/`200`
+  por idempotencia y los borrados mantienen `204`.
+
+### Ejemplos
+
+| Entrada | Resultado |
+|---|---|
+| POST ánimo: `{"emocion":"happy","confianza":0.92,"consentimientoHistorial":true}` | Válida; origen por defecto `deteccion` |
+| POST ánimo: `{"emocion":"sad","origen":"confirmada","consentimientoHistorial":true}` | Válida; confianza normalizada a `null` |
+| POST ánimo sin consentimiento | `403`, `No se guarda el resultado sin autorización explícita para conservar el historial emocional.` |
+| POST ánimo de detección con confianza `"0.92"` y consentimiento verdadero | `400`, `La confianza debe ser un número entre 0 y 1.` |
+| Catálogo: `?pagina=%20001%20&busqueda=%20Matrix%20` | Página `1`, búsqueda `Matrix` |
+| Recomendaciones: `?emocion=happy&tipo=tv` | Válida |
+| Recomendaciones: `?emocion=happy&animoId=abcdef01-0000-0000-0000-000000000000` | `400`, `Indicá exactamente uno de emocion o animoId.` |
+| Favorito: `{"tmdbId":550,"tipo":"movie","titulo":" Matrix "}` | Válido; título `Matrix`, póster `null` |
+| Favorito con `tmdbId: "550"` | `400`, `tmdbId debe ser un entero entre 1 y 999999999.` |
+
+### Verificación realizada
+
+Pruebas ejecutadas con `DOTENV_CONFIG_PATH=NUL`; las dependencias externas de las
+suites se simulan. No se ejecutaron migraciones, Docker ni pruebas contra Supabase,
+PostgreSQL o TMDB reales.
+
+| Comprobación | Resultado final |
+|---|---|
+| Frontend, `npm test` | **93/93** |
+| API Gateway, `npm test` | **7/7** |
+| auth-service, mediante `test:todo` | **44/44** |
+| emotions-service | **51/51** (31 existentes + 20 nuevas) |
+| catalog-service | **35/35** (20 existentes + 15 nuevas) |
+| recommendations-service | **87/87** (74 existentes + 13 nuevas) |
+| library-service | **50/50** (32 existentes + 18 nuevas) |
+| `npm run test:todo` | **367/367**, cero fallos, las siete suites completas |
+| Comparación temporal con los validadores de HEAD/base | **3341/3341** entradas equivalentes, incluyendo dos errores simultáneos; script temporal eliminado |
+| `npm run lint` | Código 0, sin diagnósticos |
+| Oxlint dirigido a los cuatro validadores y las cuatro pruebas nuevas | Código 0, sin diagnósticos |
+| `npm run build -- --outDir <carpeta temporal>` | Correcto; no se escribió en `dist`. Vite avisó que el destino externo no se vacía automáticamente |
+| `npm run e2e`, con `CI=true` | **9/9 aprobadas**, 0 fallos, sin reintentos; código 0, resumen `9 passed (2.4m)` |
+| `git diff --check` | Sin errores |
+
+Problemas corregidos: la primera ejecución encontró el cliente Prisma sin generar.
+Se generó únicamente el cliente local de emociones/biblioteca mediante una configuración
+temporal que omite cargar variables de entorno, con URLs ficticias y sin conexión a BD.
+La primera suite de emociones detectó que Zod exigía la clave `confianza` ausente:
+se marcó explícitamente opcional y se añadió una prueba. Una expectativa nueva de fecha
+se corrigió para respetar la interpretación local de `new Date` en lugar de asumir UTC.
+No se alteraron pruebas existentes para corregir estos fallos.
+
+E2E completadas posteriormente en esta misma rama: la instalación local raíz no tenía
+`@playwright/test` ni su ejecutable, aunque `1.63.0` ya estaba declarado y bloqueado.
+Se restauraron 52 paquetes con `npm ci --include=dev --no-audit --no-fund`, sin cambiar
+`package.json` ni `package-lock.json` raíz. Faltaba también el navegador; el comando
+oficial `npx playwright install chromium` instaló Chromium/Headless Shell v1243
+(Chrome 153.0.8010.12) y FFmpeg v1011, sin instalar Firefox ni WebKit.
+La ejecución usó el backend, la sesión y la cámara simulados existentes, con servidor
+propio y `CI=true` para impedir reutilizar un servidor previo. Las nueve pruebas
+pasaron en su primer intento. Después de aprobarse todas, el cierre automático del
+servidor Vite quedó esperando en este entorno Windows; se detuvo únicamente el proceso
+Vite iniciado por esa ejecución y el runner terminó con código 0. El HTTP 502 del log
+corresponde a la prueba deliberada de catálogo caído; el aviso NO_COLOR/FORCE_COLOR
+solo afecta al color de la consola. No se modificaron tests ni configuración.
+
+### Limitaciones y pruebas pendientes
+
+- Postman no se ejecutó: sus 27 peticiones requieren servicios reales. Se conservaron
+  mensajes exactos, estados y formas de respuesta comprobados por la colección.
+- Las nueve E2E se verificaron en Desktop Chrome. Su backend simulado no ejecuta los
+  validadores Zod: complementa las 367 pruebas unitarias/de integración y los 3341 casos
+  de equivalencia, sin sustituirlos.
+- No se hizo una revisión visual adicional ni se probaron anchos móviles en esta rama;
+  no se cambió interfaz. Los resultados de responsive de pf20 siguen siendo históricos.
+- Quedan pendientes integración real vía Gateway, aislamiento entre cuentas y flujos
+  de persistencia con consentimiento, bajo autorización posterior para servicios reales.
+- La validación de configuración con Zod y el backend anterior quedan fuera de pf22.
+
+## 1. Estado del proyecto
+
+- Aplicación creada con React 19 y Vite 8.
+- Rama actual de autenticación: `pf3_OAuth20`, basada en `pf2_InicioPantalla`.
+- Rama de la pantalla de rostro: `pf4_RostroPantalla`, basada en `dev`.
+- Rama del backend: `pf5_Express`, basada en `dev`. API REST con Express 5 en `backend/`, puerto `3010`.
+- Rama de configuración PostgreSQL: `pf6_Supabase`. Preparó y verificó la conexión que posteriormente utiliza `pf7_Prisma`.
+- Rama de persistencia: `pf7_Prisma`, integrada en `dev`. Ánimos y favoritos se guardan mediante Prisma en PostgreSQL de Supabase.
+- Rama del API Gateway: `pf8_APIGateway`, basada en `dev`. Gateway Express independiente en `apigateway/`, puerto `3000`, preparado para conectar cinco microservicios mediante Docker.
+- Rama de contenedores: `pf9_Docker`, basada en `dev`. Esqueletos de los cinco microservicios en `microservicios/`, cada uno con su `Dockerfile`, y `compose.yaml` que levanta los seis contenedores con health checks.
+- Rama del pie de página: `pf11_Pie`, basada en `dev` (con la galería de `pf10_GaleriaPrincipal` ya integrada). Componente reutilizable `Footer` integrado en la galería.
+- Rama del microservicio de emociones: `pf13_MSEmociones`, basada en `dev` (con `pf12_MSAutenticacion` integrada). `emotions-service` recibe, guarda y consulta resultados emocionales autorizados en `/api/animos` (sección 8). La migración aditiva `20261030120000_animo_consentimiento_historial` está **aplicada** en la base de Supabase.
+- Rama de detección de emociones: `pf17_FaceAPI`, basada en `dev`. `Rostro` detecta la expresión con face-api.js en el navegador y, con autorización explícita, guarda el resultado en `emotions-service` (sección 5).
+- Rama de pruebas de API en Postman: `pf19_PruebasPostman`, basada en `dev`. Colección e instrucciones en `postman/` para validar de punta a punta los contratos HTTP del API Gateway (`http://localhost:3000`) y sus cinco microservicios sin versionar credenciales.
+- Rama del tablero y la navegación integrada: `pf20_RecomDashboard`, basada en `dev` (`d730fde`). Sesión validada con Supabase Auth, selección de perfil, encabezado global con cierre de sesión, dashboard de emociones, recomendaciones, historial y favoritos, y recomendaciones posteriores al escáner (sección "Dashboard y navegación integrada — pf20_RecomDashboard"). Con esta rama ya existen rutas protegidas y pantallas posteriores al acceso; las líneas de alcance siguientes describen el estado anterior a pf20.
+- Rama de pruebas: `pf21_Testing`, basada en `dev`. Pruebas E2E con Playwright (`e2e/`, backend falso, sesión simulada y cámara falsa) y `npm run test:todo`, que corre las suites unitarias y de integración del front, el gateway y los cinco microservicios (sección «Pruebas automatizadas — pf21_Testing»).
+- Pantallas implementadas: `Main`, destinada visualmente a visitantes sin sesión, y `Rostro`, con cámara, consentimiento e interfaz de detección de emociones (accesible temporalmente desde `/#rostro`).
+- Rama de integración continua: `pf24_GitHubActions`, basada en `dev` (con `pf23_Seguridad` integrada). Pipeline automatizado en `.github/workflows/ci.yml` con 5 jobs independientes (`Calidad`, `Pruebas unitarias`, `Pruebas de integración`, `Pruebas E2E (Playwright)` y `Docker`), hermético, sin secretos ni dependencias en vivo, con escaneo histórico y publicación de reportes Playwright.
+- Alcance actual: presentación visual, animaciones e inicio de sesión OAuth 2.0 con Google o GitHub mediante Supabase. El cliente conserva y renueva la sesión; todavía no existen rutas protegidas ni una pantalla posterior al acceso.
+- Tipografía oficial de toda la aplicación: **Montserrat**. Está instalada localmente mediante `@fontsource/montserrat` y se cargan solamente los subconjuntos latinos de los pesos 400, 600, 700 y 800 desde `src/main.jsx`.
+
+## 2. Regla de actualización
+
+Antes de implementar un cambio:
+
+1. Leer este documento completo.
+2. Revisar el componente y los estilos relacionados.
+3. Mantener la arquitectura y las convenciones aquí descritas.
+4. No renombrar recursos existentes sin actualizar todas sus importaciones.
+5. La autenticación se centraliza en `src/lib/supabase.js`; no se deben crear clientes adicionales dentro de componentes.
+6. Nunca incluir claves secretas, `service_role` ni secretos de proveedores en el frontend. Solo se permite la clave publicable de Supabase mediante variables `VITE_`.
+7. En el backend, `process.env` solo se lee en `backend/src/config/env.js`; el resto del código importa `env`.
+8. En el backend, los controladores no guardan ni consultan datos directamente: siempre llaman a un service de `backend/src/services/`.
+9. El usuario de una petición se obtiene **siempre** de `req.user` (token verificado por `requireAuth`), nunca de un id enviado en el body, la query o la URL.
+10. En el API Gateway, `process.env` solo se lee en `apigateway/src/config/env.js`; las rutas y destinos se declaran en `apigateway/src/config/services.js`.
+11. El gateway no procesa el body antes del proxy. Cada microservicio valida su propio contenido y recibe sin cambios el método, ruta, query y encabezado `Authorization`.
+12. Cada microservicio es un proyecto npm independiente en `microservicios/<servicio>/`. No importa código de otro servicio ni de `backend/`: si necesita algo, lo copia o lo pide por HTTP a través de su contrato.
+13. Los secretos de un microservicio viven en `microservicios/<servicio>/.env` (ignorado por Git y por `.dockerignore`) y se documentan sin valores en su `.env.example`. Nunca se escriben en el `Dockerfile` ni en `compose.yaml`.
+14. Solo `api-gateway` publica un puerto en `compose.yaml`. Los microservicios no deben agregar `ports:`.
+15. El frontend llama al backend solo mediante `src/lib/api.js` (`solicitarApi`), que agrega el token de Supabase y traduce errores. No se arma `fetch` con `Authorization` dentro de componentes.
+16. face-api.js se analiza solo en el navegador. Ningún fotograma, imagen ni video se envía, se guarda ni se dibuja fuera del `<video>`: al backend viajan únicamente la emoción y su confianza, y solo con la casilla de autorización marcada.
+17. Seguridad HTTP centralizada en el gateway (`apigateway/src/middlewares/seguridad.js`): helmet, CORS con lista blanca, rate limit, tamaño máximo del body y token obligatorio. Los microservicios **no** agregan CORS propio (el gateway descarta esos encabezados) y no publican puertos.
+18. Toda ruta nueva del gateway es **privada por defecto**. Solo se marca `publico: true` en `services.js` si no devuelve datos de usuarios (hoy: solo el catálogo).
+19. `CORS_ORIGINS` nunca contiene `*` ni rutas: solo orígenes exactos (`https://dominio`). `env.js` rechaza al arrancar un valor inválido.
+20. Cada microservicio usa `express.json({ limit: '10kb' })` y su `errorHandler` responde `413` a `entity.too.large`. Ningún error devuelve el stack ni el body recibido.
+
+Después de implementar un cambio:
+
+1. Documentar los componentes, archivos, estilos o animaciones nuevos.
+2. Registrar decisiones técnicas relevantes.
+3. Actualizar la lista de funcionalidades pendientes.
+4. Ejecutar `npm run lint` y `npm run build`.
+5. Si se modificó el backend, levantarlo con `npm run dev` dentro de `backend/` y comprobar que `GET /api/health` responde `200`.
+6. Si se modificó el gateway, ejecutar `npm test` dentro de `apigateway/`, comprobar `GET /health` y validar `docker compose config` cuando Docker esté disponible.
+7. Si se modificó un microservicio, ejecutar `npm test` dentro de su carpeta y `docker compose up --build -d` desde la raíz; `docker compose ps` debe mostrar los seis contenedores `healthy`.
+8. Si se modificó el frontend con lógica pura (sin React ni navegador), agregar o actualizar su `*.test.js` y ejecutar `npm test` en la raíz.
+9. Antes de abrir un PR, ejecutar `npm run test:todo` (unitarias e integración de todos los paquetes) y `npm run e2e` (flujos de usuario con Playwright). Si un cambio altera textos, roles o nombres accesibles de la interfaz, actualizar las pruebas de `e2e/` en la misma rama.
+10. Si cambia el contrato de una ruta del gateway (forma del body o de la respuesta), actualizar también `e2e/support/backendFalso.js`, que lo imita.
+11. Antes de abrir un PR, ejecutar `npm run seguridad:secretos`: debe terminar en `✔ Sin secretos`. Si encuentra uno real, se quita del archivo **y se regenera la credencial** en su servicio (borrarla del archivo no la borra del historial de Git).
+
+## 3. Arquitectura actual
+
+```text
+src/
+├── App.jsx                  # Punto de composición; muestra Main o Rostro (/#rostro).
+├── App.css                  # Regla mínima del contenedor raíz.
+├── index.css                # Estilos globales, Montserrat y normalización.
+├── main.jsx                 # Inicio de React y carga local de la tipografía.
+├── assets/
+│   ├── decorations/         # Ondas y formas gráficas de fondo.
+│   ├── icons/               # Logotipos usados por controles de interfaz.
+│   ├── images/              # Imágenes PNG decorativas.
+│   └── text/                # Seis capas SVG de la composición del título.
+├── components/
+│   └── Footer/              # Pie de página reutilizable (pf11_Pie).
+├── lib/
+│   ├── supabase.js          # Cliente único de Supabase y entrada a OAuth.
+│   └── api.js               # solicitarApi: fetch al gateway con token y errores traducidos (pf17).
+└── pages/
+    ├── Main/
+    │   ├── Main.jsx         # Estructura semántica de la pantalla inicial.
+    │   └── Main.css         # Diseño, responsive y animaciones de Main.
+    └── Rostro/
+        ├── Rostro.jsx         # Pantalla de cámara, consentimiento y estado de detección.
+        ├── Rostro.css         # Diseño, responsive y animaciones de Rostro.
+        ├── CameraConsent.jsx  # Solicitud de consentimiento y variante de rechazo.
+        ├── EmotionStatus.jsx  # Presentación de los estados de detección.
+        ├── emotions.js        # Etiquetas en español de las expresiones de face-api.js.
+        ├── useCamera.js       # Ciclo de vida de getUserMedia y errores de cámara.
+        ├── RostroDeteccion.jsx    # Une Rostro con face-api.js (pf17); es lo que muestra App en /#rostro.
+        ├── AccionesResultado.jsx  # "Analizar de nuevo" y guardado con autorización explícita.
+        ├── services/
+        │   └── animos.js          # Sincroniza el usuario y llama a POST /api/animos.
+        └── deteccion/
+            ├── cargarFaceApi.js           # Import dinámico de face-api.js y carga de modelos.
+            ├── useFaceDetection.js        # Ventana de observación y estado `detection`.
+            ├── analizarExpresiones.js     # Lógica pura: normalizar, promediar y decidir.
+            └── analizarExpresiones.test.js
+
+public/models/                 # Modelos de face-api.js servidos por la propia app (pf17):
+                               # tiny_face_detector y face_expression (~520 KB).
+public/wasm/                   # Motor WebAssembly de TensorFlow.js 4.22.0 (pf17), respaldo sin WebGL.
+```
+
+```text
+backend/                       # API REST (Express 5, ES Modules). Proyecto npm independiente.
+├── package.json               # Scripts: dev (node --watch), start, test (node --test).
+├── .env.example               # Nombres de las variables del backend, sin valores.
+└── src/
+    ├── server.js              # Único archivo que hace listen (puerto de env.port).
+    ├── app.js                 # Crea y exporta Express sin listen (lo usan las pruebas).
+    ├── config/env.js          # Única lectura de process.env.
+    ├── constants/emociones.js # Emociones de face-api.js y tipos de contenido válidos.
+    ├── lib/supabase.js        # Cliente de servidor para verificar sesiones.
+    ├── middlewares/           # requireAuth, notFound y errorHandler.
+    ├── routes/                # index.js monta /api; un router por recurso.
+    ├── controllers/           # Leen req, validan y eligen el código HTTP.
+    └── services/              # Lógica y datos; se reemplazan sin tocar controladores.
+```
+
+```text
+apigateway/                    # Entrada única para los microservicios (Express 5).
+├── package.json               # Scripts: dev, start y test con node:test.
+├── .env.example               # Puerto, timeout y destinos locales sin secretos.
+├── Dockerfile                 # Imagen Node 22 Alpine con health check.
+├── README.md                  # Contratos de rutas, ejecución y nombres Docker.
+├── src/
+│   ├── server.js              # Escucha en GATEWAY_PORT y realiza cierre ordenado.
+│   ├── app.js                 # Health check, proxies y middlewares finales.
+│   ├── config/
+│   │   ├── env.js             # Única lectura y validación de process.env.
+│   │   └── services.js        # Cinco destinos y sus rutas públicas.
+│   ├── routes/
+│   │   └── gateway.routes.js  # Proxies, timeouts y respuesta 502 uniforme.
+│   └── middlewares/           # notFound y errorHandler del gateway.
+└── test/
+    └── gateway.test.js        # Health, 404 y microservicio no disponible.
+
+microservicios/                # Cinco microservicios Express independientes (pf9_Docker).
+├── auth-service/              # 3021 · /api/sesiones, /api/usuarios
+├── emotions-service/          # 3022 · /api/animos (pf13: POST, GET historial, GET /:id)
+├── catalog-service/           # 3023 · /api/catalogo
+├── recommendations-service/   # 3024 · /api/recomendaciones
+└── library-service/           # 3025 · /api/favoritos, /api/historial
+    ├── package.json           # Scripts: dev, start y test (node:test).
+    ├── .env.example           # SERVICE_NAME, PORT y variables propias sin valores.
+    ├── Dockerfile             # Node 22 Alpine, npm ci, usuario node y HEALTHCHECK.
+    ├── .dockerignore          # Excluye node_modules, .env y test de la imagen.
+    ├── src/
+    │   ├── server.js          # listen y cierre ordenado con SIGTERM/SIGINT.
+    │   ├── app.js             # /health, punto de montaje de rutas, notFound y errorHandler.
+    │   ├── config/env.js      # Única lectura de process.env.
+    │   └── middlewares/       # notFound (con nombre del servicio) y errorHandler.
+    └── test/
+        └── health.test.js     # Health, 404 en JSON y ausencia de X-Powered-By.
+
+compose.yaml                   # Gateway + cinco microservicios en la red butaca-microservices.
+```
+
+Los recursos gráficos están clasificados dentro de `src/assets/` según su función. Conservan exactamente sus nombres originales y se importan desde `Main.jsx`. No se deben duplicar en la raíz ni entre subcarpetas.
+
+## 4. Componentes de Main
+
+- `Main`: organiza tres niveles visuales independientes: fondo, decoraciones y contenido principal.
+- `central-scene`: contenedor de escena a pantalla completa que agrupa la onda central y `main-content`. Ambos comparten el mismo centro y escalan mediante reglas responsive sin depender de coordenadas independientes.
+- `WaveGroup`: reutiliza `cuadroefecto.svg` en cuatro capas concéntricas. Se instancia en el centro, esquina superior izquierda y esquina inferior derecha.
+- `AccessButton`: componente reutilizable para Google y GitHub. Recibe la acción OAuth, bloquea ambos controles mientras comienza la redirección y comunica el estado de carga con `aria-busy`.
+- `handleSignIn`: limpia errores previos, identifica el proveedor activo y solicita a Supabase el inicio de OAuth. Los errores se muestran en una región con `role="alert"` sin exponer detalles internos al usuario.
+- `textLayers`: arreglo ordenado que registra las seis capas SVG del título. Su orden también determina el `z-index` y el retraso de aparición.
+
+## 5. Pantalla Rostro (`pf4_RostroPantalla`)
+
+### Alcance
+
+Diseño de la pantalla de cámara, consentimiento e interfaz de detección. **No** incluye face-api.js ni detecciones simuladas: la integración del motor corresponde a `pf10_FaceAPI`.
+
+### Acceso temporal
+
+`App.jsx` muestra `Rostro` solo cuando el hash es exactamente `#rostro` y escucha `hashchange`. Cualquier otro hash (incluido el retorno de OAuth de Supabase) sigue mostrando `Main`. Cuando exista la navegación definitiva, se reemplaza esta condición por la ruta correspondiente; `Rostro` no depende de ella.
+
+### Flujo
+
+1. **Consentimiento** (`CameraConsent`): explica que Butaca necesita la cámara para analizar expresiones faciales y ofrecer recomendaciones personalizadas, e indica que no se guardan imágenes ni videos. Botones "Activar cámara" y "Ahora no".
+2. **Rechazo**: "Ahora no" o "Apagar cámara" muestran la variante "La cámara está desactivada" con la opción de activarla luego.
+3. **Solicitud**: mientras el navegador pide permiso, el botón muestra "Esperando permiso…" con `aria-busy`.
+4. **Cámara activa**: video en vivo en espejo, guía de encuadre ovalada, `EmotionStatus` y botón "Apagar cámara".
+5. **Error de cámara** (`CameraError`): mensaje específico y botón "Intentar de nuevo".
+
+### `useCamera`
+
+- Solicita solo video (`facingMode: 'user'`, ideal 1280 × 720, `audio: false`) y únicamente tras la aceptación del usuario.
+- Estados: `idle`, `requesting`, `active`, `error`.
+- Errores (`CAMERA_ERRORS`): `denied` (NotAllowedError/SecurityError), `notFound` (NotFoundError/OverconstrainedError), `busy` (NotReadableError/AbortError), `insecure` (contexto no seguro), `unsupported` (sin `mediaDevices`), `interrupted` (el track terminó) y `unknown`.
+- Detiene todos los tracks al apagar, al desmontar la pantalla (incluido el cambio de hash), en `pagehide` y si la pantalla se cierra mientras el navegador aún pedía permiso.
+- No graba, no captura fotogramas y no almacena imágenes.
+
+### Contrato para `pf10_FaceAPI`
+
+```jsx
+<Rostro
+  onVideoReady={(video) => { /* <video> en vivo, o null al apagar */ }}
+  detection={{ status, emotion, confidence, message }}
+/>
+```
+
+- `onVideoReady(video)`: se llama en `loadeddata` con el `HTMLVideoElement` que debe usarse como entrada de face-api.js y con `null` en `emptied` (cámara apagada). El espejo es solo visual (CSS); los fotogramas no se alteran.
+- `detection.status`: `ready` (por defecto), `analyzing`, `detected`, `inconclusive` o `error`.
+- `detection.emotion`: clave de `EMOTIONS` (`neutral`, `happy`, `sad`, `angry`, `fearful`, `disgusted`, `surprised`), las mismas expresiones que entrega face-api.js.
+- `detection.confidence`: probabilidad entre 0 y 1; se muestra como barra y porcentaje.
+- `detection.message`: texto opcional que reemplaza la descripción por defecto.
+- El estado también se refleja en la guía de encuadre mediante `data-detection`: blanco con barrido en `analyzing`, verde en `detected`, amarillo en `inconclusive` y rojo en `error`.
+
+### Diseño
+
+- Reutiliza de `Main.css` el degradado, las ondas de esquina (`WaveGroup` local con las mismas clases) y las cuatro decoraciones con sus animaciones.
+- Título en Montserrat 800: "¿Cómo te **sentís** hoy?". La palabra resaltada imita las píldoras blancas con texto `#0072FF` y rotación `-3.1deg` de los títulos SVG.
+- Recuadro translúcido con desenfoque; 4:3 en escritorio y 4:5 hasta `820px`, limitado por el ancho del contenedor (`100cqi`) y la altura de la ventana. En consentimiento o error crece si el texto lo necesita.
+- `.rostro-scroll` permite desplazamiento vertical en pantallas bajas sin modificar `body { overflow: hidden }`.
+- Hasta `1100px` se ocultan lentes y ticket; hasta `820px` las decoraciones bajan al 55 % de opacidad y el panel de estado pasa a columna; hasta `480px` los botones ocupan todo el ancho; con altura de hasta `640px` en escritorio se compacta el contenido.
+- Animaciones: `rostro-rise` (entrada del encabezado, recuadro y panel), `face-scan` (barrido al analizar) y `status-pulse` (indicador de análisis). Todas se desactivan con `prefers-reduced-motion`.
+- Accesibilidad: `EmotionStatus` usa `role="status"` con `aria-live="polite"`, los errores de cámara usan `role="alert"`, la confianza se expone como `role="meter"` y todos los botones conservan foco visible.
+
+### Detección con face-api.js (`pf17_FaceAPI`)
+
+#### Alcance
+
+Integra `@vladmandic/face-api` (fork mantenido sugerido por el brief) en `Rostro` mediante el contrato de pf4, sin rediseñar la pantalla. También guarda el resultado en `emotions-service` (`POST /api/animos`) cuando el usuario lo autoriza. **No** incluye la pantalla de recomendaciones ni el tablero (`pf20_RecomDashboard`) ni CORS de producción (`pf23_Seguridad`).
+
+#### Flujo
+
+1. El usuario acepta el consentimiento de cámara (pf4). Cuando el `<video>` tiene imagen, `onVideoReady` dispara el análisis automáticamente.
+2. **Preparando** (`analyzing` con mensaje): la primera vez se descarga face-api.js con sus modelos y se hace una inferencia de calentamiento (WebGL compila sus shaders; puede tardar varios segundos en equipos sin GPU).
+3. **Analizando** (`analyzing`): se observa el video unos 3 s, unas 5 veces por segundo. De cada fotograma con rostro se guardan en memoria **solo las siete probabilidades**.
+4. **Resultado**: se promedian las probabilidades y se elige la expresión dominante.
+   - `detected` si hubo al menos 5 fotogramas con rostro y la confianza promedio es ≥ 0.5.
+   - `inconclusive` si no se vio el rostro lo suficiente o la expresión fue ambigua, con un mensaje que indica cómo mejorar.
+   - `error` si no se pudo cargar el analizador.
+5. **Acciones** (`AccionesResultado`, debajo del panel):
+   - **Analizar de nuevo** repite el análisis.
+   - Con `detected`, se muestra la casilla *"Autorizo guardar esta emoción en mi historial…"*, desmarcada por defecto, y **Guardar resultado**, deshabilitado hasta marcarla. La casilla se reinicia en cada análisis.
+6. **Apagar cámara** cancela cualquier análisis en curso y vuelve a `ready`.
+
+#### Parámetros (`CONFIG_ANALISIS` en `analizarExpresiones.js`)
+
+| Parámetro | Valor | Motivo |
+|---|---:|---|
+| `duracionMs` | 3000 | "Que me mire a la cara un segundo", con margen para promediar. |
+| `duracionMaximaMs` | 8000 | En equipos lentos (~1 s por fotograma) se sigue observando hasta juntar el mínimo de muestras, con un tope. |
+| `intervaloMs` | 200 | ~5 fotogramas por segundo: suficiente para promediar sin saturar la CPU. |
+| `minimoMuestras` | 5 | Menos fotogramas con rostro no son representativos. |
+| `umbralConfianza` | 0.5 | Por debajo, ninguna expresión domina con claridad. |
+
+- Detector: `TinyFaceDetector` con `inputSize: 224` y `scoreThreshold: 0.5` (el más liviano; adecuado para un rostro frontal cercano a la cámara).
+- Promediar evita que un parpadeo o un gesto de un solo fotograma decida el resultado.
+- `debeTerminar`: la ventana cierra a los 3 s si ya hay 5 muestras, o a los 8 s en cualquier caso.
+
+#### Motor de TensorFlow.js
+
+`cargarFaceApi.js` prueba los motores en orden y usa el primero disponible. El elegido se informa en consola: `[face-api] Motor de TensorFlow.js: <motor>`.
+
+| Motor | Cuándo se usa | Tiempo por fotograma medido |
+|---|---|---|
+| `webgl` | El navegador ofrece WebGL (GPU). | ~20–50 ms con GPU real. |
+| `wasm` | WebGL no disponible: Brave con protección anti-fingerprinting, aceleración por hardware apagada o equipos sin GPU. | ~60 ms. |
+| `cpu` | Respaldo final si fallan los dos anteriores. | ~1000 ms. |
+
+- Los binarios `tfjs-backend-wasm.wasm` y `tfjs-backend-wasm-simd.wasm` están en `public/wasm/`. Se copiaron de `@tensorflow/tfjs-backend-wasm` **4.22.0**, instalado como `devDependency` con versión exacta (`-E`) porque debe coincidir con el TensorFlow.js que trae face-api 1.7.15. Si se actualiza face-api, hay que revisar su versión de TensorFlow.js y volver a copiar los binarios de la misma versión.
+- `setWasmPaths('/wasm/')` es obligatorio. Sin esa ruta, el motor busca los `.wasm` junto al bundle, Vite responde `index.html` y la consola muestra `expected magic word 00 61 73 6d, found 3c 21 64 6f`.
+- No se copió `tfjs-backend-wasm-threaded-simd.wasm`: requiere `crossOriginIsolated` (encabezados COOP/COEP), que la app no usa.
+- Con WASM o CPU, la consola muestra igualmente avisos `Could not get context for WebGL` e `Initialization of backend webgl failed`: son el intento fallido de WebGL y son esperados.
+
+#### Privacidad y rendimiento
+
+- face-api.js se carga con `import()` dinámico: queda en un archivo aparte (~330 KB gzip, TensorFlow.js incluido) que solo se descarga al abrir `Rostro`. El aviso de Vite *"Some chunks are larger than 500 kB"* se refiere a ese archivo y es esperado.
+- Los modelos están en `public/models/` y se sirven desde la propia app. No se usa CDN y ninguna imagen sale del navegador.
+- `normalizarMuestra` copia únicamente las siete probabilidades conocidas; no se conservan cajas, puntos faciales, fotogramas ni canvas.
+- El análisis se pausa mientras la pestaña está oculta y se cancela al apagar la cámara o salir de la pantalla.
+
+#### Guardado en `emotions-service`
+
+- `services/animos.js` → `guardarAnimo({ emocion, confianza })`:
+  1. `POST /api/usuarios` (auth-service) una vez por sesión de la página, porque emotions-service responde `409` si el usuario no existe en la tabla `Usuario`. El upsert es idempotente.
+  2. `POST /api/animos` con `{ emocion, confianza, origen: 'deteccion', consentimientoHistorial: true }`.
+- `src/lib/api.js` → `solicitarApi(ruta, { method, body })` obtiene el `access_token` de la sesión de Supabase y lo envía como `Authorization: Bearer`. Traduce errores a mensajes para el usuario: sin sesión, `401`, `403`, `409`, `502` y sin conexión.
+- Sin sesión iniciada, no se hace ninguna petición: se muestra *"Iniciá sesión con Google o GitHub…"* con enlace a la bienvenida.
+
+#### Conexión con el gateway en desarrollo (proxy de Vite)
+
+- `vite.config.js` reenvía `/api/*` de `localhost:5173` al gateway en `localhost:3000`. Para el navegador es el mismo origen, así que **no aplica CORS** en desarrollo.
+- `solicitarApi` usa `VITE_API_GATEWAY_URL`; si está vacía o no existe, llama a rutas relativas (`/api/...`) que toma el proxy.
+- En producción se define `VITE_API_GATEWAY_URL` con la URL HTTPS pública del gateway, y el gateway debe aplicar CORS con lista blanca (`pf23_Seguridad`).
+- `services/catalogo.js` (pf14) conserva su propia lectura de la variable. Si `VITE_API_GATEWAY_URL` existe vacía en `.env.local`, también pasa por el proxy.
+
+#### Problema de configuración encontrado al probar
+
+Al reemplazar `[YOUR-PASSWORD]` en las cadenas que entrega **Connect → ORMs → Prisma**, quedó un corchete en `DATABASE_URL` y no en `DIRECT_URL`. Prisma reportó `P1001: Can't reach database server`, aunque la red respondía. Con el cliente `pg`, el servidor devolvió `28P01 password authentication failed` solo para `DATABASE_URL`. Hay que borrar **ambos corchetes**. Después de editar un `.env` de microservicio, se recrea el contenedor con `docker compose up -d --force-recreate <servicio>`, porque `env_file` solo se lee al crearlo.
+
+#### Verificación realizada
+
+- `npm test` (raíz): 11/11 pruebas de `analizarExpresiones` (normalización, promedio, umbrales y ventana de observación).
+- `npm run lint`: 0 errores. `npm run build`: compila; face-api.js queda en un chunk separado.
+- Navegador real (Chromium, cámara simulada con un rostro sonriente, gateway simulado):
+  - Antes de activar la cámara no se descarga face-api.js.
+  - Resultado `detected` → **Alegría** (100 %).
+  - "Guardar resultado" está deshabilitado sin la casilla. Con la casilla marcada se enviaron `POST /api/usuarios` y `POST /api/animos` con `Authorization: Bearer` y solo los cuatro campos del contrato.
+  - "Analizar de nuevo" reinicia la casilla.
+  - "Apagar cámara" libera el video.
+  - Sin sesión se muestra el aviso y no se envía ninguna petición.
+  - Diseño revisado en escritorio (1280 px) y celular (390 px).
+- Navegador sin WebGL (Brave y simulación en Chromium): el motor queda en `wasm`, sin errores de carga de `.wasm`, y la detección funciona (~60 ms por fotograma frente a ~1000 ms con `cpu`).
+- **Prueba real de punta a punta** con la cámara del desarrollador, sesión de Google en Supabase y `docker compose` con los seis contenedores `healthy`:
+  - `POST /api/usuarios` → `200`.
+  - `POST /api/animos` → `201`, con un Payload de solo cuatro campos.
+  - La fila aparece en la tabla `Animo` de Supabase con `origen = deteccion` y `consentimientoHistorial = true`.
+
+## 6. Backend Express (`pf5_Express`)
+
+### Alcance
+
+Configuración de Express, rutas, controladores y API REST. La versión inicial de `pf5_Express` guardaba los datos temporalmente en memoria; `pf7_Prisma`, ya integrada en `dev`, reemplazó esa implementación por PostgreSQL sin cambiar el contrato HTTP. Las recomendaciones continúan siendo **datos de ejemplo** hasta `pf11_TMDB`. Zod (`pf15_Zod`), pruebas (`pf14_Testing`) y seguridad (`pf16_Seguridad`) se integran en sus ramas sin cambiar el contrato de esta sección.
+
+### Ejecución local
+
+```bash
+cd backend
+npm.cmd install        # solo la primera vez
+npm.cmd run dev        # http://localhost:3010 (se reinicia al guardar)
+```
+
+El backend tiene su propio `package.json` y `node_modules`; se instala y ejecuta desde `backend/`, independiente del front.
+
+### Capas
+
+Una petición recorre: **ruta** → `requireAuth` → **controlador** → **service** → respuesta.
+
+- `routes/index.js`: `GET /api/health` es pública y está **antes** de `requireAuth`; todo lo montado después exige sesión.
+- `controllers/`: validación mínima con `if` (la reemplaza Zod en `pf15`) y elección del código HTTP.
+- `services/`: objetos `animosService`, `favoritosService` y `recomendacionesService` con funciones `async`. Ánimos y favoritos ya consultan Prisma; recomendaciones conserva datos de ejemplo. Las ramas posteriores deben mantener nombres, parámetros y forma de la respuesta.
+- `app.js` aplica en orden: `express.json()`, `/api`, `notFound`, `errorHandler`. Los middlewares de `pf16` van antes de las rutas.
+
+### Autenticación
+
+El front debe enviar el token de la sesión de Supabase en cada petición protegida:
+
+```js
+const { data } = await supabase.auth.getSession()
+fetch('http://localhost:3010/api/animos', {
+  headers: { Authorization: `Bearer ${data.session.access_token}` },
+})
+```
+
+- `requireAuth` exige `Authorization: Bearer <token>` y lo verifica con `supabase.auth.getUser(token)` mediante `authService.obtenerUsuario`.
+- Si es válido deja `req.user = { id, email }`; el `id` es el de `auth.users` de Supabase y es la clave para separar los datos de cada persona.
+- Sin token o con token inválido/expirado responde `401`. Si Supabase no está configurado o no responde, el error llega a `errorHandler` (`500`), para no culpar al usuario.
+- `authService` se exporta como objeto para poder reemplazar `obtenerUsuario` en las pruebas sin iniciar sesión real.
+
+### Endpoints
+
+| Método | Ruta | Sesión | Body / query | Respuestas |
+|---|---|---|---|---|
+| GET | `/api/health` | No | — | `200 { status: 'ok' }` |
+| POST | `/api/animos` | Sí | `{ emocion, confianza }` | `201` ánimo creado · `400` |
+| GET | `/api/animos` | Sí | — | `200` lista de ánimos del usuario |
+| GET | `/api/recomendaciones` | Sí | `?emocion=happy&tipo=movie` (`tipo` opcional, por defecto `movie`) | `200` · `400` |
+| GET | `/api/favoritos` | Sí | — | `200` lista de favoritos del usuario |
+| POST | `/api/favoritos` | Sí | `{ tmdbId, tipo, titulo, poster? }` | `201` creado · `200` si ya existía · `400` |
+| DELETE | `/api/favoritos/:id` | Sí | — | `204` · `404` si no existe o no pertenece al usuario |
+
+- `emocion`: una de `neutral`, `happy`, `sad`, `angry`, `fearful`, `disgusted`, `surprised` (las mismas de `src/pages/Rostro/emotions.js`).
+- `confianza`: número entre `0` y `1` (la probabilidad de face-api.js).
+- `tipo`: `movie` o `tv` (los nombres de TMDB).
+- Todas las respuestas de error tienen la forma `{ error: 'mensaje' }`.
+
+### Formas de respuesta
+
+```js
+// Ánimo
+{ id, emocion, confianza, creadoEn }            // creadoEn en ISO 8601
+
+// Favorito (no se duplica la combinación tmdbId + tipo por usuario)
+{ id, tmdbId, tipo, titulo, poster, creadoEn }
+
+// Recomendaciones
+{ emocion, tipo, fuente, resultados: [
+  { tmdbId, titulo, descripcion, poster, fecha, calificacion, tipo },
+] }
+```
+
+`fuente` vale `'ejemplo'` mientras no exista la integración con TMDB. Los campos de `resultados` están normalizados en español para que la galería no tenga que distinguir entre películas (`title`, `release_date`) y series (`name`, `first_air_date`) de TMDB.
+
+### Manejo de errores
+
+- `notFound`: `404` en JSON para rutas inexistentes. Dentro de `/api`, sin sesión se responde `401` antes de evaluar la ruta (no se revela qué rutas existen).
+- `errorHandler`: JSON mal formado → `400`; cualquier otro error → `500` con mensaje genérico. El detalle solo se imprime en la consola del servidor.
+
+### Contratos para otras ramas
+
+- `pf7_Prisma` (completada): implementó modelos, migraciones, cliente Prisma, consultas filtradas por `usuarioId` y el índice único `(usuarioId, tmdbId, tipo)` en favoritos.
+- `pf11_TMDB`: reemplazar `recomendacionesService.obtener({ emocion, tipo })`, guardar la API key como variable del backend (agregarla a `config/env.js` y `.env.example`) y devolver la forma documentada con `fuente: 'tmdb'`.
+- `pf15_Zod`: reemplazar las validaciones `if` de los controladores y la lectura de `config/env.js` por esquemas.
+- `pf14_Testing`: importar `app` desde `src/app.js` con supertest y simular sesiones con `mock.method(authService, 'obtenerUsuario', ...)`.
+- `pf16_Seguridad`: agregar helmet, CORS con lista blanca y rate limit en `app.js`, antes de `app.use('/api', ...)`.
+
+## 7. API Gateway (`pf8_APIGateway`)
+
+### Responsabilidad
+
+El gateway en `apigateway/` es la única dirección que debe conocer el frontend. No contiene lógica de negocio ni accede directamente a Supabase, Prisma o TMDB: conserva la petición y la delega al microservicio responsable.
+
+- Puerto local y Docker: `3000`.
+- Health check público: `GET /health`.
+- Los destinos y el timeout se configuran mediante variables de entorno.
+- `Authorization: Bearer <token>` se reenvía sin cambios para que el servicio de sesión o cada servicio protegido valide la identidad.
+- Si el destino no existe, rechaza la conexión o excede el timeout, el gateway responde `502` con `{ error, service }` sin exponer detalles internos.
+- Una ruta que no pertenece a ningún contrato responde `404` en JSON.
+- No se usa `express.json()` antes de los proxies porque consumiría el stream del body; cada microservicio es responsable de analizar y validar su contenido.
+
+### Contratos de rutas
+
+| Rutas públicas | Servicio Docker | Puerto | Variable | Responsabilidad futura |
+|---|---|---:|---|---|
+| `/api/sesiones`, `/api/usuarios` | `auth-service` | 3021 | `AUTH_SERVICE_URL` | Validar sesiones de Supabase y gestionar el usuario |
+| `/api/animos` | `emotions-service` | 3022 | `EMOTIONS_SERVICE_URL` | Guardar y consultar resultados emocionales autorizados |
+| `/api/catalogo` | `catalog-service` | 3023 | `CATALOG_SERVICE_URL` | Consultar películas, series y detalles en TMDB |
+| `/api/recomendaciones` | `recommendations-service` | 3024 | `RECOMMENDATIONS_SERVICE_URL` | Relacionar emociones con contenido recomendado |
+| `/api/favoritos`, `/api/historial` | `library-service` | 3025 | `LIBRARY_SERVICE_URL` | Administrar favoritos e historial |
+
+Cada servicio debe aceptar la misma ruta pública recibida. El gateway no elimina `/api` ni renombra recursos.
+
+### Docker
+
+- `compose.yaml` construye `apigateway/Dockerfile`, publica `3000:3000` y crea la red bridge `butaca-microservices`.
+- Los contenedores de los cinco microservicios se agregaron en `pf9_Docker` (sección 8).
+- Docker resuelve los servicios por nombre dentro de la red; no se deben fijar direcciones IP de contenedores.
+- Ejecutado fuera de Docker, el gateway puede iniciar sin los microservicios: `/health` responde normalmente y las rutas sin destino devuelven `502`.
+- Para ejecutar solo el gateway: `docker compose up --build api-gateway` desde la raíz.
+
+## 8. Docker y microservicios (`pf9_Docker`)
+
+### Alcance
+
+Infraestructura de contenedores para todo el backend de microservicios. Crea un **esqueleto funcional** de cada uno de los cinco servicios (Express mínimo con `/health`, pruebas y `Dockerfile`) y los conecta con el gateway en `compose.yaml`. **No** implementa lógica de negocio: cada responsable agrega sus rutas en su rama (`pf12` a `pf16`). El frontend no se contenedoriza: se ejecuta con `npm run dev` y se despliega en Vercel. `backend/` (pf5–pf7) no forma parte de `compose.yaml`; su código sirve de referencia para migrar la lógica a los microservicios.
+
+### Ejecución
+
+```bash
+# Desde la raíz, con Docker Desktop encendido
+docker compose up --build -d     # construye y levanta los seis contenedores
+docker compose ps                # todos deben verse (healthy)
+docker compose logs -f library-service   # logs de un servicio
+docker compose down              # detiene y elimina contenedores y red
+```
+
+Para desarrollar un servicio sin Docker: `cd microservicios/<servicio>`, copiar `.env.example` como `.env`, `npm.cmd install` y `npm.cmd run dev`.
+
+### Servicios
+
+| Servicio Docker | Carpeta | Puerto interno | Rutas que recibe | Rama responsable |
+|---|---|---:|---|---|
+| `api-gateway` | `apigateway/` | 3000 (publicado) | todas | `pf8_APIGateway` |
+| `auth-service` | `microservicios/auth-service/` | 3021 | `/api/sesiones`, `/api/usuarios` | `pf12_MSAutenticacion` |
+| `emotions-service` | `microservicios/emotions-service/` | 3022 | `/api/animos` | `pf13_MSEmociones` |
+| `catalog-service` | `microservicios/catalog-service/` | 3023 | `/api/catalogo` | `pf14_MSCatalogo` |
+| `recommendations-service` | `microservicios/recommendations-service/` | 3024 | `/api/recomendaciones` | `pf15_MSRecomendaciones` |
+| `library-service` | `microservicios/library-service/` | 3025 | `/api/favoritos`, `/api/historial` | `pf16_MSBiblioteca` |
+
+### Esqueleto común
+
+- Los cinco servicios tienen el mismo `src/`. `SERVICE_NAME` y `PORT` llegan por variables de entorno (`compose.yaml` o `.env`), por lo que cada contenedor se identifica sin cambiar código.
+- `GET /health` responde `200 { status: 'ok', service }`. Lo usan el `HEALTHCHECK` del `Dockerfile` y `depends_on` del gateway.
+- Rutas inexistentes responden `404 { error, service }`. El campo `service` permite comprobar a qué contenedor llegó una petición.
+- `errorHandler` responde `400` ante JSON mal formado y `500` genérico en otros casos; el detalle solo se imprime en el log del contenedor.
+- `x-powered-by` está deshabilitado.
+- `server.js` atiende `SIGTERM` (la señal de `docker compose down`) y cierra conexiones antes de salir.
+
+### Middleware de autenticación (`pf12_MSAutenticacion`)
+
+- `auth-service/src/middlewares/requireAuth.js` exporta `requireAuth` y la fábrica `createRequireAuth` para inyectar un cliente simulado en pruebas. Verifica `Authorization: Bearer <token>` con el cliente Supabase reutilizable y `auth.getUser(token)`; solo asigna a `req.user` el `id` y el `email` devueltos por Supabase.
+- Responde JSON con `401` si falta el token, el formato es incorrecto o la sesión es rechazada; `500` si falta configuración y `503` ante fallos de infraestructura, red o límites de solicitudes. No expone tokens ni detalles internos.
+- `auth-service/test/requireAuth.test.js` cubre éxito, encabezados incorrectos, rechazo del token, usuario ausente, falta de configuración y fallos de Supabase mediante clientes simulados, sin credenciales reales ni conexiones externas. El usuario confirmó el resultado final de la suite de `auth-service`: **44/44 pruebas automatizadas aprobadas**.
+- El middleware protege `GET /api/sesiones`, `POST /api/usuarios` y `GET /api/usuarios`; `/health` permanece público. La configuración de Prisma y los contratos de usuarios se describen abajo.
+
+### Consulta de sesión (`pf12_MSAutenticacion`)
+
+- `auth-service/src/app.js` monta `sesionesRouter` en `/api/sesiones`. `src/routes/sesiones.routes.js` declara `GET /` con `requireAuth` y el controlador `obtenerSesion` de `src/controllers/sesiones.controller.js`.
+- Contrato: `GET /api/sesiones` exige `Authorization: Bearer <token>` y devuelve `200` con `{ "id": "<id de Supabase>", "email": "<email de Supabase>" }`, obtenido exclusivamente de `req.user`. No acepta identificadores del cliente para elegir la identidad ni consulta la base de datos.
+- Sin token, con formato incorrecto o token rechazado reutiliza el `401` JSON de `requireAuth`. La falta de configuración y los fallos de infraestructura conservan sus respuestas `500` y `503` respectivamente. No se agregan operaciones POST en `/api/sesiones`.
+- `auth-service/test/sesiones.test.js` prueba el endpoint HTTP local con `supabase.auth.getUser` simulado: éxito, rechazo, token ausente, formato incorrecto, `/health` público y POST inexistente. No usa credenciales reales ni conecta con Supabase y forma parte de las 44 pruebas aprobadas. En la integración real confirmada por el usuario, la autenticación con Supabase funcionó: `GET /api/sesiones` con token válido respondió `HTTP 200` mediante el Gateway y las solicitudes sin token fueron rechazadas con `HTTP 401`.
+
+### Preparación de Prisma en auth-service (`pf12_MSAutenticacion`)
+
+- `auth-service` declara `@prisma/client` como dependencia de producción y `prisma` como dependencia de desarrollo, ambos fijados en `6.19.3`, con script `prisma:generate` (`prisma generate`). Instalación y generación local: `npm.cmd ci` y `npm.cmd run prisma:generate` dentro de `microservicios/auth-service/`.
+- `auth-service/prisma/schema.prisma` conserva el esquema completo de `backend/prisma/schema.prisma`: `Usuario`, `Animo` y `Favorito`, con sus nombres, relaciones e índices existentes. Describe las mismas tablas; generar el cliente no crea tablas ni modifica datos. No se copia ninguna carpeta de migraciones.
+- Las migraciones siguen siendo responsabilidad del esquema principal en `backend/prisma/`. Este microservicio no ejecuta `migrate`, `db push` ni `db pull`; su copia debe mantenerse compatible cuando cambie el esquema principal.
+- `src/config/env.js` centraliza `DATABASE_URL` y `DIRECT_URL` como `env.databaseUrl` y `env.directUrl`; `.env.example` documenta ambas sin valores. La configuración privada debe apuntar a la misma base y esquema del backend y se suministra localmente o en el entorno de ejecución, sin incorporarla al repositorio ni a la imagen.
+- `src/lib/prisma.js` carga la configuración centralizada y exporta una única instancia de `PrismaClient` por proceso, siguiendo el patrón del backend. No llama a `$connect` ni ejecuta consultas al importarse; solo el servicio de usuarios lo usa para consultar o sincronizar. `/health` y `/api/sesiones` no consultan PostgreSQL.
+- El Dockerfile de `auth-service` instala OpenSSL, instala dependencias de desarrollo para generar el cliente y luego las elimina con `npm prune --omit=dev`. La generación usa URLs ficticias limitadas al comando de construcción; las URLs reales solo se inyectan al ejecutar Docker/Render. Mantiene el usuario `node`, el puerto configurable y el health check existente. Para Render sin Docker: instalar incluyendo dependencias de desarrollo y generar durante el build; iniciar con `npm start`.
+- El usuario confirmó la instalación, generación del cliente y pruebas reales de persistencia mediante Prisma en PostgreSQL, sin ejecutar migraciones desde este microservicio. La construcción y prueba básica de Docker fueron completadas con variables ficticias; los resultados y las alertas de seguridad pendientes se detallan abajo.
+
+### Usuarios autenticados (`pf12_MSAutenticacion`)
+
+- Arquitectura: `src/routes/usuarios.routes.js` aplica `requireAuth`, llama a `src/controllers/usuarios.controller.js` y este delega en `src/services/usuarios.service.js`, que usa la instancia reutilizable de Prisma. `src/app.js` monta el router en `/api/usuarios`.
+- `POST /api/usuarios`: sin body obligatorio. Ejecuta `prisma.usuario.upsert` con `where: { id: req.user.id }`; crea usando el id y correo verificados o actualiza únicamente el correo. El correo ausente se normaliza a `null`. Ignora identidades y correos del body, query y headers personalizados. No modifica `creadoEn`, ánimos ni favoritos y repetir la operación no duplica registros. Devuelve `200` con `{ id, email, creadoEn }`.
+- `GET /api/usuarios`: ejecuta `prisma.usuario.findUnique` usando exclusivamente `req.user.id` y selecciona `id`, `email` y `creadoEn`. Devuelve `200` con esos campos o `404 { error: 'El usuario autenticado no tiene un registro local.' }`. No crea ni modifica registros y no permite elegir otro usuario.
+- Ambos endpoints requieren `Authorization: Bearer <token>` y conservan las respuestas del middleware: `401` por autenticación ausente o rechazada, `500` si Supabase no está configurado y `503` ante fallos de Supabase. Los fallos de persistencia responden `500` con un mensaje genérico de guardado o consulta; no se envía ni se imprime el error original de Prisma.
+- `src/services/usuarios.service.js` usa una selección explícita de los tres campos públicos; no devuelve relaciones ni utiliza el correo como clave de identidad. Las fechas se serializan como cadenas ISO en JSON.
+- `test/usuarios.test.js` simula `supabase.auth.getUser`, `prisma.usuario.upsert` y `prisma.usuario.findUnique` antes de utilizar la aplicación HTTP local. Cubre creación, sincronización repetida, correo ausente, conservación de fecha y relaciones, aislamiento entre usuarios, `404`, `401`, errores de persistencia y continuidad de `/health` y `/api/sesiones`, sin conexiones externas. Forma parte de la suite confirmada por el usuario con **44/44 pruebas aprobadas**.
+- Integración real confirmada por el usuario: `POST /api/usuarios` directamente a `auth-service` respondió `HTTP 200` y registró al usuario en PostgreSQL mediante Prisma. `GET /api/usuarios` respondió `HTTP 200` tanto directamente como mediante el Gateway, con respuestas coincidentes.
+- Dos `POST /api/usuarios` consecutivos mediante el Gateway y un `GET /api/usuarios` final respondieron `HTTP 200`, conservando la identidad y la fecha de creación. El proceso de `auth-service` permaneció estable durante las pruebas de diagnóstico.
+- Inicialmente se observó un `HTTP 502` con `ECONNRESET` en un POST mediante el Gateway. El problema no volvió a reproducirse en las pruebas posteriores y su causa original no fue identificada; no se atribuye a una corrección específica.
+
+### Verificación de Docker de auth-service (`pf12_MSAutenticacion`)
+
+- El usuario confirmó que la imagen `butaca-auth-service:pf12` se construyó correctamente: Docker Build finalizó con **14/14 pasos**. El contenedor arrancó y apareció como `healthy`.
+- `GET http://localhost:3022/health` respondió `HTTP 200` con `{ status: "ok", service: "butaca-service" }` en el contenedor de prueba. El contenedor se detuvo correctamente al finalizar.
+- Se utilizaron variables ficticias: esta prueba confirma la construcción, el arranque y el health check, pero no conexiones reales a Supabase ni a PostgreSQL desde Docker.
+
+### Auditoría de seguridad de auth-service (`pf12_MSAutenticacion`)
+
+- El usuario confirmó que `npm audit` y `npm audit --omit=dev` reportaron las mismas **tres vulnerabilidades altas**, correspondientes a la cadena `prisma@6.19.3` → `@prisma/config@6.19.3` → `deepmerge-ts@7.1.5`. El aviso es `GHSA-ggr8-5vv4-36mx`.
+- Se comprobó con `npm ls` dentro de la imagen Docker que los paquetes vulnerables permanecen instalados después de la instalación y poda de dependencias. La construcción exitosa y el health check no implican que la vulnerabilidad esté corregida.
+- No se identificó una ruta de explotación desde los endpoints actuales, pero esto no garantiza ausencia de riesgo. **La vulnerabilidad sigue sin corregirse**.
+- No se aplicó `npm audit fix --force`, porque propone migrar a Prisma `7.10.1`, un cambio mayor. Se recomienda evaluar una corrección compatible con Prisma 6 y dar seguimiento antes de fusionar el PR.
+
+### Microservicio de emociones (`pf13_MSEmociones`)
+
+#### Arquitectura
+
+```text
+microservicios/emotions-service/
+├── prisma/schema.prisma            # Copia del esquema principal (backend/prisma). Solo genera el cliente.
+├── src/
+│   ├── app.js                      # express.json({ limit: '10kb' }), /health y /api/animos.
+│   ├── config/env.js               # Única lectura de process.env (igual que auth-service).
+│   ├── constants/emociones.js      # EMOCIONES, ORIGENES, versión del consentimiento y límites de paginación.
+│   ├── lib/supabase.js, prisma.js  # Copias de auth-service: cliente Supabase sin sesión propia e instancia única de Prisma.
+│   ├── middlewares/requireAuth.js  # Copia exacta del middleware de auth-service.
+│   ├── middlewares/errorHandler.js # 400 JSON inválido, 413 body excesivo (sin log) y 500 genérico.
+│   ├── validators/animos.validator.js # Validación con if del body, query e id.
+│   ├── routes/animos.routes.js     # requireAuth para todo el router.
+│   ├── controllers/animos.controller.js
+│   └── services/animos.service.js  # Único acceso a Prisma.
+└── test/
+    ├── health.test.js              # Esqueleto pf9 (3 pruebas).
+    └── animos.test.js              # 28 pruebas del contrato /api/animos.
+```
+
+- Una petición recorre: **ruta** → `requireAuth` → **controlador** (valida y elige el código HTTP) → **service** (Prisma) → respuesta.
+- `requireAuth`, `lib/supabase.js`, `lib/prisma.js` y `config/env.js` se **copiaron sin cambios** desde `auth-service`, por la regla 12 (los servicios no importan código entre sí). Si `auth-service` corrige su middleware, la copia debe actualizarse. Verificar el token localmente evita una llamada HTTP extra a `GET /api/sesiones` por cada petición.
+- Zod no está instalado en el proyecto: se mantuvo la convención vigente de validaciones con `if`, agrupadas en `validators/` para poder reemplazarlas por esquemas sin tocar controladores ni services.
+
+#### Modelo de datos
+
+Se amplió `Animo` en el esquema principal `backend/prisma/schema.prisma` de forma **aditiva** (no se renombró ni eliminó nada):
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `id` | `String` uuid | Identificador generado por Prisma. |
+| `usuarioId` | `String` | `req.user.id` del token. Clave foránea a `Usuario.id` con cascada (relación existente). |
+| `emocion` | `String` | Una de `neutral`, `happy`, `sad`, `angry`, `fearful`, `disgusted`, `surprised`. |
+| `confianza` | `Float?` | **Ahora opcional**: obligatoria para `origen = 'deteccion'`, opcional para `'confirmada'`. |
+| `origen` | `String` (`'deteccion'` por defecto) | `deteccion` (face-api.js) o `confirmada` (elegida o corregida por el usuario). |
+| `consentimientoHistorial` | `Boolean` (`false` por defecto) | Evidencia de la autorización explícita para conservar el registro. |
+| `consentimientoVersion` | `String?` | Versión del texto aceptado (`CONSENTIMIENTO_HISTORIAL_VERSION = 'historial-v1'`). |
+| `consentimientoEn` | `DateTime?` | Fecha y hora del servidor en que se registró la autorización. |
+| `creadoEn` | `DateTime` | Fecha y hora del registro. |
+
+- Índice nuevo `@@index([usuarioId, creadoEn])` para el historial paginado.
+- No se guardan fotografías, fotogramas ni videos: el service solo copia los campos validados y el body está limitado a 10 kB.
+- Los ánimos anteriores a pf13 (guardados por `backend/`) quedan con `consentimientoHistorial = false`, `origen = 'deteccion'` y sin versión/fecha de consentimiento; **no se muestran** en el historial porque no tienen evidencia de autorización. No se borran.
+- Migración: `backend/prisma/migrations/20261030120000_animo_consentimiento_historial/migration.sql`. Estado real y requisitos en «Estado de la migración».
+- `backend/src/services/animos.service.js` sigue siendo compatible: inserta sin las columnas nuevas (toman su valor por defecto) y selecciona solo campos previos; solo verá `confianza: null` en registros `confirmada` creados por este servicio. La copia del esquema de `auth-service` no se modificó; sigue funcionando porque solo consulta `Usuario`, pero quedó desactualizada en `Animo` y conviene sincronizarla en su rama.
+
+#### Estado de la migración (2026-10-30): APLICADA en producción
+
+- **Revisión del SQL**: `prisma migrate diff` (6.19.3) entre el esquema de `dev` y el de esta rama genera exactamente las mismas sentencias que el archivo: un `ALTER COLUMN "confianza" DROP NOT NULL`, cuatro `ADD COLUMN` (dos con `DEFAULT`, dos nulos) y un `CREATE INDEX`. No contiene `DROP`, `DELETE`, `TRUNCATE`, renombres ni cambios de tipo: es **aditiva** y no elimina información.
+- **Compatibilidad**: `auth-service` solo consulta `Usuario`; `backend/` sigue funcionando (ver arriba); `catalog`, `recommendations` y `library` no usan Prisma. Los clientes Prisma generados con el esquema anterior seleccionan columnas explícitas, por lo que las columnas nuevas no los afectan.
+- **Autorización**: el responsable del proyecto autorizó expresamente aplicar la migración y realizar las pruebas de integración.
+- **Respaldo verificado antes de migrar**: como no hay acceso a los respaldos administrados de Supabase desde el entorno de desarrollo, se generó un respaldo lógico propio con `pg_dump` 17 (solo lectura): estructura completa del esquema `public` y datos de `Animo` (0 filas) y `_prisma_migrations`. No incluye datos de `Usuario` ni `Favorito`, que la migración no modifica, para no copiar datos personales. Se comprobó que es **recuperable** restaurándolo en un PostgreSQL 17 local descartable: 4 tablas, 2 claves foráneas, 5 índices y el historial de migraciones. El respaldo se guarda fuera del repositorio, en la máquina de desarrollo.
+- **Estado previo**: `prisma migrate status` (desde `backend/`, Prisma 6.19.3, Session Pooler del proyecto `fxumhujdmabgxjqmzoxs`, esquema `public`) indicaba como única pendiente `20261030120000_animo_consentimiento_historial`. Conteos: `Usuario=1`, `Animo=0`, `Favorito=0`.
+- **Aplicación**: `prisma migrate deploy` desde `backend/` el 2026-10-30: «All migrations have been successfully applied». No se usaron `db push`, `migrate dev` ni `migrate reset`.
+- **Estado posterior**: `migrate status` responde «Database schema is up to date!»; `"Animo"` tiene `origen`, `consentimientoHistorial`, `consentimientoVersion` y `consentimientoEn`, y `confianza` admite `NULL`. Los conteos de `Usuario`, `Animo` y `Favorito` no cambiaron; solo se agregó la fila esperada en `_prisma_migrations`.
+- **Reversión, si hiciera falta**: `DROP INDEX "Animo_usuarioId_creadoEn_idx"`, eliminar las cuatro columnas nuevas y restablecer `NOT NULL` en `confianza` (solo posible si no hay filas con `confianza` nula), o restaurar el respaldo del esquema.
+
+#### Relación con Usuario
+
+`emotions-service` **no crea usuarios**; esa responsabilidad es de `POST /api/usuarios` en `auth-service`. Si el usuario autenticado no tiene registro local, Prisma rechaza la clave foránea (`P2003`) y el servicio responde `409`. El front debe llamar a `POST /api/usuarios` después del inicio de sesión y antes de guardar emociones.
+
+#### Endpoints
+
+Todos exigen `Authorization: Bearer <access_token de Supabase>` y se acceden mediante el gateway (`http://localhost:3000`).
+
+| Método | Ruta | Body / query | Respuestas |
+|---|---|---|---|
+| GET | `/health` | — | `200 { status: 'ok', service }` (público) |
+| POST | `/api/animos` | `{ emocion, confianza, origen?, consentimientoHistorial: true }` | `201` registro · `400` · `401` · `403` sin consentimiento · `409` sin usuario local · `413` · `500` · `503` |
+| GET | `/api/animos` | `?pagina=1&limite=20&emocion=&origen=&desde=&hasta=&orden=desc` | `200 { resultados, paginacion }` · `400` · `401` · `500` · `503` |
+| GET | `/api/animos/:id` | — | `200` registro · `404` si no existe, no es propio o no tiene consentimiento · `401` · `500` |
+
+```js
+// Registro (POST 201, cada elemento de resultados y GET /:id)
+{ id, emocion, confianza, origen, consentimientoHistorial, consentimientoVersion, consentimientoEn, creadoEn }
+
+// GET /api/animos
+{ resultados: [ /* registros */ ], paginacion: { pagina, limite, total, totalPaginas } }
+```
+
+- **Cambio de contrato respecto a `backend/`**: `GET /api/animos` ya no devuelve un arreglo plano sino `{ resultados, paginacion }`, y `POST` exige `consentimientoHistorial`.
+- Orden: `creadoEn` y luego `id`, descendente por defecto (`orden=asc` opcional). `limite` entre 1 y 100 (20 por defecto); `pagina` entre 1 y 10000. `desde`/`hasta` son fechas ISO 8601 inclusivas.
+
+#### Validaciones
+
+- Body: debe ser un objeto JSON. `consentimientoHistorial` debe ser exactamente `true`; ausencia, `false`, `"true"`, `1`, `consentimientoCamara: true` o `consent: true` responden `403` y no guardan nada. **El permiso de cámara no equivale a autorizar el historial.**
+- `emocion` de la lista; `origen` `deteccion` o `confirmada`; `confianza` número finito entre 0 y 1 (obligatoria para `deteccion`, opcional o `null` para `confirmada`).
+- Se ignoran `usuarioId`, `id`, `creadoEn`, `consentimientoVersion`, imágenes y cualquier otro campo del body, query o headers personalizados.
+- Query: parámetros repetidos (`?pagina=1&pagina=2`), enteros fuera de rango, emociones u orígenes desconocidos, fechas inválidas o `desde > hasta` responden `400`. `:id` que no es UUID responde `404`.
+
+#### Seguridad
+
+- El usuario sale siempre de `req.user.id`; cada consulta filtra por `usuarioId` y `consentimientoHistorial: true`. Un registro ajeno responde `404`, igual que uno inexistente, para no revelar su existencia.
+- Errores de Prisma: respuesta genérica `500` (o `409` para `P2003`). En el log solo se imprime el código de Prisma (por ejemplo `P1001`), nunca el mensaje, que puede contener la cadena de conexión.
+- `errorHandler` no registra el body de errores `400`/`413` porque puede contener datos emocionales.
+- Sin secretos en el código: `.env.example` documenta `SERVICE_NAME`, `PORT`, `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `DATABASE_URL` y `DIRECT_URL` sin valores. Los reales van en `microservicios/emotions-service/.env` (ignorado por Git y `.dockerignore`) o en el entorno de ejecución.
+- `npm audit` y `npm audit --omit=dev` reportan las mismas **tres vulnerabilidades altas** que `auth-service` (`prisma@6.19.3` → `@prisma/config` → `deepmerge-ts`, `GHSA-ggr8-5vv4-36mx`). No se aplicó `npm audit fix --force` (Prisma 7, cambio mayor). `@prisma/client` y `prisma` quedaron fijados en `6.19.3`, igual que en `auth-service`.
+
+#### Gateway y Docker
+
+- El gateway ya enrutaba `/api/animos` hacia `emotions-service:3022` desde `pf8`; no se modificó su código. Se agregó una prueba en `apigateway/test/gateway.test.js` que confirma que `/api/animos/:id?query` llega sin cambios.
+- `Dockerfile` igual al de `auth-service`: OpenSSL, `npm ci --include=dev`, `prisma generate` con URLs ficticias, `npm prune --omit=dev`, usuario `node` y `HEALTHCHECK` contra `/health`. `compose.yaml` no se modificó: ya declara `env_file` opcional, `SERVICE_NAME`, `PORT` y la red interna sin `ports:`.
+- Desarrollo local: `cd microservicios/emotions-service`, `npm.cmd ci`, copiar `.env.example` como `.env` con los valores, `npm.cmd run prisma:generate` y `npm.cmd run dev`.
+
+#### Pruebas realizadas (2026-10-30)
+
+- `npm test` en `emotions-service`: **31/31 aprobadas** (3 de health + 28 de `animos.test.js`). Supabase (`auth.getUser`) y el delegado `prisma.animo` se simulan en memoria; no hay conexiones externas ni credenciales reales. Cubren: sin token, formato incorrecto, token inválido, Supabase caído (`503`), registro autorizado con usuario del token, emoción confirmada sin confianza, rechazo sin consentimiento (`403`), datos inválidos y JSON mal formado (`400`), body excesivo (`413`), usuario sin registro local (`409`), historial ordenado, paginación y filtros, parámetros inválidos, `GET /:id`, aislamiento entre usuarios, fallos de base de datos (`500` sin filtrar detalles), `/health` público y métodos no implementados.
+- `npm test` en `apigateway`: **5/5 aprobadas**.
+- `npx prisma validate` y `prisma generate` (6.19.3) correctos; `docker compose config` válido.
+- Prueba manual con `node src/server.js` y variables ficticias: `/health` `200`, `GET /api/animos` sin token `401`.
+- **Configuración real** (`microservicios/emotions-service/.env`, ignorado por Git y Docker): clave `sb_publishable_` del proyecto `fxumhujdmabgxjqmzoxs`; `DATABASE_URL` en el Transaction Pooler (`aws-0-us-east-1.pooler.supabase.com:6543`, `?pgbouncer=true`) y `DIRECT_URL` en el Session Pooler (mismo host, `5432`), ambos con usuario `postgres.fxumhujdmabgxjqmzoxs`. Se usó Session Pooler porque `db.fxumhujdmabgxjqmzoxs.supabase.co` solo resuelve a IPv6 y el equipo de desarrollo no tiene IPv6.
+- **Conectividad real de solo lectura**: `SELECT 1` correcto por ambos poolers (PostgreSQL 17.11) y `GET /auth/v1/settings` de Supabase `200` con la clave publicable (proveedores GitHub, Google y email).
+- **Docker real**: `docker compose build emotions-service` construyó la imagen; un contenedor temporal (`docker run --rm` con `--env-file .env`) arrancó, alcanzó `healthy`, `/health` respondió `200`, `GET`/`POST /api/animos` sin token `401` y con token inválido `401` (rechazado por Supabase real). La imagen no contiene `.env` ni `test/` y corre como `node`. `docker stop` lo detuvo en menos de un segundo y `--rm` lo eliminó. `SELECT count(*) FROM "Animo"` = 0 antes y después: no hubo escrituras.
+- **Docker Compose completo** (después de la migración): `docker compose up --build -d` levantó los seis contenedores, todos `healthy`. Como `auth-service` no tiene `.env` propio, se le inyectaron las mismas variables con un override local fuera del repositorio, sin modificar `compose.yaml`. Mediante el gateway: `/health` `200`; `GET /api/animos` y `GET /api/usuarios` sin token `401`; token inválido `401`.
+- **Pendiente: pruebas reales con usuarios autenticados** (`POST /api/usuarios` → `POST /api/animos` → `GET /api/animos`, rechazos `403` y aislamiento entre dos cuentas) contra la base real. **No se realizaron porque no se cuenta con dos sesiones de prueba válidas** (`access_token` de Supabase de dos cuentas autorizadas); el inicio de sesión OAuth en `localhost` presentó problemas y quedó fuera del alcance de esta rama. La rama se entrega formalmente con este pendiente, por decisión del responsable del proyecto. Estos casos están cubiertos únicamente por las pruebas automatizadas con simulaciones. Por eso, contra la base real no se ha ejecutado ninguna escritura en `Animo` (0 filas).
+
+#### Limitaciones y pendientes
+
+- Integración definitiva: obtener dos sesiones de prueba válidas (fuera de esta rama; el problema de OAuth en `localhost` corresponde a la autenticación del front) y luego, mediante el gateway: `POST /api/usuarios`, `POST /api/animos` con consentimiento, `GET /api/animos`, `POST` sin consentimiento (`403`) y `GET /api/animos/:id` de un registro de la otra cuenta (`404`). Registrar los ids creados para su limpieza autorizada.
+- `auth-service` no tiene `.env` propio: para `docker compose up` sin override, su responsable debe crearlo a partir de su `.env.example`.
+- La imagen pesa ~860 MB por los motores de Prisma; puede optimizarse con una construcción multietapa.
+- El front todavía no envía resultados: falta la casilla de consentimiento de historial (separada de la de cámara) con el texto de la versión `historial-v1` y la llamada a `POST /api/usuarios` antes de guardar.
+- No existe eliminación ni retiro del consentimiento (`DELETE`); queda para una rama posterior si se decide.
+- Sincronizar la copia de `schema.prisma` de `auth-service` y reemplazar las validaciones `if` por Zod cuando se integre.
+- Vulnerabilidad de `deepmerge-ts` sin corregir (ver arriba).
+
+### Microservicio de catálogo (`pf14_MSCatalogo`)
+
+#### Arquitectura
+
+```text
+microservicios/catalog-service/
+├── package.json                        # Express 5, dotenv y pruebas con node:test.
+├── .env.example                        # SERVICE_NAME, PORT, TMDB_API_KEY, TMDB_BASE_URL, TMDB_IMAGE_BASE_URL y TMDB_TIMEOUT_MS.
+├── src/
+│   ├── app.js                          # CORS con lista blanca, express.json(), /health y /api/catalogo.
+│   ├── config/env.js                   # Única lectura de process.env.
+│   ├── constants/catalogo.js           # TIPOS_CATALOGO, CATEGORIAS_GALERIA, PAGINACION_CATALOGO y mapeo de géneros TMDB.
+│   ├── validators/catalogo.validator.js # Validación defensiva con if de query y parámetros de ruta.
+│   ├── routes/catalogo.routes.js       # GET / y GET /:tipo/:tmdbId.
+│   ├── controllers/catalogo.controller.js # Valida entrada, llama al service y elige el código HTTP.
+│   └── services/catalogo.service.js    # Consulta TMDB con fetch + AbortSignal.timeout y normaliza al español.
+└── test/
+    ├── health.test.js                  # Esqueleto pf9 (3 pruebas).
+    └── catalogo.test.js                # 16 pruebas del contrato /api/catalogo y /api/catalogo/:tipo/:tmdbId.
+```
+
+#### Endpoints
+
+| Método | Ruta | Query / Parámetros | Respuestas |
+|---|---|---|---|
+| GET | `/health` | — | `200 { status: 'ok', service }` |
+| GET | `/api/catalogo` | `?tipo=all\|movie\|tv&categoria=Todos&busqueda=&pagina=1` | `200 { fuente: 'tmdb', filtros, resultados, paginacion }` · `400` · `500` sin API key · `502` fallo TMDB · `503` timeout |
+| GET | `/api/catalogo/:tipo/:tmdbId` | `:tipo` (`movie` o `tv`), `:tmdbId` (entero positivo) | `200` detalle normalizado · `400` · `404` si no existe en TMDB · `500` · `502` · `503` |
+
+```js
+// Elemento en resultados (GET /api/catalogo)
+{
+  id: 'movie-550',
+  tmdbId: 550,
+  titulo: 'El club de la pelea',
+  tipo: 'Película',          // 'Película' | 'Serie' (para TarjetaContenido y DetalleContenido)
+  tipoTmdb: 'movie',         // 'movie' | 'tv' (para rutas de detalle, recomendaciones y favoritos)
+  anio: 1999,
+  fecha: '1999-10-15',
+  generos: ['Drama', 'Acción'],
+  calificacion: 8.4,
+  sinopsis: '...',
+  descripcion: '...',
+  portada: 'https://image.tmdb.org/t/p/w500/pelea.jpg',
+  poster: 'https://image.tmdb.org/t/p/w500/pelea.jpg',
+  esDemostracion: false
+}
+```
+
+#### Seguridad y pruebas
+- `TMDB_API_KEY` vive únicamente en `microservicios/catalog-service/.env` (ignorado por Git y `.dockerignore`) y soporta tanto API Key v3 como Read Access Token v4. En caso de fallo de TMDB, el log registra solo el código interno sin exponer la clave.
+- `src/pages/Galeria/services/catalogo.js` consume `GET /api/catalogo` a través del API Gateway en el puerto `3000` (con respaldo a datos de demostración si el gateway está apagado en desarrollo local).
+- Pruebas automatizadas: **19/19 aprobadas** en `catalog-service` (`health.test.js` + `catalogo.test.js`) y **6/6 aprobadas** en `apigateway`.
+
+
+
+### Microservicio de biblioteca (`pf16_MSBiblioteca`)
+
+#### Arquitectura
+
+```text
+microservicios/library-service/
+├── Dockerfile                               # Base node:22-alpine con OpenSSL, generación de Prisma y poda de devDependencies.
+├── package.json                             # Express 5, @supabase/supabase-js, @prisma/client 6.19.3, dotenv y pruebas con node:test.
+├── .env.example                             # SERVICE_NAME, PORT, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, DATABASE_URL y DIRECT_URL.
+├── prisma/schema.prisma                     # Copia sincronizada del esquema principal (Usuario, Animo, Favorito e HistorialRecomendacion).
+├── src/
+│   ├── app.js                               # express.json({ limit: '10kb' }), /health, /api/favoritos y /api/historial.
+│   ├── config/env.js                        # Única lectura centralizada de process.env.
+│   ├── constants/biblioteca.js              # EMOCIONES, TIPOS_CONTENIDO ('movie', 'tv'), PAGINACION y LIMITES_TEXTO.
+│   ├── lib/supabase.js, prisma.js           # Cliente Supabase sin sesión persistente e instancia única de PrismaClient.
+│   ├── middlewares/requireAuth.js           # Verificación del token Bearer contra Supabase y fábrica createRequireAuth.
+│   ├── middlewares/errorHandler.js          # 400 JSON inválido, 413 cuerpo excesivo y 500 genérico sin filtrar detalles internos.
+│   ├── validators/biblioteca.validator.js   # Validación defensiva con if de cuerpo, query e id UUID para favoritos e historial.
+│   ├── routes/favoritos.routes.js           # GET /, POST / y DELETE /:id protegidos con requireAuth.
+│   ├── routes/historial.routes.js           # GET /, POST / y DELETE /:id protegidos con requireAuth.
+│   ├── controllers/favoritos.controller.js  # Orquesta validación, servicio y códigos HTTP (200, 201, 204, 400, 404, 409, 500).
+│   ├── controllers/historial.controller.js  # Orquesta validación, servicio y códigos HTTP (200, 201, 204, 400, 404, 409, 500).
+│   ├── services/favoritos.service.js        # Operaciones en Prisma sobre Favorito aisladas por usuarioId.
+│   └── services/historial.service.js        # Operaciones en Prisma sobre HistorialRecomendacion aisladas por usuarioId.
+└── test/
+    ├── health.test.js                       # Esqueleto pf9 (3 pruebas).
+    └── biblioteca.test.js                   # 22 pruebas del contrato /api/favoritos y /api/historial con Supabase y Prisma simulados.
+```
+
+- Cada petición autenticada recorre el flujo: **ruta** → `requireAuth` → **controlador** (valida la entrada y define el código HTTP) → **servicio** (consulta o escribe en Prisma) → **respuesta JSON**.
+- Cumpliendo la regla de aislamiento entre microservicios, `library-service` mantiene su propia copia de `requireAuth.js`, `lib/supabase.js`, `lib/prisma.js`, `config/env.js` y `prisma/schema.prisma`, sin importar archivos desde otros microservicios ni desde `backend/`.
+
+#### Modelo de datos
+
+El microservicio opera sobre `Favorito` (definido en `pf7_Prisma`) e incorpora de forma **aditiva** el modelo `HistorialRecomendacion` en `backend/prisma/schema.prisma`:
+
+| Tabla | Campos principales | Índices y restricciones |
+|---|---|---|
+| `Favorito` | `id` (UUID), `usuarioId`, `tmdbId` (Int), `tipo` (`'movie'` \| `'tv'`), `titulo`, `poster?`, `creadoEn` | `@@unique([usuarioId, tmdbId, tipo])` y `@@index([usuarioId, creadoEn])` |
+| `HistorialRecomendacion` | `id` (UUID), `usuarioId`, `emocion`, `tmdbId` (Int), `tipo` (`'movie'` \| `'tv'`), `titulo`, `poster?`, `calificacion?` (Float), `creadoEn` | `@@index([usuarioId, creadoEn])` y clave foránea hacia `Usuario.id` (`onDelete: Cascade`) |
+
+- **Migración aditiva**: `backend/prisma/migrations/20261031180000_historial_recomendaciones/migration.sql`. Solo agrega la tabla `HistorialRecomendacion`, su clave foránea hacia `Usuario` y los índices compuestos `(usuarioId, creadoEn)`, sin eliminar ni alterar columnas existentes.
+
+#### Endpoints
+
+Todas las rutas de negocio exigen `Authorization: Bearer <access_token de Supabase>` y se consumen a través del API Gateway (`http://localhost:3000`).
+
+| Método | Ruta | Body / Query | Respuestas |
+|---|---|---|---|
+| GET | `/health` | — | `200 { status: 'ok', service }` (público) |
+| GET | `/api/favoritos` | `?pagina=1&limite=20&tipo=&orden=desc` | `200 { resultados, paginacion }` · `400` · `401` · `500` · `503` |
+| POST | `/api/favoritos` | `{ tmdbId, tipo, titulo, poster? }` | `201` creado · `200` si ya existía (idempotente) · `400` · `401` · `409` sin usuario local · `413` · `500` · `503` |
+| DELETE | `/api/favoritos/:id` | `:id` (UUID) | `204` sin contenido · `401` · `404` si no existe o es de otro usuario · `500` · `503` |
+| GET | `/api/historial` | `?pagina=1&limite=20&emocion=&tipo=&desde=&hasta=&orden=desc` | `200 { resultados, paginacion }` · `400` · `401` · `500` · `503` |
+| POST | `/api/historial` | `{ emocion, tmdbId, tipo, titulo, poster?, calificacion? }` | `201` registro creado · `400` · `401` · `409` sin usuario local · `413` · `500` · `503` |
+| DELETE | `/api/historial/:id` | `:id` (UUID) | `204` sin contenido · `401` · `404` si no existe o es de otro usuario · `500` · `503` |
+
+#### Validaciones, Seguridad y Pruebas
+
+- **Aislamiento por usuario (`req.user.id`)**: se ignora cualquier `usuarioId`, `id` o `creadoEn` enviado por el cliente. Las consultas y eliminaciones filtran siempre por `usuarioId: req.user.id`; intentar borrar un registro ajeno o un ID que no es UUID responde `404`.
+- **Idempotencia en favoritos**: `POST /api/favoritos` verifica la clave compuesta `(usuarioId, tmdbId, tipo)`. Si ya existe, devuelve `200` con el favorito registrado sin duplicarlo; si es nuevo, lo crea y devuelve `201`.
+- **Relación con `Usuario` (`P2003` → `409`) y privacidad en `500`**: `library-service` no crea registros en `Usuario`; si falta el usuario local, responde `409`. Ante fallos de Prisma, registra solo el código de error (`P1001`, etc.) y responde `500` sin exponer cadenas de conexión.
+- **Pruebas realizadas**: `npm test` en `microservicios/library-service` (**25/25 pruebas aprobadas**: 3 en `health.test.js` y 22 en `biblioteca.test.js`), `npm test` en `apigateway` (**7/7 pruebas aprobadas**), `npm run lint` y `npm run build`.
+
+
+
+### Dockerfile
+
+- Base `node:22-alpine`, igual que el gateway.
+- Copia `package.json` y `package-lock.json` antes que `src/` para aprovechar la caché de capas: cambiar código no reinstala dependencias.
+- `npm ci --omit=dev`: instalación exacta del lockfile, sin dependencias de desarrollo en los esqueletos; `auth-service` instala también las de desarrollo para generar Prisma y luego las elimina, como se describe arriba.
+- `ARG PORT` → `ENV PORT`: el mismo `Dockerfile` sirve para los cinco servicios.
+- `USER node`: el proceso no se ejecuta como root.
+- `HEALTHCHECK` con `node` + `fetch` contra `/health` (Alpine no incluye `curl`).
+- `CMD ["node", "src/server.js"]`: Node recibe directamente las señales de Docker.
+- `.dockerignore` excluye `node_modules`, `.env`, `.env.*` (excepto `.env.example`), `test` y `coverage`.
+
+### compose.yaml
+
+- Red bridge `butaca-microservices`. Los servicios se resuelven por nombre (`http://library-service:3025`); no se usan IP fijas.
+- Solo `api-gateway` publica `3000:3000`. Los microservicios son accesibles únicamente dentro de la red, por lo que no se puede evitar el gateway.
+- `api-gateway` declara `depends_on` con `condition: service_healthy` para los cinco servicios: no arranca hasta que todos superan su health check.
+- Cada microservicio declara `env_file` apuntando a su `.env` con `required: false`. Los secretos se inyectan al arrancar el contenedor y nunca quedan dentro de la imagen.
+- `environment` fija `SERVICE_NAME` y `PORT`, y prevalece sobre el `.env`.
+- `restart: unless-stopped` reinicia un contenedor caído salvo que se haya detenido manualmente.
+
+### Cómo agregar la lógica de un microservicio (`pf12` a `pf16`)
+
+1. Trabajar solo dentro de `microservicios/<servicio>/`.
+2. Crear rutas, controladores y services siguiendo la arquitectura de `backend/` (sección 6) y montarlos en `src/app.js`, en el bloque marcado, con la **misma ruta pública** del gateway (por ejemplo `app.use('/api/favoritos', favoritosRouter)`).
+3. Instalar dependencias con `npm.cmd install <paquete>` dentro de la carpeta del servicio para actualizar su `package-lock.json`.
+4. Declarar nuevas variables en `src/config/env.js` y documentarlas sin valores en `.env.example`. Los valores reales van en `.env`.
+5. Si el servicio usa Prisma, ajustar su `Dockerfile`: instalar OpenSSL (`RUN apk add --no-cache openssl`, Prisma lo necesita en Alpine), copiar `prisma/` y ejecutar `npx prisma generate` dentro de la imagen. Como `prisma` es dependencia de desarrollo, en ese caso instalar con `npm ci`, generar el cliente y luego `npm prune --omit=dev`.
+6. No agregar `ports:` en `compose.yaml`; para probar, pasar por `http://localhost:3000`.
+7. Verificar con `npm test`, `docker compose up --build -d` y `docker compose ps`.
+
+### Verificación realizada
+
+- `npm test` en los cinco servicios: 3/3 pruebas en cada uno.
+- `docker compose up --build -d`: seis imágenes construidas y seis contenedores `healthy`.
+- A través del gateway, cada ruta llegó a su servicio (`404` con el `service` correspondiente, en lugar del `502` previo) y `/api/nada` fue rechazada por el gateway.
+- `http://localhost:3021/health` no responde desde el host: los microservicios no están expuestos.
+
+## 9. Galería principal (`pf10_GaleriaPrincipal`)
+
+### Alcance
+
+- La pantalla se abre en `/#galeria` y conserva el sistema de navegación por hash existente. `/#rostro` sigue mostrando la cámara y cualquier otro hash muestra la bienvenida.
+- `Rostro` incluye el enlace **Explorar la galería**. Desde la galería, **Escanearme** regresa a `/#rostro` sin recargar la aplicación.
+- **Mis Recomendaciones** muestra un aviso temporal hasta que `pf15_MSRecomendaciones` implemente su pantalla y contrato.
+- La interfaz usa los SVG oficiales `logobutacaoficial.svg`, `iconoescanearme.svg` e `iconomisreconocimientos.svg` ubicados en la raíz del proyecto.
+
+### Componentes y datos
+
+- `GaleriaPrincipal.jsx`: coordina carga, filtro activo, selección y avisos.
+- `components/EncabezadoGaleria.jsx`: logo y acciones de navegación.
+- `components/FiltrosGaleria.jsx`: categorías controladas mediante estado de React.
+- `components/CuadriculaContenido.jsx` y `TarjetaContenido.jsx`: cuadrícula y tarjetas reutilizables.
+- `components/DetalleContenido.jsx`: modal responsive; cierra mediante botón, clic en el fondo o tecla Escape.
+- `components/EstadoGaleria.jsx`: skeletons y estados de error o ausencia de resultados.
+- `data/contenidosDemo.js`: datos visuales temporales identificados expresamente como demostración; no representan datos de TMDB.
+- `services/catalogo.js`: único punto de acceso a datos. `pf14_MSCatalogo` debe reemplazar su respuesta simulada por una solicitud al API Gateway, sin agregar consultas HTTP a las tarjetas.
+
+### Contrato de integración pendiente
+
+- El frontend solo debe consumir la ruta pública existente `/api/catalogo` mediante el API Gateway en el puerto `3000`; nunca debe llamar directamente a `catalog-service:3023`.
+- No se definió un formato definitivo ni se inventaron subrutas. `pf14` debe documentar el contrato real antes de sustituir los datos simulados.
+- El botón de favoritos es solo visual y permanece deshabilitado. Su persistencia corresponde a `pf16_MSBiblioteca`.
+
+### Diseño y accesibilidad
+
+- Fondo oficial `#0470F6` a `#0000B0`, encabezado blanco fijo, filtros desplazables y hasta siete columnas en escritorio, cinco en pantallas medianas, tres en tabletas y dos en teléfonos.
+- Las tarjetas mantienen proporción `2 / 3`, muestran placeholder cuando no hay portada y revelan título/tipo mediante hover o foco.
+- Todos los controles usan elementos semánticos, foco visible y nombres accesibles. El modal usa `role="dialog"`, `aria-modal` y recibe foco al abrirse.
+- Las animaciones se desactivan con `prefers-reduced-motion`.
+
+## 10. Pie de página (`pf11_Pie`)
+
+### Alcance
+
+- Componente reutilizable `Footer` en `src/components/Footer/` (`Footer.jsx` y `Footer.css`). Es el primer componente compartido entre pantallas; por eso vive fuera de `src/pages/`.
+- Distribución inspirada en el pie de AlbaCinema, sin usar su marca: identidad de Butaca, columna **Menú**, columna **Sobre Butaca** y franja inferior con copyright e información legal.
+- Integrado únicamente en `GaleriaPrincipal`, después de `<main>` y dentro de `.gallery-page`, que es el contenedor con scroll. `Main` y `Rostro` no lo incluyen: son pantallas de altura fija (`100svh`) con composición centrada y un pie rompería su diseño. Si en el futuro se agrega, debe hacerse una sola vez por pantalla.
+
+### Contenido y enlaces
+
+| Elemento | Destino |
+|---|---|
+| Inicio | `#` → `Main` |
+| Explorar películas | `#galeria` |
+| Escanearme | `#rostro` |
+| Mis recomendaciones | Prop opcional `onRecommendations`. Si se recibe, se muestra como `<button>` (la galería le pasa el mismo aviso temporal del encabezado); si no, se muestra como texto atenuado no interactivo. Cuando `pf15_MSRecomendaciones` cree su pantalla, reemplazar por su ruta en `menuLinks`. |
+| Privacidad, Términos y condiciones | Texto no interactivo (`title="Próximamente"`) hasta que existan sus páginas. |
+
+- No se incluye información de contacto: el proyecto no cuenta todavía con teléfono, correo ni redes sociales oficiales. No se deben inventar.
+- El logo es `logobutacaoficial.svg` (raíz). Como es azul `#0470F6`, el pie lo muestra en blanco con `filter: brightness(0) invert(1)`, sin duplicar el recurso.
+
+### Diseño y responsive
+
+- Fondo `#0000B0` → `#00007A` con un brillo radial `#0470F6`, línea superior en `#72B4FF`, texto blanco, separadores `rgb(255 255 255 / 16%)` y títulos de columna en `#9CCAFF`, mayúsculas y Montserrat 800.
+- Hover discreto en los enlaces (color, opacidad y desplazamiento de 3 px), foco visible y sin animaciones de entrada. `prefers-reduced-motion` desactiva las transiciones.
+- Escritorio: tres columnas (`1.15fr 0.85fr 1.15fr`) con separadores verticales.
+- Hasta `900px`: la identidad ocupa todo el ancho y Menú/Sobre Butaca quedan en dos columnas.
+- Hasta `560px`: una columna, identidad centrada, enlaces de 40 px de alto y franja inferior centrada.
+- Verificado a 1280, 820 y 375 px sin desbordamiento horizontal.
+
+## 11. Recursos gráficos
+
+### Título compuesto
+
+Las siguientes imágenes están en `src/assets/text/`, comparten el mismo lienzo `2608 × 1281` y deben permanecer superpuestas dentro de un único contenedor con relación `2607.4 / 1280.8`:
+
+1. `preparatexto.svg`
+2. `tustexto.svg`
+3. `palomitastexto.svg`
+4. `ytexto.svg`
+5. `comienzaentexto.svg`
+6. `butacatexto.svg`
+
+No se deben recortar, reposicionar o escalar individualmente. La adaptación de tamaño siempre se realiza sobre el contenedor padre.
+
+### Recursos de texto reservados para `pf4`
+
+Los siguientes SVG se conservaron en `src/assets/text/` para la siguiente fase. Comparten un lienzo `2608 × 960`, todavía no se importan en ningún componente y no deben eliminarse por parecer recursos sin uso:
+
+1. `quetexto.svg`
+2. `veremostexto.svg`
+3. `hoytexto.svg`
+
+Cuando `pf4` defina su composición visual, debe importarlos desde esta carpeta y documentar aquí el componente, orden de superposición y comportamiento responsive que adopte.
+
+`pf4_RostroPantalla` no los utiliza porque componen el texto "¿Qué veremos hoy?" y la pantalla de rostro usa "¿Cómo te sentís hoy?" en Montserrat. Se mantienen reservados para una pantalla futura.
+
+### Decoraciones
+
+- `src/assets/decorations/cuadroefecto.svg`: ondas de fondo con rotación de `-3.1deg` y opacidad de `34 %`.
+- `src/assets/images/rollodiseño.png`: esquina superior izquierda.
+- `src/assets/images/lentesdiseño.png`: esquina superior derecha; oculto en móvil.
+- `src/assets/images/ticketdiseño.png`: esquina inferior izquierda; oculto en móvil.
+- `src/assets/images/palomitasdiseño.png`: esquina inferior derecha.
+- `src/assets/icons/logogoogle.svg` y `src/assets/icons/logogithub.svg`: iconos de los botones de acceso.
+
+## 12. Estilos y responsive
+
+- Fondo a pantalla completa: degradado vertical de `#0470F6` a `#0000B0`.
+- La página usa `100svh`, evita barras de desplazamiento y controla los niveles mediante contextos de apilamiento.
+- En escritorio, los botones se muestran horizontalmente.
+- Hasta `820px`, los botones pasan a columna, se vuelven más compactos y se ocultan lentes y ticket. En ese tamaño aumentan el rollo, las palomitas y moderadamente las ondas de esquina para conservar presencia visual sin competir con el contenido.
+- En teléfonos de hasta `480px`, los botones tienen un máximo de `212 × 36 px`; la onda central usa un ancho relativo máximo del `56vw` para enmarcar el contenido sin ocupar excesivamente la pantalla.
+- Existe un ajuste adicional para anchos de hasta `480px` o alturas de hasta `560px`.
+- Todos los controles interactivos conservan foco visible para navegación con teclado.
+- `prefers-reduced-motion: reduce` desactiva animaciones y muestra todas las capas del título directamente.
+
+## 13. Animaciones
+
+- `build-center-wave`: efecto introductorio de expansión elástica controlada de la onda central.
+- `build-top-left-wave` y `build-bottom-right-wave`: trasladan y expanden las ondas exteriores hasta sus esquinas definitivas.
+- `reveal-layer`: aparición secuencial del título, una sola vez desde los 1650 ms, con intervalos de 140 ms y duración de 320 ms.
+- `reveal-button`: entrada independiente de los botones mediante opacidad, desplazamiento vertical y escala. Google comienza a los 2700 ms y GitHub a los 2860 ms, después del título.
+- `decoration-enter`: entrada escalonada desde los bordes entre los 900 y 1290 ms, antes de la flotación permanente.
+- `wave-breathe`: expansión y contracción lenta e infinita de las ondas después de terminar su construcción inicial.
+- `float`: flotación sutil, asíncrona y permanente de las cuatro decoraciones cinematográficas, con duraciones distintas.
+- Los botones incluyen transiciones discretas para `hover`, `focus-visible` y `active`.
+
+## 14. Accesibilidad
+
+- El documento usa `lang="es"`.
+- El título visual compuesto por SVG cuenta con un `h1` oculto visualmente para lectores de pantalla.
+- Las imágenes decorativas se ocultan a tecnologías de asistencia.
+- Los botones usan elementos `<button>` reales porque inician una acción; anuncian el estado de carga y se deshabilitan para evitar solicitudes duplicadas.
+- Los estados de foco son visibles y las animaciones respetan la preferencia de movimiento reducido.
+
+## 15. Autenticación y entorno
+
+- Dependencia oficial: `@supabase/supabase-js`.
+- Proyecto Supabase: `fxumhujdmabgxjqmzoxs`.
+- Proveedores habilitados en Supabase: Google y GitHub.
+- `src/lib/supabase.js` crea una única instancia con persistencia, renovación automática y detección de sesión en la URL.
+- Variables requeridas: `VITE_SUPABASE_URL` y `VITE_SUPABASE_PUBLISHABLE_KEY`.
+- `VITE_API_GATEWAY_URL`: vacía en desarrollo (el proxy de Vite reenvía `/api` al gateway en `:3000`); en producción, la URL HTTPS pública del gateway.
+- `.env.example` documenta los nombres sin publicar credenciales. `.env.local` contiene la configuración local y Git lo ignora.
+- La URL de retorno enviada a Supabase es `window.location.origin`. Cada origen usado en desarrollo o producción debe incluirse en **Authentication > URL Configuration > Redirect URLs** del panel de Supabase.
+- Backend: `backend/.env` (ignorado por Git) con `PORT`, `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` y `DATABASE_URL`. `SUPABASE_URL` y `SUPABASE_PUBLISHABLE_KEY` corresponden a las variables `VITE_` del front; el backend los usa solo para verificar tokens. Si faltan, `server.js` muestra un aviso y las rutas protegidas responden `500`.
+- El servidor MCP de Supabase para Codex está configurado y autenticado con el proyecto correcto. El MCP sirve para administración y documentación; la aplicación usa el SDK en tiempo de ejecución.
+
+### Configuración PostgreSQL (`pf6_Supabase`)
+
+- Alcance: preparar la configuración de PostgreSQL en Supabase para la futura integración con Prisma, sin implementar modelos, migraciones ni persistencia.
+- `SUPABASE_URL` es la URL de API/Auth usada por el cliente Supabase; `DATABASE_URL` es la cadena privada de conexión PostgreSQL. No son intercambiables y `DATABASE_URL` nunca debe exponerse mediante variables `VITE_`.
+- `backend/src/config/env.js` lee `DATABASE_URL` y la expone como `env.databaseUrl`, con cadena vacía si no está definida. El resto del backend mantiene la regla de importar `env` sin leer `process.env` directamente. `backend/.env.example` documenta `DATABASE_URL=` sin valores privados.
+- Para la prueba local mediante IPv4 se utilizó el Session pooler de Supabase.
+- La conexión se verificó con una herramienta temporal de Node.js y `pg`, instalada fuera del repositorio y sin agregar dependencias al proyecto. Se ejecutó únicamente `SELECT 1 AS conexion;`, que devolvió `conexion = 1`, con tiempo límite de conexión y cierre del cliente al finalizar.
+- La prueba validó TLS y el hostname mediante la CA oficial descargada de Supabase, configurada en `ssl.ca` con `rejectUnauthorized: true`.
+- El certificado y la herramienta temporal permanecen fuera del directorio del repositorio; las credenciales solo se mantienen en el archivo local `backend/.env`, ignorado por Git y fuera del contenido versionado. No se publican contraseñas ni cadenas de conexión.
+- El backend utiliza PostgreSQL mediante Prisma para guardar ánimos y favoritos. La configuración inicial de `pf6_Supabase` se conserva como antecedente de conexión; los modelos, migraciones y CRUD vigentes están documentados en `pf7_Prisma`.
+
+## 16. Funcionalidades pendientes
+
+> **Actualización `pf20_RecomDashboard`:** quedan resueltos en esa rama la pantalla posterior a la autenticación, el cierre de sesión y el menú de usuario, la navegación con rutas protegidas, el paso de `Rostro` a recomendaciones, la sincronización de `POST /api/usuarios` tras el inicio de sesión y la integración del frontend con `/api/recomendaciones`. Se conservan los puntos originales como referencia. Siguen pendientes los perfiles múltiples (requieren backend), la verificación con servicios reales y los demás puntos.
+
+- Definir la pantalla o ruta a mostrar después de una autenticación exitosa.
+- Añadir cierre de sesión y una interfaz que represente al usuario autenticado.
+- Añadir navegación y rutas cuando existan más pantallas, reemplazando el acceso temporal `/#rostro`.
+- Conectar el front con el backend enviando `Authorization: Bearer <access_token>` en cada petición protegida.
+- Cambiar la URL del frontend para consumir el API Gateway en el puerto `3000` en lugar de conocer cada microservicio.
+- Completar `library-service` (`pf16`). Auth, emociones y catálogo ya están implementados en dev; recomendaciones está implementado en la rama `pf15_MSRecomendaciones` y pendiente de integración.
+- Aplicar, con autorización, la migración `20261030120000_animo_consentimiento_historial` y verificar `emotions-service` con Supabase, PostgreSQL y Docker reales.
+- Llevar al usuario desde el resultado de `Rostro` a sus recomendaciones (`GET /api/recomendaciones?emocion=...`) en `pf20_RecomDashboard`. `src/lib/api.js` ya está disponible para llamar al gateway con el token.
+- Sincronizar el usuario (`POST /api/usuarios`) justo después del inicio de sesión. Hoy `Rostro` lo hace antes de guardar el primer resultado.
+- Integrar el frontend con `/api/recomendaciones` del gateway: pf15 ya obtiene contenido real mediante catálogo; el backend previo conserva sus ejemplos y no fue modificado.
+- Habilitar CORS con lista blanca, helmet y rate limit en el API Gateway (`pf23_Seguridad`). En desarrollo, el proxy de Vite evita CORS; en producción el gateway debe permitir el dominio del front.
+- Sustituir el favicon provisional de Vite por el recurso oficial de Butaca cuando se proporcione.
+- Incorporar pruebas automatizadas cuando se definan los flujos funcionales.
+
+## Microservicio de recomendaciones (`pf15_MSRecomendaciones`)
+
+### Alcance y arquitectura
+
+Implementado en `microservicios/recommendations-service/`, puerto interno 3024, desde dev `87a29a4`. No modifica frontend, otros microservicios, gateway ni Compose. No incorpora dependencias nuevas, Prisma, SDK de Supabase, credenciales TMDB ni acceso a tablas. El Dockerfile existente sigue usando Node 22 Alpine, usuario node y health check.
+
+Flujo: router → autenticación HTTP → controlador/validación → servicio de recomendaciones → clientes HTTP internos. `src/app.js` conserva la exportación `app` y añade `crearApp` con configuración y fetch inyectables para las pruebas.
+
+- Auth: `GET /api/sesiones` con el Bearer original; la identidad verificada queda en `req.user`. No sincroniza usuarios ni escribe datos.
+- Emociones: `GET /api/animos/:id` con el mismo Bearer. El servicio propietario aplica el aislamiento por usuario. Se comprueba el id devuelto, la emoción y `consentimientoHistorial === true`; un registro sin consentimiento se trata como inexistente. No se selecciona automáticamente un ánimo anterior.
+- Catálogo: dos consultas paralelas a `GET /api/catalogo?tipo=...&categoria=...&pagina=1`, sin enviar el Bearer. Catálogo conserva toda la integración TMDB. Se exige `fuente: 'tmdb'`, contenido no demostrativo y campos compatibles; `calificacion: null` es válido según el normalizador existente.
+
+### Contrato HTTP
+
+| Método | Ruta | Sesión | Resultado |
+|---|---|---|---|
+| GET | `/health` | No | `200 { status: 'ok', service: 'recommendations-service' }` |
+| GET | `/api/recomendaciones?emocion=happy&tipo=movie` | Bearer | Recomendaciones por emoción explícita, sin guardar historial |
+| GET | `/api/recomendaciones?animoId=<uuid>&tipo=tv` | Bearer | Recomendaciones por un ánimo propio autorizado |
+
+Se exige exactamente uno de `emocion` o `animoId`. `tipo` es `movie` por defecto o `tv`. Se rechazan parámetros desconocidos, repetidos, vacíos o incompatibles. La autenticación precede a la validación. No hay endpoints de escritura.
+
+Respuesta de ejemplo estructural (no es una consulta real a TMDB):
+
+```json
+{"emocion":"happy","tipo":"movie","fuente":"tmdb","resultados":[]}
+```
+
+Cada resultado conserva `{ tmdbId, titulo, descripcion, poster, fecha, calificacion, tipo }`, donde `tipo` es `movie` o `tv`. Se devuelve como máximo 20, deduplicados por tipo e id. Orden: prioridad editorial de categoría, calificación descendente (sin calificación al final) e id ascendente. Solo se consulta la primera página de cada categoría; no se promete cubrir todo el catálogo. Las respuestas protegidas usan `Cache-Control: no-store`.
+
+Errores siempre `{ error: 'mensaje' }`: `400` entrada inválida, `401` sesión ausente/rechazada, `404` ánimo inexistente/ajeno/sin consentimiento, `502` respuesta o estructura inválida de dependencias, `503` indisponibilidad o timeout. Los estados 429 y 5xx de dependencias se consideran indisponibilidad. Un 404 de auth se considera respuesta inválida (`502`). Los fallos parciales producen error, sin resultados incompletos ni ejemplos de respaldo. Errores internos inesperados: `500` genérico. No se imprimen tokens, URLs de peticiones ni excepciones externas.
+
+### Preferencias editoriales
+
+Las siete categorías reales son Acción, Comedia, Drama, Terror, Romance, Ciencia ficción y Animación (además del filtro Todos). Se adaptó la propuesta: Aventura → Acción, Familiar → Animación, Fantasía → Ciencia ficción y Misterio → Terror, conforme a la agrupación de géneros del catálogo. No se inventaron filtros ni se atribuyen efectos terapéuticos.
+
+| Emoción | Categorías en orden de prioridad |
+|---|---|
+| happy | Comedia, Acción |
+| sad | Comedia, Animación |
+| angry | Acción, Comedia |
+| fearful | Comedia, Animación |
+| disgusted | Acción, Ciencia ficción |
+| surprised | Ciencia ficción, Terror |
+| neutral | Drama, Acción |
+
+### Configuración y archivos
+
+`src/config/env.js` es la única lectura de variables de entorno. `.env.example` documenta valores de desarrollo sin secretos:
+
+| Variable | Valor predeterminado |
+|---|---|
+| SERVICE_NAME | recommendations-service |
+| PORT | 3024 |
+| AUTH_SERVICE_URL | http://auth-service:3021 |
+| EMOTIONS_SERVICE_URL | http://emotions-service:3022 |
+| CATALOG_SERVICE_URL | http://catalog-service:3023 |
+| REQUEST_TIMEOUT_MS | 4000 |
+| UPSTREAM_TIMEOUT_MS | 2500 |
+
+En Docker se usan los nombres DNS existentes; al ejecutar cada servicio localmente, configurar las URLs a localhost con su puerto. Las URLs solo aceptan orígenes HTTP/HTTPS sin credenciales, rutas ni query. Ambos timeouts aceptan enteros de 1 a 4000 ms. Todas las llamadas comparten el plazo total de 4000 ms, inferior a los 5000 ms del gateway; incluye lectura de bodies. Se cancelan al finalizar/cerrar la respuesta y no se siguen redirecciones con credenciales. El cumplimiento temporal depende también de la disponibilidad del event loop.
+
+Modificados: `.env.example`, `src/app.js`, `src/config/env.js`, `src/middlewares/errorHandler.js`. Creados: `src/clients/servicios.client.js`, `src/constants/recomendaciones.js`, `src/controllers/recomendaciones.controller.js`, `src/middlewares/requireAuth.js`, `src/routes/recomendaciones.routes.js`, `src/services/recomendaciones.service.js`, `src/validators/recomendaciones.validator.js` y `test/recomendaciones.test.js`. Todos dentro del servicio. Documentación: esta guía.
+
+### Verificación inicial de entrega — 2026-10-31
+
+- `npm.cmd ci --ignore-scripts --no-audit --no-fund --prefix microservicios/recommendations-service`: dependencias existentes instaladas, sin cambiar manifiestos ni lockfile.
+- `npm.cmd test --prefix microservicios/recommendations-service`: **56/56 aprobadas**, 0 fallos, cancelaciones u omisiones. Las primeras 53 se ampliaron con calificación null, rechazo de demostraciones e id emocional inconsistente.
+- Cobertura: health público, 404, X-Powered-By ausente, autenticación, siete emociones, movie/TV, ánimo autorizado, reenvío del Bearer, rechazo de registro ajeno/sin consentimiento, validaciones, orden y deduplicación, máximo veinte, vacío, fallo parcial, errores/red/JSON/HTML y estructuras inválidas de las tres dependencias.
+- Auth, emociones y catálogo se **simulan** en las pruebas de contrato; aislamiento real entre cuentas y consentimiento en la base no se verificaron. Los timeouts de cabeceras, body incompleto y plazo global se prueban con servidores HTTP locales reales que no completan respuestas; no son pruebas contra Supabase ni TMDB.
+- API Gateway: **6/6 aprobadas**, con upstreams locales de prueba. No se modificó su suite ni se comprobó un despliegue completo por el gateway.
+- `npm.cmd run lint`: aprobado. `npm.cmd run build -- --outDir <temporal>/butaca-pf15-final-build --emptyOutDir false`: aprobado; 101 módulos, salida fuera del repositorio, sin editar dist.
+- `git diff --check`: aprobado. Sin cambios en otros microservicios ni frontend; no se agregaron archivos .env privados ni credenciales. No se realizaron commits, push, merges, rebases o migraciones.
+- Docker: CLI presente, pero motor inaccesible (pipe docker_engine inexistente); además reporta acceso denegado a su configuración. Construcción, arranque y estado healthy de contenedores **no verificados**.
+- Pendiente: prueba integral con sesiones reales y catálogo TMDB configurado cuando el entorno esté disponible, validación Docker y futura integración de frontend/CORS. No se ejecutaron escrituras en bases reales ni revisión visual en móviles/escritorio, pues esta entrega solo cambia un API y documentación.
+
+### Verificación adicional antes de publicar — 2026-10-31
+
+Esta verificación sustituye el bloqueo Docker anterior. Docker Desktop estaba iniciado; el motor 29.9.2 respondió al ejecutar fuera del entorno restringido con una configuración Docker temporal vacía, sin utilizar credenciales del usuario.
+
+- Imagen `butaca-pf15-review:local` construida con el Dockerfile existente y `--build-arg PORT=3024`. Construcción aprobada; el `npm ci --omit=dev` de la imagen reportó 0 vulnerabilidades en ese momento. Docker avisó que el builder clásico está deprecado; no impidió la construcción.
+- Contenedor temporal `butaca-pf15-review`, publicado exclusivamente en `127.0.0.1:39096`, ejecutado con usuario `node`, sin volúmenes, archivos .env ni credenciales reales. Dependencias dirigidas a `http://host.docker.internal:39095`; timeouts ficticios de prueba: global 3500 ms, por llamada 1200 ms.
+- Estado inspeccionado: **running healthy**. `GET /health` desde dentro del contenedor y desde el host: **200** con `{ "status": "ok", "service": "recommendations-service" }`.
+- Nuevo `microservicios/recommendations-service/test/http.test.js`: servidores HTTP simulados locales para auth, emociones y catálogo, utilizando el cliente fetch real. Puede ejecutarse normalmente con `npm test`, sin Docker, con puertos aleatorios y loopback. En modo contenedor, `PF15_TEST_CONTAINER_URL=http://127.0.0.1:39096` selecciona el contenedor y el simulador escucha en el puerto 39095 accesible desde Docker. Esta variable solo pertenece a pruebas, no al servicio productivo. No requiere cambios en Dockerfile ni dependencias.
+- Prueba del contenedor: **18/18 aprobadas** (17 subcasos y su prueba contenedora, tal como los cuenta node:test): health, emoción/movie, ánimo/TV, reenvío del Bearer ficticio solo a auth/emociones, falta de sesión, parámetros repetidos, sesión inválida, indisponibilidad de auth/catálogo, ánimo ajeno, falta de consentimiento, JSON y estructura inválidos, fallo parcial, rechazo de redirecciones, timeouts de auth y body del catálogo, y resultados vacíos. Verificados estados 200/400/401/404/502/503 y JSON.
+- Suite completa local de recomendaciones: **74/74 aprobadas**, 0 fallos, cancelaciones u omisiones (56 previas + 18 nuevas). Gateway: **6/6 aprobadas** con upstreams locales simulados.
+- Lint aprobado. Build general aprobado (101 módulos; salida en directorio temporal `butaca-pf15-docker-review-build`, fuera del repositorio). `git diff --check` aprobado.
+- No hay archivos adicionales de Docker/build para incluir o excluir del commit; imagen y contenedor viven en Docker, configuración y build en el directorio temporal del sistema. El contenedor temporal se retira al finalizar. Se conserva la imagen local para repetir las pruebas. No se alteraron otros microservicios, frontend, gateway, Compose ni lockfiles.
+- Estas son pruebas de red y contenedor reales **con dependencias simuladas**. No validan el funcionamiento conjunto de auth/emociones/catálogo reales, Supabase, PostgreSQL o TMDB.
+- Pendiente real: recorrido completo por el gateway con los tres servicios existentes configurados. Auth necesitaría su configuración privada de Supabase y una sesión válida de prueba; comprobar aislamiento entre personas requeriría dos sesiones de cuentas autorizadas. Emociones necesitaría su conexión PostgreSQL y registros propios ya existentes con consentimiento (esta revisión no crea registros). Catálogo necesitaría su credencial TMDB configurada de forma privada en ese servicio. Recomendaciones no necesita SDK ni credenciales de esas plataformas. No se solicitaron ni leyeron estos datos, ni se realizaron migraciones o escrituras reales.
+
+## 17. Historial
+
+### 2026-11-08 — Perfiles, grupos, notificaciones y correcciones (`pf25_MejorasVisuales`)
+
+- Perfiles con nombre, apellido y edad por cuenta; datos (ánimos, favoritos, historial, recomendación del día) separados por perfil con `X-Butaca-Perfil` verificado en el servidor.
+- Grupos con invitaciones por correo, recomendaciones compartidas (con autor) y gestión de integrantes; centro de notificaciones con campana.
+- Correcciones: "Mis recomendaciones" en local (URLs de Docker en el `.env`), formulario "Queremos conocerte" en celulares y 8 pruebas E2E del PR #24.
+- Migración `20261109120000_perfiles_grupos_notificaciones` verificada en PostgreSQL local y aplicada en Supabase. Detalle en la sección «Perfiles, grupos y notificaciones — pf25_MejorasVisuales».
+- Migración aplicada en Supabase el 2026-11-08 con autorización, después de un respaldo lógico verificado (restaurado en PostgreSQL 17 local). Conteos sin cambios y versión desplegada anterior funcionando con la base migrada.
+- Verificación: 426/426 unitarias e integración (7 paquetes), 35/35 E2E, lint y build sin errores, sin secretos.
+
+### 2026-11-04 — Integración continua con GitHub Actions (`pf24_GitHubActions`)
+
+- Se diseñó e implementó el workflow principal de CI en `.github/workflows/ci.yml` activado en `push` y `pull_request` para `dev`, `main` y `pf*`.
+- Arquitectura en 5 jobs modulares con dependencias (`needs:`):
+  1. `Calidad`: linter (`oxlint`), compilación (`vite build`) y escaneo histórico de secretos con `fetch-depth: 0`.
+  2. `Pruebas unitarias`: 99 pruebas del frontend ejecutadas en memoria.
+  3. `Pruebas de integración`: ejecución unificada hermética de los 7 paquetes mediante `npm run test:todo -- --instalar` (389 pruebas en total) con generación automática de Prisma mediante URLs dummy.
+  4. `Pruebas E2E (Playwright)`: instalación de Chromium con dependencias Linux (`--with-deps`), ejecución headless de las 9 pruebas E2E con cámara simulada (`rostro-sonriente.y4m`) y publicación incondicional de artefactos (`playwright-report/` y `test-results/`).
+  5. `Docker`: validación estática y estructural del archivo `compose.yaml` mediante `docker compose config`.
+- Optimización de tiempos mediante caché de dependencias npm monitoreando los 7 archivos lockfile activos, caché de binarios de Playwright en `~/.cache/ms-playwright` y control de concurrencia con `cancel-in-progress: true`.
+- Se incorporó el badge de estado de CI en `README.md` y se documentaron las reglas de protección de rama para `dev` y `main` con verificación estricta de los 5 checks.
+- Verificación completa aprobada: 389/389 unitarias/integración, 9/9 E2E, compilación y linter sin errores, y cero secretos detectados.
+
+### 2026-11-03 — Pruebas unitarias, de integración y E2E (`pf21_Testing`)
+
+- Se instaló `@playwright/test` 1.63.0 (versión exacta) y se crearon `playwright.config.js` y `playwright.slow.config.js`.
+- `e2e/` contiene 9 pruebas E2E: acceso y rutas protegidas, galería y favoritos, y detección facial con guardado autorizado. Corren con un backend falso que imita los contratos reales, una sesión de Supabase simulada y una cámara falsa con un rostro (Y4M).
+- `scripts/test-todo.mjs` (`npm run test:todo`) corre y resume las 301 pruebas unitarias y de integración del front, el gateway y los cinco microservicios.
+- Scripts nuevos: `test:todo`, `e2e`, `e2e:ui`, `e2e:slow` y `e2e:report`. `.gitignore` excluye `test-results/` y `playwright-report/`.
+- Verificado en Windows: 301/301 unitarias e integración y 9/9 E2E.
+
+### 2026-11-02 — Dashboard de recomendaciones y navegación integrada (`pf20_RecomDashboard`)
+
+- Flujo completo: inicio de sesión → selección de perfil → galería → escáner → emoción detectada → recomendaciones. La sesión se valida con `supabase.auth.getUser()`, no solo con `localStorage`, y las rutas con datos personales están protegidas.
+- Encabezado global (`src/components/Encabezado/`) con Galería, Escanearme, Mis recomendaciones, Dashboard, Favoritos y menú de usuario con cambio de perfil y cierre de sesión.
+- Dashboard (`src/pages/Dashboard/`) con Mis emociones (`GET /api/animos`, gráficos SVG, filtros), Mis recomendaciones (`GET /api/recomendaciones`), Historial (`/api/animos` y `/api/historial`) y Mis favoritos (`/api/favoritos`).
+- Pantalla de perfiles con un único perfil real derivado de la cuenta; los perfiles múltiples quedan bloqueados porque no existe modelo `Perfil` en PostgreSQL (propuesta documentada, sin migraciones).
+- No se modificaron microservicios, Gateway, Prisma ni la base. Lint, build, 93 pruebas unitarias y 57 verificaciones de navegador con servicios simulados aprobadas; falta la prueba con servicios reales.
+
+### 2026-11-02 — Pruebas de endpoints y contratos HTTP en Postman (`pf19_PruebasPostman`)
+
+- Se creó la carpeta `postman/` con la colección exportable `Butaca_API_Gateway.postman_collection.json` (Collection v2.1), el entorno local `Butaca_Local.postman_environment.json` y la guía paso a paso `postman/README.md`.
+- Se organizaron las peticiones en seis carpetas que recorren todos los endpoints expuestos por el API Gateway (`http://localhost:3000`): salud y rutas inexistentes, autenticación (`sesiones` y `usuarios`), emociones (`animos` con verificación de consentimiento `403`), catálogo TMDB (`catalogo` general y detalle por tipo e identificador), recomendaciones (`recomendaciones` por emoción explícita y por `animoId` autorizado) y biblioteca (`favoritos` con validación de idempotencia `201`/`200` e `historial` con limpieza mediante `DELETE`).
+- Se agregaron scripts de prueba en Postman (`pm.test`) para verificar códigos de estado HTTP, estructura de las respuestas y encadenamiento automático de variables (`usuarioId`, `animoId`, `favoritoId`, `historialId`) durante la ejecución en el Collection Runner.
+- Se garantizó que ningún archivo versionado incluya tokens reales ni secretos privados (`accessToken` se declara vacío y como variable secreta en el entorno).
+
+
+### 2026-11-01 — Detección de emociones con face-api.js (`pf17_FaceAPI`)
+
+- Se instaló `@vladmandic/face-api` 1.7.15 y se agregaron a `public/models/` los modelos `tiny_face_detector` y `face_expression`.
+- Selección explícita del motor de TensorFlow.js (`webgl` → `wasm` → `cpu`), con los binarios WASM 4.22.0 en `public/wasm/` (`@tensorflow/tfjs-backend-wasm` como devDependency exacta).
+- `RostroDeteccion` conecta `Rostro` con `useFaceDetection` mediante el contrato de pf4 (`onVideoReady`, `detection`). `App.jsx` muestra `RostroDeteccion` en `/#rostro`.
+- Análisis de ~3 s con calentamiento de WebGL, promedio de probabilidades, umbrales de muestras y confianza, y tope de 8 s para equipos lentos.
+- `Rostro` acepta `children` para mostrar acciones debajo del panel. Se agregó `AccionesResultado` (analizar de nuevo y guardar con casilla de autorización), con estilos en `Rostro.css`.
+- `src/lib/api.js` centraliza las llamadas al gateway con el token de Supabase. `services/animos.js` sincroniza el usuario y guarda en `POST /api/animos`.
+- Proxy de Vite para `/api` en desarrollo. Se documentó `VITE_API_GATEWAY_URL` en `.env.example`.
+- Script `npm test` en la raíz, con 11 pruebas unitarias de la lógica de análisis.
+- Verificado de punta a punta con Docker, Supabase Auth y PostgreSQL reales: el resultado se guarda en `Animo`.
+
+
+### 2026-10-31 — Microservicio de biblioteca (`pf16_MSBiblioteca`)
+
+- Se implementó `library-service` con los endpoints protegidos `GET /api/favoritos`, `POST /api/favoritos` (idempotente: `201` al crear y `200` si ya existía), `DELETE /api/favoritos/:id`, `GET /api/historial` (con paginación y filtros por emoción, tipo y fechas), `POST /api/historial` y `DELETE /api/historial/:id`.
+- Se añadió de forma aditiva el modelo `HistorialRecomendacion` en `backend/prisma/schema.prisma`, se sincronizó `microservicios/library-service/prisma/schema.prisma` y se creó la migración `20261031180000_historial_recomendaciones`, conservando `Favorito` compatible con `pf7_Prisma`.
+- Se garantizó el aislamiento por `req.user.id`, el manejo de `P2003` con respuesta `409` cuando el usuario autenticado no tiene registro local en `Usuario`, la ocultación de detalles internos de Prisma en errores `500` y el ajuste del `Dockerfile` con OpenSSL y generación del cliente Prisma (`6.19.3`).
+- Se agregaron 22 pruebas automatizadas en `microservicios/library-service/test/biblioteca.test.js` y la prueba de enrutamiento para `/api/favoritos` y `/api/historial` en `apigateway/test/gateway.test.js`.
+
+### 2026-10-31 — Microservicio de recomendaciones (`pf15_MSRecomendaciones`)
+
+- Implementado GET protegido por auth-service, selección por emoción explícita o ánimo autorizado y consulta HTTP a catálogo, sin persistencia propia ni integración TMDB duplicada.
+- Contrato, mapeo editorial, configuración, errores y resultados de pruebas detallados en la sección de recomendaciones anterior. Rama de trabajo pendiente de revisión e integración; Docker e integración real pendientes.
+
+### 2026-10-31 — Microservicio de catálogo (`pf14_MSCatalogo`)
+
+- Se implementó `catalog-service` con `GET /api/catalogo` (tendencias, descubrimiento por tipo y categoría, búsqueda por texto y paginación) y `GET /api/catalogo/:tipo/:tmdbId` (detalle enriquecido de película o serie).
+- Se normalizaron los campos de TMDB al español y se tradujeron los identificadores de géneros a las siete categorías de la galería (`Acción`, `Comedia`, `Drama`, `Terror`, `Romance`, `Ciencia ficción`, `Animación`), manteniendo compatibilidad con `pf10`, `pf15` y `pf16`.
+- Se conectó `src/pages/Galeria/services/catalogo.js` y `GaleriaPrincipal.jsx` con `/api/catalogo` mediante el API Gateway (`puerto 3000`).
+- 19/19 pruebas aprobadas en `catalog-service` y 6/6 en `apigateway`, verificadas junto con `npm run lint` y `npm run build`.
+
+
+### 2026-10-30 — Microservicio de emociones (`pf13_MSEmociones`)
+
+- Se implementó `emotions-service` con `POST /api/animos`, `GET /api/animos` (paginación y filtros) y `GET /api/animos/:id`, protegidos con la copia de `requireAuth` de `auth-service`.
+- Se exige `consentimientoHistorial: true` explícito, distinto del permiso de cámara, y se guarda la evidencia (versión y fecha) en cada registro.
+- Se amplió `Animo` de forma aditiva y se escribió la migración `20261030120000_animo_consentimiento_historial`, sin ejecutarla.
+- Dockerfile con Prisma 6.19.3 igual al de `auth-service`; gateway y `compose.yaml` sin cambios funcionales.
+- 31/31 pruebas en `emotions-service` y 5/5 en `apigateway`. Imagen Docker `healthy` y conexiones reales de solo lectura a PostgreSQL y Supabase Auth verificadas, sin escrituras.
+- Migración revisada (equivalente a `prisma migrate diff`, aditiva) y **aplicada** con autorización, después de verificar un respaldo propio restaurándolo en un PostgreSQL local. Seis contenedores `healthy` mediante el gateway. Las pruebas de `POST` y `GET` con usuarios reales autenticados quedan **pendientes** porque no se cuenta con dos sesiones de prueba válidas; la rama se entrega formalmente con las pruebas aprobadas.
+
+### 2026-10-29 — Pie de página (`pf11_Pie`)
+
+- Se creó el componente reutilizable `src/components/Footer/` con identidad de Butaca, menú, descripción del proyecto y franja legal.
+- Los enlaces del menú usan las rutas por hash existentes; Mis recomendaciones reutiliza el aviso temporal de la galería y los enlaces legales quedan no interactivos hasta que existan sus páginas.
+- Se integró una sola vez en `GaleriaPrincipal`; `Main` y `Rostro` no se modificaron.
+- Diseño responsive en tres, dos y una columna. Verificado con `npm run lint`, `npm run build` y revisión visual a 1280, 820 y 375 px. No se agregaron dependencias.
+
+### 2026-10-29 — Galería principal (`pf10_GaleriaPrincipal`)
+
+- Se implementó la pantalla `/#galeria` con encabezado oficial, filtros por categoría, cuadrícula responsive, tarjetas y modal de detalle.
+- Se separaron componentes, datos simulados y capa de acceso a catálogo para permitir la integración posterior con `/api/catalogo`.
+- Se conectó la navegación entre reconocimiento facial y galería sin instalar una librería de rutas ni modificar los microservicios.
+- Se prepararon estados de carga, error y vacío, foco visible, cierre con Escape y compatibilidad con movimiento reducido.
+
+### 2026-10-28 — Docker y esqueletos de microservicios (`pf9_Docker`)
+
+- Se creó `microservicios/` con `auth-service`, `emotions-service`, `catalog-service`, `recommendations-service` y `library-service`, cada uno como proyecto Express independiente con `/health`, `notFound`, `errorHandler`, cierre ordenado y tres pruebas con `node:test`.
+- Se agregó un `Dockerfile` por servicio (Node 22 Alpine, `npm ci --omit=dev`, usuario `node`, `HEALTHCHECK`) y su `.dockerignore`.
+- `compose.yaml` ahora levanta los seis contenedores en la red `butaca-microservices`; solo el gateway publica el puerto `3000` y espera a que los cinco servicios estén `healthy`.
+- Cada microservicio puede recibir secretos con `env_file` sin incluirlos en la imagen.
+- Verificado con Docker Desktop: seis contenedores `healthy` y enrutamiento correcto del gateway hacia cada servicio.
+
+### 2026-10-28 — API Gateway y contratos de microservicios (`pf8_APIGateway`)
+
+- Se creó `apigateway/` como proyecto Express independiente con configuración centralizada y cinco destinos configurables.
+- Se implementaron proxies para sesiones/usuarios, emociones, catálogo TMDB, recomendaciones, favoritos e historial.
+- El gateway conserva las rutas y credenciales de autorización, incorpora timeouts y devuelve errores `502` uniformes cuando un servicio no está disponible.
+- Se añadieron pruebas con `node:test` para health, rutas desconocidas y destinos desconectados.
+- Se agregó una imagen Docker con health check y `compose.yaml` con la red `butaca-microservices`.
+- Se verificó la configuración con Docker Engine 29.9.2 y Compose 5.6.1: la imagen construyó correctamente, el contenedor alcanzó estado `healthy`, `/health` respondió `200` y un destino inexistente devolvió `502`.
+- Los microservicios no se implementaron; quedaron documentados sus nombres Docker, puertos, variables y contratos para las ramas responsables.
+
+### 2026-10-27 — Modelos, migraciones y CRUD con Prisma (`pf7_Prisma`)
+
+- Se configuró Prisma ORM en `backend/prisma/schema.prisma` conectado a PostgreSQL en Supabase mediante `DATABASE_URL` y `DIRECT_URL`.
+- Se definieron los modelos `Usuario`, `Animo` y `Favorito` con relaciones 1–N, borrado en cascada y unicidad `@@unique([usuarioId, tmdbId, tipo])` en favoritos.
+- Se ejecutó la migración inicial `init_butaca_models` y se creó la instancia única `PrismaClient` en `backend/src/lib/prisma.js`.
+- Se reemplazó el almacenamiento temporal en memoria de `animosService` y `favoritosService` por consultas reales a PostgreSQL sin alterar los controladores.
+
+### 2026-10-26 — Configuración PostgreSQL (`pf6_Supabase`)
+
+- Se agregó `DATABASE_URL` a `backend/.env.example` y su lectura centralizada como `env.databaseUrl` en `backend/src/config/env.js`.
+- Se preparó la configuración privada local, ignorada por Git, para el Session pooler de Supabase mediante IPv4.
+- Se verificó la conexión con una herramienta temporal externa al repositorio: `SELECT 1 AS conexion;` devolvió `1`, con validación TLS y del hostname mediante la CA oficial de Supabase.
+- La prueba no creó tablas, modificó datos ni ejecutó migraciones. El backend conserva el almacenamiento en memoria; la integración con Prisma queda pendiente para `pf7_Prisma`.
+
+### 2026-10-26 — Backend Express (`pf5_Express`)
+
+- Se creó `backend/` como proyecto npm independiente con Express 5, dotenv y `@supabase/supabase-js`.
+- Se separó `app.js` (configuración exportable) de `server.js` (único `listen`) para permitir pruebas con supertest.
+- Se implementó la API REST de ánimos, recomendaciones y favoritos con arquitectura de rutas, controladores y services.
+- Se agregó `requireAuth`, que verifica el token de Supabase y expone `req.user`; `GET /api/health` queda pública.
+- Se agregaron `notFound` y `errorHandler` con respuestas JSON y sin exponer detalles internos.
+- Los datos se guardan temporalmente en memoria y las recomendaciones son de ejemplo hasta `pf7_Prisma` y `pf11_TMDB`.
+- Se documentaron las variables en `backend/.env.example`.
+
+### 2026-10-25 — Pantalla de rostro (`pf4_RostroPantalla`)
+
+- Se creó `src/pages/Rostro/` con la pantalla "¿Cómo te sentís hoy?", consentimiento previo, vista previa de cámara y estados visuales de detección.
+- Se implementó `useCamera` sobre `getUserMedia`: activación solo tras el consentimiento, apagado manual, manejo de errores y liberación de la cámara al salir.
+- Se creó `EmotionStatus` como componente de presentación listo para recibir resultados de face-api.js, sin implementar ni simular detecciones.
+- `App.jsx` habilita temporalmente la pantalla en `/#rostro` sin afectar `Main` ni el retorno de OAuth.
+- No se agregaron dependencias.
+
+### 2026-10-25 — OAuth 2.0 con Supabase
+
+- Se instaló el cliente oficial `@supabase/supabase-js` y se creó una instancia centralizada.
+- Los botones de Google y GitHub ahora inician el flujo OAuth correspondiente.
+- Se incorporaron estados accesibles de carga, bloqueo contra solicitudes duplicadas y mensajes seguros de error.
+- Se documentaron las variables de entorno y se protegió la configuración local mediante `.gitignore`.
+- Se configuró y autenticó en Codex el MCP de Supabase para el proyecto `fxumhujdmabgxjqmzoxs`.
+- Se incorporaron `quetexto.svg`, `veremostexto.svg` y `hoytexto.svg` en `src/assets/text/` como recursos reservados para el desarrollo de `pf4`.
+
+### 2026-10-24 — Secuencia cinematográfica y escena responsive
+
+- Se creó `central-scene` para mantener alineados la onda central, el título y los botones al cambiar la resolución.
+- Se añadió una introducción coordinada de aproximadamente 3.3 segundos: ondas, decoraciones, título y botones.
+- Las decoraciones ahora entran desde sus bordes correspondientes antes de iniciar la flotación ambiental.
+- Se redujeron exclusivamente en móvil la onda central y los botones, manteniendo intacta la composición final de escritorio.
+- Se amplió el tratamiento de `prefers-reduced-motion` para omitir la introducción y conservar las escalas finales de las ondas.
+
+### 2026-10-24 — Refinamiento visual y organización de recursos
+
+- Se compactaron los botones en móvil y se añadió su entrada secuencial posterior al título.
+- Se redujeron y reposicionaron las ondas de esquina en escritorio para mostrar solo una sección parcial.
+- Se aumentó la presencia del rollo, las palomitas y las ondas laterales en móvil.
+- Se agregó una entrada escalonada a las decoraciones antes de sus ciclos de flotación asíncronos.
+- Se trasladaron los recursos originales a `src/assets/text`, `icons`, `decorations` e `images`, sin duplicarlos ni renombrarlos.
+
+### 2026-10-24 — Pantalla inicial
+
+- Se reemplazó la demostración de Vite por la página `Main`.
+- Se integraron todas las capas SVG del título y los PNG cinematográficos proporcionados.
+- Se crearon ondas animadas, entrada secuencial del título y botones visuales sin autenticación.
+- Se implementó adaptación para escritorio, móvil y movimiento reducido.
+- Se estableció Montserrat como tipografía oficial local del proyecto.
+
+## Integración frontend de recomendaciones — pf18_TMDB
+
+Implementada sobre `9361e5522f5a7b425daac03058fa64e1351c1558`, con pf17 integrado. Su objetivo es preparar el consumo autenticado de recomendaciones TMDB para pf20, sin implementar pantalla, dashboard ni navegación y sin modificar la cámara, la detección facial, los microservicios o el Gateway.
+
+### Servicio y parámetros
+
+`src/services/recomendaciones.js` exporta `obtenerRecomendaciones(parametros)`. Usa directamente `solicitarApi` de `src/lib/api.js`: obtiene la sesión existente de Supabase y envía el Bearer al API Gateway. No recibe tokens como parámetros, no registra datos privados, no persiste resultados y no llama directamente a TMDB. Las peticiones son GET, sin body.
+
+| Parámetro | Valores y validación |
+|---|---|
+| `emocion` | `neutral`, `happy`, `sad`, `angry`, `fearful`, `disgusted`, `surprised` |
+| `animoId` | UUID de un registro propio autorizado; el backend verifica propiedad y consentimiento |
+| `tipo` | `movie` por defecto o `tv` |
+
+Se exige exactamente uno entre `emocion` y `animoId`. Se rechazan valores vacíos, tipos incorrectos, arreglos y propiedades desconocidas antes de consultar sesión o red. Las propiedades opcionales deben omitirse, no enviarse con `undefined`. No se elige automáticamente un ánimo anterior ni se guarda uno para obtener recomendaciones.
+
+### Respuesta y adaptación
+
+La promesa devuelve `{ emocion, tipo, fuente: 'tmdb', resultados }`. El `tipo` exterior conserva `movie` o `tv`; cada elemento interior usa el formato de Galería:
+
+| Campo de salida | Origen |
+|---|---|
+| `id` | `${tipo}-${tmdbId}`: estable y distinto para película/serie con el mismo id numérico |
+| `tmdbId` | Identificador numérico real de TMDB, sin reemplazarlo por el compuesto |
+| `tipoTmdb` | `tipo` del backend (`movie` o `tv`) |
+| `tipo` | Etiqueta visual `Película` o `Serie` |
+| `titulo` | Se conserva |
+| `descripcion`, `sinopsis` | `descripcion` del backend |
+| `poster`, `portada` | `poster` del backend; conserva `null` |
+| `fecha` | Se conserva, incluido `null` |
+| `anio` | Derivado de una fecha con formato `YYYY-MM-DD`; `null` si no está disponible en ese formato |
+| `generos` | `[]`: el contrato no proporciona géneros; no representa una clasificación |
+| `calificacion` | Se conserva, incluido `null` |
+| `esDemostracion` | `false`, después de exigir `fuente: 'tmdb'` |
+
+Se valida la estructura, la emoción y el tipo recibidos y los campos necesarios para React. Se rechazan identificadores duplicados y respuestas incompatibles completas, sin presentar resultados parciales. Se conserva el orden editorial del backend. Una lista vacía válida permanece vacía; no hay datos de respaldo ni simulaciones en producción. No se hacen consultas adicionales por elemento para inventar o completar géneros.
+
+### Ejemplos destinados a pf20
+
+```js
+import { obtenerRecomendaciones } from './services/recomendaciones.js'
+
+// Resultado actual, sin guardar historial emocional.
+const peliculas = await obtenerRecomendaciones({ emocion: 'happy' })
+const series = await obtenerRecomendaciones({ emocion: 'neutral', tipo: 'tv' })
+
+// registroAutorizado proviene del historial propio o de un guardado consentido.
+const anteriores = await obtenerRecomendaciones({
+  animoId: registroAutorizado.id,
+  tipo: 'movie',
+})
+
+// Dentro del componente de pf20:
+// <CuadriculaContenido contenidos={peliculas.resultados} onSelect={setSeleccionado} />
+// <DetalleContenido contenido={seleccionado} onClose={cerrarDetalle} />
+```
+
+La ruta del import debe ajustarse a la ubicación del consumidor. pf20 debe mantener estados de carga, éxito, vacío y error, presentar `error.message` de forma accesible, permitir reintentos y descartar resultados anteriores al cambiar consulta, análisis o usuario. No debe usar el filtro por géneros como si `generos: []` contuviera esa información. La navegación desde Rostro y la transferencia del resultado quedan a cargo de pf20.
+
+### Errores
+
+Los errores son `ApiError` con `codigo`, `message` seguro y `status` cuando existe estado HTTP. No se muestran cuerpos de error ni excepciones externas. Ajustes compatibles en el cliente compartido: mensajes de sesión generales, estados 400/404/503, sanitización de fallos de sesión y JSON inválido; se mantienen 403/409 y el guardado existente.
+
+| Caso | Código |
+|---|---|
+| Parámetros locales inválidos / HTTP 400 | `parametros-invalidos` |
+| Sesión ausente | `sin-sesion` |
+| Error al obtener la sesión | `sesion-no-disponible` |
+| HTTP 401 | `sesion-expirada` |
+| HTTP 404 | `registro-no-encontrado` |
+| HTTP 502/503 | `servicio-no-disponible` |
+| Fallo de red | `sin-conexion` |
+| JSON o contrato incompatible | `respuesta-invalida` |
+
+Para JSON inválido se conserva el estado HTTP recibido; para estructura incompatible del contrato se usa 502. Los fallos locales de sesión/red no tienen estado HTTP. No se exige consentimiento de historial para consultar por emoción explícita, pero ambas modalidades requieren sesión.
+
+### Verificación y pendientes — 2026-11-01
+
+- `npm.cmd test`: **67/67 aprobadas**, 0 fallos, cancelaciones u omisiones: 56 nuevas y 11 existentes. Se cubren las siete emociones, ánimo autorizado, movie/TV, validación previa, adaptación, ids, vacíos, HTTP 400/401/404/502/503, sesión, red, JSON inválido y estructuras incompatibles. Se ejecuta el cliente HTTP real, sustituyendo únicamente Supabase y fetch con datos ficticios de prueba. Las excepciones y respuestas maliciosas simuladas no exponen la credencial ficticia.
+- Compatibilidad React comprobada renderizando los componentes existentes de cuadrícula, tarjeta y detalle con películas y series adaptadas y campos `null`. El JSX se transforma en memoria mediante Vite, sin editar componentes ni generar archivos en el repositorio. Los hooks de módulos usados por las pruebas requieren una versión de Node con `node:module.registerHooks` (ejecutado con Node 24.19.0).
+- `npm.cmd run lint`: aprobado.
+- `npm.cmd run build -- --outDir <carpeta temporal>`: aprobado; salida fuera de `dist`. Advertencias: destino fuera de la raíz y bloque FaceAPI mayor a 500 kB. No se modifica la lógica facial para resolver esa advertencia.
+- Dependencias declaradas restauradas con `npm.cmd ci --ignore-scripts --no-audit --no-fund`, sin cambiar `package.json` ni el lock. El primer intento restringido falló con EACCES; el reintento autorizado completó la instalación.
+- `git diff --check`: aprobado. La implementación inicial se verificó antes de commit/push; la revisión final repitió las 67 pruebas, lint y build satisfactoriamente para autorizar la publicación de pf18. No se ejecutaron migraciones, escrituras en bases, lecturas de archivos privados ni activación de cámara.
+- Pendiente: recorrido real con Supabase, Gateway, servicios y TMDB configurados, incluido aislamiento entre cuentas para `animoId`. Estas pruebas automatizadas no acreditan disponibilidad de esos servicios ni autenticación real.
+- Pendiente para pf20: conexión visual, estados y navegación; verificación en navegador de teclado, foco y distintos anchos de escritorio/móviles. pf18 no cambia HTML/CSS ni implementa una pantalla para esa revisión visual.
+
+
+## Pruebas de API con Postman — pf19_PruebasPostman
+
+Implementada por Raúl sobre `dev` para documentar y verificar de manera ordenada todos los contratos HTTP del ecosistema de microservicios de Butaca a través de su único punto de entrada público: el API Gateway en `http://localhost:3000`. Esta entrega no modifica la lógica de los microservicios ni del frontend, sino que provee una suite de pruebas interactiva y automatizable en Postman.
+
+### Alcance y estructura de la carpeta `postman/`
+
+```text
+postman/
+├── Butaca_API_Gateway.postman_collection.json   # Colección Postman v2.1 con las 6 carpetas de pruebas y scripts pm.test.
+├── Butaca_Local.postman_environment.json        # Variables de entorno locales sin credenciales ni secretos versionados.
+└── README.md                                    # Guía de importación, obtención del token de Supabase y uso del Collection Runner.
+```
+
+- **`Butaca_API_Gateway.postman_collection.json`**: agrupa todas las peticiones HTTP dirigidas exclusivamente a `{{gatewayUrl}}` (`http://localhost:3000`), verificando tanto casos exitosos como rechazos esperados por reglas de negocio y seguridad (`400`, `401`, `403`, `404`).
+- **`Butaca_Local.postman_environment.json`**: define las variables necesarias para parametrizar las consultas y encadenar los identificadores creados durante las pruebas, manteniendo `accessToken` vacío por seguridad.
+- **`postman/README.md`**: explica en lenguaje claro cómo levantar los seis contenedores con Docker Compose, cómo importar la colección y el entorno en Postman, cómo obtener el `access_token` desde una sesión iniciada en el navegador y cómo ejecutar el flujo completo desde el Collection Runner.
+
+### Carpetas y peticiones de la colección
+
+Todas las rutas se consumen mediante el API Gateway (`http://localhost:3000`), el cual redirige cada solicitud al microservicio interno correspondiente dentro de la red de Docker:
+
+| Carpeta | Microservicio destino | Método y ruta | Propósito y validaciones en Postman (`pm.test`) |
+|---|---|---|---|
+| **1. API Gateway y Salud** | `api-gateway` (`:3000`) | `GET /health`<br>`GET /api/no-existe` | Comprueba que el gateway responde `200 OK` con `{ status: 'ok', service: 'butaca-api-gateway', routes }` y que cualquier ruta fuera de contrato devuelve `404 Not Found` en formato JSON. |
+| **2. Autenticación y Usuarios (`auth-service`)** | `auth-service` (`:3021`) | `GET /api/sesiones` (con y sin token)<br>`POST /api/usuarios`<br>`GET /api/usuarios` | Verifica el rechazo `401` cuando no se envía token, valida la identidad de la sesión activa (`200`), sincroniza al usuario en PostgreSQL mediante `upsert` (`200`) guardando `usuarioId` y consulta su perfil local (`200`). |
+| **3. Emociones y Consentimiento (`emotions-service`)** | `emotions-service` (`:3022`) | `POST /api/animos` (sin consentimiento)<br>`POST /api/animos` (confianza inválida)<br>`POST /api/animos` (válido)<br>`GET /api/animos`<br>`GET /api/animos/{{animoId}}`<br>`GET /api/animos/:idInexistente` | Confirma que enviar `consentimientoHistorial: false` se rechaza con `403 Forbidden`, valida el rechazo `400` por confianza fuera de rango, registra un ánimo autorizado (`201`) guardando `animoId`, consulta el listado paginado (`200`), el detalle propio (`200`) y el rechazo `404` ante un UUID inexistente o ajeno. |
+| **4. Catálogo TMDB (`catalog-service`)** | `catalog-service` (`:3023`) | `GET /api/catalogo`<br>`GET /api/catalogo?tipo=movie&categoria=Acción&pagina=1`<br>`GET /api/catalogo?busqueda=Matrix&pagina=1`<br>`GET /api/catalogo/movie/{{tmdbIdPelicula}}`<br>`GET /api/catalogo/movie/999999999`<br>`GET /api/catalogo?tipo=invalido` | Valida las rutas públicas del catálogo con tendencias generales (`200`), filtrado por categoría (`200`), búsqueda por texto (`200`), detalle enriquecido (`200`), contenido inexistente (`404`) y parámetro `tipo` inválido (`400`). |
+| **5. Recomendaciones por Ánimo (`recommendations-service`)** | `recommendations-service` (`:3024`) | `GET /api/recomendaciones?emocion=happy&tipo=movie`<br>`GET /api/recomendaciones?animoId={{animoId}}&tipo=tv`<br>`GET /api/recomendaciones?emocion=happy&animoId={{animoId}}`<br>`GET /api/recomendaciones` (sin token) | Comprueba la obtención de recomendaciones con `fuente: 'tmdb'` tanto por emoción explícita (`200`) como a partir del `animoId` propio autorizado (`200`), además de validar el error `400` al enviar ambos parámetros simultáneamente y el rechazo `401` sin sesión. |
+| **6. Biblioteca: Favoritos e Historial (`library-service`)** | `library-service` (`:3025`) | `POST /api/favoritos` (1.ª y 2.ª vez)<br>`GET /api/favoritos`<br>`POST /api/historial`<br>`GET /api/historial`<br>`DELETE /api/favoritos/{{favoritoId}}` (1.ª y 2.ª vez)<br>`DELETE /api/historial/{{historialId}}` (1.ª y 2.ª vez) | Verifica la creación de un favorito (`201`) y su idempotencia al repetir la petición (`200` sin duplicar el registro), registra una recomendación en el historial (`201`), consulta ambos listados paginados (`200`) y ejecuta la limpieza final con `DELETE` (`204 No Content` la primera vez y `404 Not Found` la segunda). |
+
+### Variables de entorno y encadenamiento automático
+
+El archivo `Butaca_Local.postman_environment.json` define las siguientes variables para permitir que la colección funcione de forma automática en el **Collection Runner** sin intervención manual entre pasos:
+
+| Variable | Valor inicial en el repositorio | Uso en la colección |
+|---|---|---|
+| `gatewayUrl` | `http://localhost:3000` | Dirección única del API Gateway hacia donde apuntan todas las peticiones. |
+| `accessToken` | `""` (vacío, tipo `secret`) | Token JWT de Supabase que el desarrollador pega localmente antes de probar las rutas protegidas. |
+| `accessTokenSecundario` | `""` (vacío, tipo `secret`) | Variable opcional para pruebas de aislamiento entre dos cuentas distintas. |
+| `usuarioId` | `""` (autocompletado) | Se asigna automáticamente al ejecutar `POST /api/usuarios`. |
+| `animoId` | `""` (autocompletado) | Se captura en `POST /api/animos` y se reutiliza en `GET /api/animos/:id` y `GET /api/recomendaciones?animoId=...`. |
+| `favoritoId` | `""` (autocompletado) | Se captura en `POST /api/favoritos` y se elimina al final con `DELETE /api/favoritos/:id`. |
+| `historialId` | `""` (autocompletado) | Se captura en `POST /api/historial` y se elimina al final con `DELETE /api/historial/:id`. |
+| `tmdbIdPelicula` | `"550"` | Identificador numérico de película en TMDB utilizado para probar catálogo, favoritos e historial. |
+| `tmdbIdSerie` | `"1399"` | Identificador numérico de serie en TMDB disponible para pruebas de detalle de series. |
+
+De esta manera, al finalizar la corrida del Collection Runner, los registros de prueba creados en `Favorito` e `HistorialRecomendacion` se limpian automáticamente mediante sus respectivos endpoints `DELETE`, y el repositorio permanece libre de credenciales o tokens de sesión.
+
+## Dashboard y navegación integrada — pf20_RecomDashboard
+
+Rama `pf20_RecomDashboard`, creada desde `dev` en `d730fde` (pf14–pf19 integradas). Implementa el tablero de emociones, recomendaciones, historial y favoritos, y el flujo de navegación completo de la aplicación. **No modifica microservicios, Gateway, Prisma ni la base de datos.** Solo consume los contratos existentes.
+
+### Flujo y rutas
+
+**Inicio de sesión → Selección de perfil → Galería → Escáner → Emoción detectada → Recomendaciones.**
+
+La navegación sigue siendo por hash (compatible con `#rostro` y `#galeria` de ramas anteriores y con el retorno de OAuth). `src/lib/rutas.js` traduce el hash; `src/hooks/useRuta.js` lo observa.
+
+| Hash | Pantalla | Requiere sesión |
+|---|---|---|
+| `#` o desconocido (incluido el retorno de OAuth) | `Main` sin sesión; con sesión redirige a `#galeria` | No |
+| `#perfiles` | `Perfiles` ("¿Quién va a ver hoy?") | Sí |
+| `#galeria` | `GaleriaPrincipal` con el encabezado global | Sí |
+| `#rostro` | `RostroDeteccion` con el encabezado global | Sí |
+| `#dashboard` | Dashboard → Mis emociones | Sí |
+| `#recomendaciones` | Dashboard → Mis recomendaciones (último ánimo guardado) | Sí |
+| `#recomendaciones/emocion/:emocion` | Recomendaciones por emoción, **sin guardar** | Sí |
+| `#recomendaciones/animo/:uuid` | Recomendaciones por ánimo propio guardado | Sí |
+| `#historial` | Dashboard → Historial | Sí |
+| `#favoritos` | Dashboard → Mis favoritos | Sí |
+
+Sin sesión válida, `App.jsx` muestra `Main` para **cualquier** hash: ninguna pantalla con datos personales se renderiza ni llama a `/api`.
+
+### Sesión (Supabase Auth)
+
+- `src/lib/sesion.js` → `validarSesion(cliente)`: lee la sesión guardada y la **valida con el servidor** mediante `supabase.auth.getUser()`. No alcanza con que exista en `localStorage`.
+  - `400/401/403/404/422` → token inválido o revocado: `signOut({ scope: 'local' })` y estado `anonimo`.
+  - Error de red → estado `error` con botón **Reintentar** (no se cierra una sesión que podría ser válida).
+- `src/hooks/useSesion.js` escucha `onAuthStateChange` (`SIGNED_IN`, `USER_UPDATED`, `SIGNED_OUT`) sin llamar a Supabase dentro del callback. Tras validar ejecuta una vez `POST /api/usuarios` (`src/services/usuarios.js`), necesario para que emociones y biblioteca no respondan `409`.
+- `cerrarSesion()` en `src/lib/supabase.js` usa `signOut({ scope: 'local' })` (solo este navegador). `App.jsx` además limpia el perfil activo, la sincronización de usuario y la marca de historial registrado, y vuelve a la bienvenida.
+
+### Perfiles — dependencia de backend
+
+**No existe un modelo `Perfil` en PostgreSQL** (`backend/prisma/schema.prisma`: `Usuario`, `Animo`, `Favorito`, `HistorialRecomendacion`). Por eso:
+
+- `Perfiles` muestra un único perfil real, armado con los datos de Supabase Auth (`full_name`/`name`/`user_name`, avatar HTTPS de Google o GitHub, proveedor) por `perfilDeCuenta()` en `src/services/perfiles.js`.
+- La tarjeta **Agregar perfil** no crea nada: explica que hace falta persistencia en la base.
+- El perfil elegido se guarda en `sessionStorage` (`butaca:perfil-activo`) solo como estado de interfaz y únicamente si coincide con el `usuarioId` autenticado. No separa datos en el backend.
+
+**Propuesta para habilitar perfiles múltiples (requiere autorización; no se ejecutó ninguna migración):**
+
+1. Migración aditiva: `model Perfil { id String @id @default(uuid()); usuarioId String; nombre String; avatar String?; creadoEn DateTime @default(now()); usuario Usuario @relation(..., onDelete: Cascade); @@index([usuarioId]) }` y `perfilId String?` (nullable, sin romper registros previos) en `Animo`, `Favorito` y `HistorialRecomendacion`. Se cambia la unicidad de `Favorito` a `@@unique([usuarioId, perfilId, tmdbId, tipo])`.
+2. `auth-service`: `GET/POST/PATCH/DELETE /api/perfiles`, siempre filtrando por `req.user.id`, con un tope de perfiles por cuenta.
+3. Emociones y biblioteca: aceptar el encabezado `X-Butaca-Perfil` y **verificar en el servidor** que el perfil pertenece a `req.user.id` antes de filtrar o guardar (nunca confiar en el valor del cliente). Agregar la ruta al Gateway no requiere cambios: el encabezado se reenvía.
+4. Front: `Perfiles` lista `/api/perfiles` y `solicitarApi` agrega el encabezado del perfil activo.
+
+### Encabezado global y footer
+
+- `src/components/Encabezado/` (`Encabezado.jsx`, `Encabezado.css`): logo oficial; navegación **Galería, Escanearme, Mis recomendaciones, Dashboard, Favoritos** con `aria-current`; menú de usuario con avatar, nombre, correo, **Cambiar perfil** y **Cerrar sesión**. Debajo de 1180 px la navegación pasa a un menú hamburguesa que se cierra con Escape, al hacer clic afuera o al navegar. Reutiliza los íconos oficiales `iconoescanearme.svg` e `iconomisreconocimientos.svg`.
+- `GaleriaPrincipal` recibe el encabezado global por la prop `encabezado`. `EncabezadoGaleria` (pf10) se conserva como respaldo y su botón de recomendaciones ahora enlaza a `#recomendaciones`. Se quitó el aviso "estará disponible cuando se integre pf15".
+- `Footer` enlaza las rutas reales (galería, escáner, recomendaciones, dashboard, favoritos). Se eliminó la prop `onRecommendations`, que ya no es necesaria.
+- `RostroDeteccion` se muestra dentro de `.app-shell` (en `App.css`) para que `Rostro` ocupe el alto restante debajo del encabezado sin modificar `Rostro.jsx`.
+
+### Dashboard (`src/pages/Dashboard/`)
+
+```text
+Dashboard.jsx / Dashboard.css        # Saludo, pestañas por hash, sección activa y Footer.
+estadisticas.js (+ .test.js)         # Distribución, emoción más frecuente, confianza promedio y serie temporal (día/semana/mes).
+formato.js                           # Fechas en español, etiquetas de emoción y FILTROS_VACIOS.
+components/  EstadoPanel, FiltrosHistorial, FilaAnimo, GraficoEvolucion, GraficoDistribucion, Paginacion, TarjetaPelicula
+secciones/   SeccionEmociones, SeccionRecomendaciones, SeccionHistorial, SeccionFavoritos
+```
+
+**A. Mis emociones** (`GET /api/animos`):
+- Filtros por emoción, desde y hasta. Las fechas locales se convierten a ISO con el inicio y el fin del día.
+- Indicadores: total de registros (`paginacion.total`), emoción más frecuente (los empates se resuelven por el registro más reciente), último registro y confianza promedio (solo detecciones; las confirmadas no tienen confianza).
+- **Evolución emocional:** columnas apiladas por periodo, hechas con SVG propio sin dependencias. Tooltip con desglose al pasar el mouse o con foco de teclado, y botón **Ver como tabla**.
+- **Distribución:** barras horizontales con etiqueta, cantidad y porcentaje visibles.
+- Línea de tiempo de los registros recientes con fecha y hora.
+- Los gráficos usan hasta 500 registros (páginas de 100, el máximo del contrato) y avisan si hay más.
+- Colores fijos por emoción (`COLORES_EMOCION`): paleta categórica validada para daltonismo sobre superficie blanca. Siempre acompañada de etiquetas o tabla.
+
+**B. Mis recomendaciones** (`GET /api/recomendaciones`):
+- Con `#recomendaciones` se usa el último ánimo guardado (`animoId`), de modo que el servidor verifica propiedad y consentimiento. Si no hay ninguno, se invita a escanear.
+- Las fichas de emoción consultan con `emocion` (sin guardar nada) y alternan entre Películas y Series (`tipo`).
+- Cada tarjeta muestra póster real de TMDB, título, tipo, año, calificación, sinopsis, acceso al detalle y botón de favorito. Las 5 primeras llevan la marca "Top".
+- **Géneros:** `/api/recomendaciones` no los incluye. `src/services/detallesCatalogo.js` los completa con `GET /api/catalogo/:tipo/:tmdbId` (caché en memoria, 4 consultas simultáneas). Si falla, la tarjeta queda sin géneros: no se inventan.
+
+**C. Historial:**
+- *Emociones registradas*: `GET /api/animos`, paginado de a 20, con filtros de emoción y fechas.
+- *Recomendaciones recibidas*: `GET /api/historial` (persistencia real de pf16), paginado, con filtros de emoción, tipo y fechas.
+  - La interfaz aclara que figurar en el historial **no significa que el usuario haya visto** el contenido.
+  - El filtro de tipo solo se envía a `/api/historial`.
+
+**D. Mis favoritos** (`/api/favoritos`):
+- `src/context/FavoritosProvider.jsx` + `favoritosContexto.js` cargan todos los favoritos del usuario una vez y los comparten entre galería, recomendaciones y dashboard.
+- `BotonFavorito` (`src/components/BotonFavorito/`) agrega con `POST` (idempotente) o quita con `DELETE /api/favoritos/:id`. Está deshabilitado en datos de demostración o sin proveedor.
+- Filtro por tipo y detalle completado con el catálogo.
+
+### Escáner → emoción → recomendaciones
+
+`AccionesResultado` (pf17) conserva su lógica de consentimiento y ahora muestra `RecomendacionesRostro` cuando hay una emoción detectada:
+
+1. Muestra la emoción detectada (sin cambios en `EmotionStatus`).
+2. La casilla de autorización para guardar sigue siendo independiente del permiso de cámara.
+3. `POST /api/animos` solo se ejecuta con la casilla marcada. Ahora se conserva el `id` devuelto.
+4. `GET /api/recomendaciones?emocion=...&tipo=movie` muestra 6 pósters sin guardar nada. **Ver todas** abre `#recomendaciones/emocion/:e`, o `#recomendaciones/animo/:id` si se guardó.
+5. Solo si el resultado se guardó con consentimiento, las 5 recomendaciones destacadas se registran con `POST /api/historial` (una vez por `animoId` por pestaña, controlado con `sessionStorage`). Sin consentimiento, la interfaz aclara que no quedan en el historial.
+6. **Explorar la galería** sigue disponible.
+
+Nunca se envían ni se guardan imágenes o video: solo emoción, confianza y datos públicos de TMDB.
+
+### Contratos consumidos (todas las rutas pasan por el Gateway con `Authorization: Bearer <token de Supabase>`, salvo catálogo)
+
+| Método y ruta | Servicio | Uso en pf20 |
+|---|---|---|
+| `POST /api/usuarios` | auth-service | Sincronización una vez por sesión |
+| `GET /api/animos?pagina&limite&emocion&desde&hasta&orden` | emotions-service | Estadísticas, gráficos, historial → `{ resultados, paginacion }` |
+| `GET /api/animos/:id` | emotions-service | Fecha del ánimo en `#recomendaciones/animo/:id` |
+| `POST /api/animos` | emotions-service | Escáner, con `consentimientoHistorial: true` (sin cambios de pf17) |
+| `GET /api/recomendaciones?emocion\|animoId&tipo` | recommendations-service | Dashboard y escáner (servicio de pf18) |
+| `GET /api/catalogo/:tipo/:tmdbId` | catalog-service | Géneros y detalle |
+| `GET/POST /api/favoritos`, `DELETE /api/favoritos/:id` | library-service | Favoritos |
+| `GET/POST /api/historial` | library-service | Historial de recomendaciones |
+
+`src/services/contratos.js` valida cada respuesta: UUID, emociones conocidas, fechas, rangos, `consentimientoHistorial === true` y paginación. Si el backend devuelve algo fuera de contrato, la sección muestra un error en lugar de datos parciales. Ningún request envía `usuarioId`: el usuario sale siempre del token en el servidor. No se agregaron endpoints ni secretos en el front, y no fue necesario modificar CORS: en desarrollo el proxy de Vite evita CORS, y catalog-service ya permite `localhost:5173`.
+
+### Archivos
+
+**Nuevos:**
+- `src/lib/rutas.js`, `src/lib/sesion.js`
+- `src/hooks/useSesion.js`, `useRuta.js`, `useDetalleContenido.js`
+- `src/context/FavoritosProvider.jsx`, `favoritosContexto.js`
+- `src/components/Encabezado/*`, `src/components/BotonFavorito/*`
+- `src/pages/Perfiles/*`, `src/pages/Dashboard/**`, `src/pages/Rostro/RecomendacionesRostro.jsx`
+- `src/services/biblioteca.js`, `contratos.js`, `detallesCatalogo.js`, `emociones.js`, `perfiles.js`, `usuarios.js`
+- Pruebas: `rutas.test.js`, `sesion.test.js`, `contratos.test.js`, `perfiles.test.js`, `estadisticas.test.js`
+
+**Modificados:**
+- `src/App.jsx`, `src/App.css`: flujo con sesión, perfiles, rutas protegidas y `.app-shell`.
+- `src/lib/supabase.js`: agrega `cerrarSesion`.
+- `src/components/Footer/Footer.jsx`: enlaces reales.
+- `src/pages/Galeria/GaleriaPrincipal.jsx`: prop `encabezado`.
+- `src/pages/Galeria/components/DetalleContenido.jsx`: `BotonFavorito` en lugar del botón deshabilitado y `generos` opcional.
+- `src/pages/Galeria/components/EncabezadoGaleria.jsx`: enlace a `#recomendaciones`.
+- `src/pages/Rostro/AccionesResultado.jsx`, `Rostro.css`: recomendaciones posteriores a la detección.
+- `src/pages/Rostro/services/animos.js`: usa la sincronización compartida de `services/usuarios.js`.
+- `src/services/recomendaciones.test.js`: el render de `DetalleContenido` también compila `BotonFavorito` e ignora `.css`; la aserción original no cambió.
+
+### Pruebas realizadas
+
+| Prueba | Resultado |
+|---|---|
+| `npm run lint` | Sin advertencias ni errores |
+| `npm run build` | Correcto. Antes fue necesario `npm install`: `node_modules` local no tenía `@vladmandic/face-api` de pf17, aunque ya estaba en `package.json` y `package-lock.json`. Persiste el aviso previo de bundle > 500 kB (face-api). |
+| `npm test` | 93/93 (67 previas + 26 nuevas: rutas, validación de sesión, contratos, perfiles, estadísticas) |
+| Navegador (Chrome headless + Playwright, fuera del repo) | 57/57 verificaciones con **Supabase Auth y Gateway simulados a nivel de red** |
+
+Las verificaciones de navegador cubrieron:
+- Rutas protegidas sin sesión.
+- Token rechazado por `getUser` y eliminado del almacenamiento.
+- Sesión existente → perfiles → galería.
+- Las cinco opciones del encabezado.
+- Favorito desde la galería (`POST` con Bearer y sin `usuarioId`) y quitar favorito (`DELETE`).
+- Indicadores, gráfico, tooltip, tabla y filtros de emociones.
+- Recomendaciones por último ánimo, por emoción y por tipo, con géneros del detalle.
+- Que no se escriba historial sin consentimiento.
+- Historial con filtros.
+- Cierre de sesión (limpia token y perfil, vuelve a la bienvenida y las rutas siguen protegidas).
+- Estados de error `502` y respuesta fuera de contrato.
+- Ausencia de scroll horizontal en 1440, 820 y 390 px, menú hamburguesa y ausencia de errores de JavaScript.
+
+### Limitaciones y pendientes
+
+- **Prueba con servicios reales (2026-11-02), con Supabase Auth, PostgreSQL y Docker Compose reales:**
+  - Configuración local creada y fuera de Git y de las imágenes Docker (`.gitignore` y `.dockerignore`): `.env.local` en la raíz solo con `VITE_SUPABASE_URL` y la clave **publicable**, y `.env` de `auth-service`, `library-service` y `recommendations-service` a partir de sus `.env.example` y de los valores de `emotions-service`. Sin claves `service_role` ni `sb_secret`.
+  - El error "No fue posible iniciar sesión. Verifica la configuración…" se debía a la falta de `.env.local`: sin esas variables no se crea el cliente de Supabase.
+  - Funciona: login real con Google (vuelve a `http://localhost:5173`) → "¿Quién va a ver hoy?" → galería con encabezado global; dashboard, recomendaciones, historial y favoritos accesibles con sesión; `GET /api/animos`, `/api/favoritos` y `/api/historial` responden `200` con datos de la cuenta; la sincronización `POST /api/usuarios` funciona (no hay `409`); sin token, el Gateway responde `401`; **Cerrar sesión** borra el token y el perfil activo, vuelve a la bienvenida y `#dashboard` queda protegido.
+  - GitHub: Supabase redirige correctamente a la autorización de GitHub con `redirect_to=http://localhost:5173`; falta que el usuario la acepte para completar el recorrido.
+  - **TMDB integrado:** se creó `microservicios/catalog-service/.env` a partir de su `.env.example`, con `TMDB_API_KEY` (clave v3 entregada por el equipo) y las URLs y el tiempo de espera de la plantilla. Está excluido de Git y de la imagen: no hay `.env` dentro del contenedor y la clave no aparece en los logs ni en archivos versionados. Luego se ejecutó `docker compose up -d --force-recreate catalog-service recommendations-service`.
+    - `/api/catalogo?tipo=movie` y `?tipo=tv` devuelven `fuente: "tmdb"`, 20 resultados cada uno, todos con póster de `image.tmdb.org` (la imagen responde `200 image/jpeg`), título, tipo, géneros y sinopsis en español. El detalle `/api/catalogo/:tipo/:tmdbId` también responde (`movie/550`, `tv/1399`).
+    - Observación sobre `catalog-service` (pf14, fuera del alcance de pf20): agrupa a propósito Suspenso (53) y Misterio (9648) en la categoría "Terror", y Crimen (80) en "Drama". Por eso, por ejemplo, *El caballero oscuro* aparece con "Terror".
+    - Pruebas de los servicios con `npm ci` local (no tenían `node_modules` fuera de Docker): `catalog-service` 20/20 y `recommendations-service` 74/74.
+  - **Recorrido real en Chrome con TMDB activo (sesión Google real):**
+    - Galería: 20 pósters reales de TMDB cargados, con películas y series. El detalle muestra tipo, año, géneros, sinopsis y calificación.
+    - Favoritos: **Agregar a favoritos** desde el detalle → `POST /api/favoritos` guardado en PostgreSQL (total 1, con `tmdbId`, `tipo`, `titulo` y `poster`); aparece en Dashboard → Mis favoritos; **Quitar** desde esa sección → `DELETE`, la base vuelve a 0. La cuenta quedó como estaba.
+    - Recomendaciones: con sesión autenticada, `#recomendaciones/emocion/happy` muestra 20 tarjetas reales con "Top", póster, año, calificación, géneros completados desde el detalle y sinopsis. El cambio Películas/Series funciona. Una consulta por emoción **no** escribe historial (`/api/historial` sigue en 0).
+    - Dashboard: Mis emociones, Historial (emociones y recomendaciones recibidas), Mis recomendaciones y Mis favoritos cargan con datos reales de la cuenta y muestran el estado vacío correcto (la cuenta no tiene emociones guardadas). Navegación del encabezado verificada.
+    - Escáner con cámara real: el consentimiento de cámara es independiente; face-api.js detectó "Calma 79 %" y se mostraron recomendaciones reales debajo del resultado, con el aviso de que no quedan en el historial. La casilla "Autorizo guardar esta emoción" se dejó **desmarcada**: `/api/animos` y `/api/historial` siguieron en 0. **Apagar cámara** detiene el stream.
+    - Cerrar sesión: borra el token de Supabase y el perfil activo, vuelve a la bienvenida y `#dashboard`, `#favoritos` y `#rostro` quedan protegidos.
+  - **Pendiente de verificación real:**
+    - Login con GitHub hasta el final: falta que el usuario acepte "Authorize application".
+    - Guardar una emoción con consentimiento y su efecto en los gráficos, el historial y `#recomendaciones/animo/:id`. Requiere que el usuario marque la casilla.
+    - El botón **Ver todas** del escáner, que solo es visible mientras hay un resultado.
+    - El aislamiento entre dos cuentas distintas.
+    - El diseño responsive con datos reales; se verificó solo con servicios simulados.
+- El flujo **detección → recomendaciones → registro en historial** no se ejecutó en navegador porque requiere cámara y un rostro real para face-api.js. Su lógica de consentimiento es la de pf17 y la vista previa usa los mismos servicios verificados.
+- **Perfiles múltiples:** bloqueados hasta la migración y los endpoints propuestos arriba (requieren autorización del equipo).
+- `/api/recomendaciones` no devuelve géneros: se completan con una consulta de detalle por tarjeta. Si el servicio incluyera `generos`, se podrían evitar esas consultas.
+- `HistorialRecomendacion` registra lo que Butaca recomendó (top 5 por ánimo guardado), no lo que el usuario vio. No existe un modelo de "visto".
+- No hay endpoint para borrar emociones desde el dashboard (`emotions-service` no expone `DELETE /api/animos/:id`).
+- El commit de documentación `bbcf9b5` de pf13 no está en la base de esta rama (solo cambia `IARECURSO.md`).
+
+## Pruebas automatizadas — pf21_Testing
+
+### Pirámide de pruebas de Butaca
+
+| Nivel | Qué prueba | Dónde | Comando | Cantidad |
+|---|---|---|---|---:|
+| Unitarias (front) | Lógica pura: análisis de face-api, rutas, sesión, contratos, estadísticas, recomendaciones | `src/**/*.test.js` | `npm test` | 93 |
+| Integración (servicios) | Endpoints reales de cada servicio con Supabase, Prisma y TMDB simulados | `apigateway/test`, `microservicios/*/test` | `npm test` en cada carpeta | 208 |
+| Todo lo anterior | Las 7 suites con resumen | `scripts/test-todo.mjs` | `npm run test:todo` | **301** |
+| Integración con servicios reales | Cadena completa vía gateway con Docker, Supabase y TMDB reales | `postman/` (pf19) | Postman / Runner | 27 peticiones |
+| **E2E** | Flujos completos del usuario en un navegador real | `e2e/*.spec.js` | `npm run e2e` | **9** |
+
+### Comandos
+
+```bash
+npm run test:todo              # unitarias + integración de los 7 paquetes (usa node_modules existentes)
+npm run test:todo -- --instalar  # máquina limpia o CI: npm ci + prisma generate en cada paquete
+npm run e2e                    # E2E headless (rápido, para el día a día y CI)
+npm run e2e:ui                 # panel interactivo: viaje en el tiempo por cada acción
+npm run e2e:slow               # ventana visible en cámara lenta (1 s por acción), para demos
+npm run e2e:report             # reporte HTML con capturas, video y trace de la última corrida
+```
+
+La primera vez: `npm install` y `npx playwright install chromium` (descarga el navegador de Playwright, ~300 MB con el headless shell).
+
+### `test:todo`
+
+- Entra a cada paquete y ejecuta su `npm test` (regla 12: cada uno es un proyecto npm independiente), lee el resumen de `node:test` y muestra una tabla.
+- Con `--instalar`, o si falta `node_modules`, hace `npm ci` y, en los servicios con Prisma, `prisma generate` con una URL de relleno (generar el cliente no se conecta a la base).
+- Termina con código de salida `1` si algún paquete falla, para que la integración continua (`pf24_GitHubActions`) marque el check en rojo.
+- No necesita `.env`, Docker ni red: las pruebas de los servicios simulan Supabase, Prisma y TMDB.
+
+### Estrategia E2E
+
+El login real con Google/GitHub no se puede automatizar (los proveedores bloquean navegadores automatizados y exigen cuentas reales), y en CI no hay cámara, Docker ni llaves. Por eso los E2E prueban **la aplicación completa en el navegador** contra dependencias simuladas en la red:
+
+- **Sesión simulada** (`e2e/support/sesion.js`): se guarda en `localStorage` una sesión con el formato de supabase-js (`sb-e2e-butaca-auth-token`) para una Supabase **inventada** (`https://e2e-butaca.supabase.co`). Si algo escapara del backend falso, falla en lugar de tocar el Supabase real.
+- **Backend falso** (`e2e/support/backendFalso.js`): `page.route` intercepta en el navegador `/api/*` y Supabase Auth (`/auth/v1/user`, `/auth/v1/logout`), y responde con **los mismos contratos** de los microservicios. Respeta sus reglas: `401` sin token, `403` sin `consentimientoHistorial: true`, favoritos sin duplicados y paginación `{ resultados, paginacion }`. Guarda estado durante la prueba y registra cada petición en `backend.peticiones` para afirmar qué envió el front. `backend.fallar('/api/catalogo', 502)` simula un servicio caído.
+- **Cámara falsa** (`e2e/fixtures/rostro-sonriente.y4m`): Chromium la reproduce como webcam (`--use-file-for-fake-video-capture`). **face-api.js corre de verdad** y detecta *Alegría*. Se usa Y4M porque Chromium no reproduce MJPEG en este modo.
+- **Fixtures** (`e2e/support/pruebas.js`): `backend` se conecta automáticamente en cada prueba (`auto: true`) y empieza vacío; `test.use({ conSesion: true })` inicia la prueba con sesión. El segundo parámetro de las fixtures se llama `entregar` (no `use`) porque la regla `react/rules-of-hooks` de oxlint lo confundía con un hook.
+- **Selectores**: `getByRole`, `getByLabel` y nombres accesibles, sin `data-testid`. Las pantallas ya exponen roles y nombres accesibles, así que no fue necesario modificar componentes de otras ramas y, de paso, se verifica su accesibilidad. Los enlaces del encabezado se buscan dentro de la navegación principal (`menu(page, nombre)`) porque el footer repite algunos.
+
+### Configuración (`playwright.config.js`)
+
+- `webServer` levanta `npm run dev` en el puerto **5174** (no 5173): `reuseExistingServer` nunca reutiliza el `npm run dev` personal, que apunta al Supabase real.
+- `webServer.env` define `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` y `VITE_API_GATEWAY_URL=''`. Vite da prioridad a las variables del proceso sobre `.env.local`.
+- Un solo navegador (Chromium) y `workers: 1`: face-api usa mucha CPU y en paralelo las pruebas se estorban. `timeout` de 90 s por prueba.
+- `trace`, `screenshot` y `video` se conservan **solo cuando una prueba falla** (`retain-on-failure`); en CI hay `retries: 1` y el reporte HTML no se abre solo.
+- `playwright.slow.config.js` hereda la configuración con ventana visible y `slowMo: 1000`.
+
+### Casos E2E
+
+| Archivo | Prueba | Tipo |
+|---|---|---|
+| `acceso.spec.js` | Bienvenida con accesos de Google y GitHub | feliz |
+| | `#dashboard`, `#favoritos`, `#rostro` y `#galeria` sin sesión muestran la bienvenida y no piden datos personales | borde / seguridad |
+| | Con sesión: "¿Quién va a ver hoy?" → galería, y sincronización con `POST /api/usuarios` | feliz |
+| | Cerrar sesión vuelve a la bienvenida y `#dashboard` queda protegido | seguridad |
+| `galeria.spec.js` | Catálogo visible y filtro por género | feliz |
+| | Favorito desde el detalle → aparece en *Mis favoritos*; el body es `{ tmdbId, tipo, titulo, poster }` con `Bearer` | feliz / contrato |
+| | Catálogo caído (`502`) → error con "Reintentar" | borde |
+| `rostro.spec.js` | face-api detecta *Alegría* → "Para tu alegría" → **Guardar deshabilitado sin la casilla** → guarda → el body tiene **solo** `emocion`, `confianza`, `origen` y `consentimientoHistorial` → aparece en el dashboard | feliz / privacidad |
+| | Apagar la cámara vuelve al consentimiento, oculta el video y no guarda nada | borde / privacidad |
+
+### Para la integración continua (`pf24_GitHubActions`)
+
+```yaml
+- run: npm ci
+- run: npm run lint
+- run: npm run test:todo -- --instalar
+- run: npx playwright install --with-deps chromium
+- run: npm run e2e
+- uses: actions/upload-artifact@v4
+  if: ${{ !cancelled() }}
+  with: { name: playwright-report, path: playwright-report/ }
+```
+
+Ninguno de estos pasos necesita secretos.
+
+### Verificación realizada
+
+- Windows (máquina del desarrollador): `npm run test:todo -- --instalar` → **301/301**. `npm run e2e` → **9/9** en ~27 s; la detección facial tarda ~8 s por prueba.
+- Linux sin GPU: 9/9 E2E. Las pruebas con cámara, repetidas 3 veces, dieron 6/6 (estables).
+- `npm run lint` 0 errores, `npm test` 93/93 y `npm run build` correcto.
+
+## Seguridad — pf23_Seguridad
+
+### Objetivo y alcance
+
+Cerrar la única puerta pública de Butaca, el API Gateway, con las capas de la Clase 19 (casco → portero → límite de golpes), proteger las rutas privadas y revisar el manejo de secretos. Rama `pf23_Seguridad`, basada en `dev` con pf22_Zod integrada.
+
+Estado encontrado al empezar: sin helmet, sin rate limit y sin CORS en el gateway (solo `catalog-service` tenía CORS propio, con `butaca.vercel.app`). `npm audit` marcaba 1 vulnerabilidad moderada en los 3 servicios con Prisma. No había archivos `.env` en el historial de Git.
+
+### Orden de las capas en el gateway (`apigateway/src/app.js`)
+
+```
+helmet → cors → [/health] → rate limit general → rate limit de escritura → tamaño del body → token → proxy → 404 / error
+```
+
+`/health` queda antes del rate limit y del token para que Docker y Render puedan consultarlo siempre.
+
+| Capa | Archivo / variable | Qué hace | Respuesta |
+|---|---|---|---|
+| Casco (helmet 8.3.0) | `casco` | `nosniff`, `X-Frame-Options`, HSTS, `Referrer-Policy: no-referrer` y CSP `default-src 'none'` (el gateway solo devuelve JSON). `crossOriginResourcePolicy: cross-origin` para que el front lea las respuestas. | encabezados |
+| Portero (cors 2.8.6) | `portero`, `CORS_ORIGINS` | Lista blanca exacta. A un origen ajeno no se le envía `Access-Control-Allow-Origin` y el navegador bloquea la respuesta. Métodos `GET, POST, DELETE, OPTIONS`; encabezados `Authorization, Content-Type`; `credentials: false` (el token viaja en `Authorization`, no en cookies). | preflight `204` |
+| Límite general (express-rate-limit 8.7.3) | `RATE_LIMIT_MAX` (300/min) | Por IP, todo `/api/*`. Amplio porque una pantalla del dashboard hace varias consultas. | `429` + `Retry-After` |
+| Límite de escritura | `RATE_LIMIT_WRITE_MAX` (60/min) | Solo `POST/PUT/PATCH/DELETE`. | `429` |
+| Tamaño del body | `MAX_BODY_BYTES` (32 KB) | Rechaza por `Content-Length` sin abrir conexión con el microservicio. | `413` |
+| Token | `exigirToken` | Las rutas privadas sin `Authorization: Bearer <token>` se rechazan sin llegar al microservicio. La verificación **real** del token la sigue haciendo cada servicio con Supabase (`requireAuth`). Una ruta inexistente sigue dando `404`, no `401`. | `401` |
+
+El preflight `OPTIONS` no cuenta para el rate limit ni exige token: lo dispara el navegador, no el usuario.
+
+### Decisiones
+
+- **Un solo responsable de CORS.** El proxy descarta los `access-control-*` y `x-powered-by` que agregue un microservicio (`proxyRes` en `gateway.routes.js`). Así el CORS propio de `catalog-service` no duplica encabezados (el navegador rechaza dos `Access-Control-Allow-Origin`).
+- **Privado por defecto.** `services.js` marca solo el catálogo con `publico: true`. Si alguien agrega un servicio nuevo y se olvida de pensar en la seguridad, queda protegido.
+- **`trust proxy`.** Render pone un proxy delante: con `TRUST_PROXY=1`, `req.ip` es la IP del usuario. Con `0` (local y Docker) es la IP de la conexión. Un valor demasiado alto permitiría falsificar la IP con `X-Forwarded-For` y saltarse el rate limit.
+- **Body en los microservicios.** `auth`, `catalog` y `recommendations` usaban el límite por defecto (100 KB) y un body grande terminaba en `500`. Ahora los 5 usan `10kb` y responden `413`.
+- **Vulnerabilidad de Prisma.** `prisma 6.19.3 → @prisma/config → deepmerge-ts 7.1.5` (GHSA-ggr8-5vv4-36mx, agotamiento de pila con objetos recursivos). La única solución de npm era Prisma 7 (versión mayor, cambia la configuración). Se usó `"overrides": { "deepmerge-ts": "8.0.2" }` en `auth`, `emotions` y `library`: `@prisma/config` solo usa la función `deepmerge`, que la versión 8 conserva. `npm audit --omit=dev` → 0 vulnerabilidades.
+- **`.gitattributes`.** `*.y4m`, `*.wasm`, `*.bin` e imágenes se marcan `binary` para que Git en Windows (`core.autocrlf`) no les cambie los finales de línea. El video falso de la cámara tiene bytes `0x0D` sueltos.
+
+### Manejo de secretos
+
+| Secreto | Dónde vive | Nunca en |
+|---|---|---|
+| `DATABASE_URL` / `DIRECT_URL` (contraseña de la base de Supabase) | `.env` de auth, emotions y library | front, Git, `compose.yaml`, capturas |
+| `TMDB_API_KEY` | `.env` de catalog-service | front, Git |
+| Clave publicable de Supabase | `.env.local` del front (`VITE_`) | — es pública por diseño; la protección real es RLS + verificación del token |
+| Clave secreta / `service_role` de Supabase | **no se usa** en Butaca | en ningún lado |
+
+`npm run seguridad:secretos` (`scripts/revisar-secretos.mjs`) revisa los archivos versionados y `dist/`; con `-- --historial` revisa además los commits. Busca solo los secretos que Butaca usa: `sb_secret_`, JWT con `role: service_role` o de TMDB, cadenas PostgreSQL con contraseña real, `TMDB_API_KEY=` con valor, llaves privadas y cualquier `.env` versionado. Nunca imprime el valor completo y termina con código 1 si encuentra algo (sirve para pf24). La lógica está en `scripts/seguridad/detectores.js` con pruebas en `detectores.test.js` (las corre `npm test` de la raíz).
+
+### Producción en Render
+
+```
+CORS_ORIGINS=https://<front>.onrender.com
+TRUST_PROXY=1
+```
+
+Render sirve HTTPS y helmet envía HSTS. Las demás variables pueden quedar con los valores por defecto de `apigateway/.env.example`. Si se agrega un dominio propio, se suma a `CORS_ORIGINS` separado por coma.
+
+### Pruebas
+
+- `apigateway/test/seguridad.test.js` (9): encabezados de helmet, origen permitido y ajeno, preflight sin llegar al servicio, limpieza de CORS del servicio, `401` en las 6 rutas privadas y con encabezado mal formado, proxy con token, catálogo público, `404` y `413`.
+- `apigateway/test/limite.test.js` (3): escrituras `200, 200, 429`; límite general con `RateLimit-Policy` y `Retry-After`; `/health` no cuenta.
+- `apigateway/test/apoyo.js`: microservicio falso que registra lo que recibe y responde con CORS `*` a propósito.
+- `gateway.test.js`: la prueba del `502` ahora envía token, porque sin token el gateway responde `401` antes.
+- `health.test.js` de auth, catalog y recommendations: body de 20 KB → `413`.
+- Navegador real (Chromium): desde `http://localhost:5173` el `POST` con `Authorization` responde `200`; desde `http://localhost:5999` queda **bloqueado** por CORS.
+
+### Verificación realizada
+
+- Windows (máquina del desarrollador): `npm run test:todo -- --instalar` → **389/389** (front 99, gateway 20, auth 45, emotions 51, catalog 36, recommendations 88, library 50). `npm run e2e` → 9/9. `npm run lint` 0 errores. `npm run seguridad:secretos -- --historial` → sin secretos en 280 archivos ni en 57 commits.
+- Docker: `docker compose up --build -d` construye las 6 imágenes; `npm ci` dentro de las imágenes con Prisma reporta 0 vulnerabilidades. `/health` devuelve CSP y HSTS sin `X-Powered-By`; `/api/favoritos` sin token → `401`; el catálogo sin token no da `401`.
+- Navegador (app real con Supabase): el dashboard carga ánimos y favoritos; en DevTools las respuestas de `/api/*` traen `Content-Security-Policy`, `RateLimit: "general"; r=298; t=60` y `RateLimit-Policy: "general"; q=300; w=60`.
+- El `20` del gateway incluye `test/apoyo.js`: `node --test` ejecuta todo `.js` dentro de `test/`, y ese archivo cuenta como 1 aunque solo exporta funciones (19 pruebas reales).
+- Linux: gateway 20/20, auth 45/45, emotions 51/51, catalog 36/36, recommendations 88/88, library 50/50, raíz 99/99. `npm run e2e` 9/9. `npm run lint` 0 errores. `npm run build` correcto. `npm run seguridad:secretos -- --historial` → sin secretos.
+
+## Integración continua — pf24_GitHubActions (2026-11-04)
+
+### Objetivo y alcance
+
+Implementar el pipeline automatizado de Integración Continua (CI) mediante GitHub Actions en `.github/workflows/ci.yml` para la plataforma Butaca, abarcando el frontend (React 19 + Vite 8), el API Gateway (Express 5), los cinco microservicios (`auth-service`, `emotions-service`, `catalog-service`, `recommendations-service`, `library-service`) y la infraestructura de Docker Compose. Rama `pf24_GitHubActions`, basada en `dev` con `pf23_Seguridad` integrada.
+
+El pipeline garantiza los siguientes principios de ingeniería:
+1. **Hermetismo absoluto:** ejecución 100 % autónoma sin requerir secretos productivos ni conexiones a bases de datos PostgreSQL, instancias de Supabase ni APIs de TMDB en vivo.
+2. **Preservación de la pirámide de pruebas:** verificación íntegra de las 389 pruebas unitarias y de integración de los 7 paquetes activos, y las 9 pruebas de extremo a extremo (E2E) con Playwright.
+3. **Seguridad y detección de secretos:** escaneo profundo de todo el árbol de archivos y del historial completo de commits de Git mediante `scripts/revisar-secretos.mjs`.
+4. **Optimización de recursos:** ejecución modular mediante grafos de dependencia (`needs:`), almacenamiento en caché multinivel de dependencias npm y binarios de navegador, y cancelación automática de flujos redundantes.
+
+### Estructura del pipeline y detalle de los 5 jobs
+
+El flujo de trabajo se dispara en eventos de `push` y `pull_request` sobre las ramas `dev`, `main` y ramas de características `pf*`. Opera bajo el principio de menor privilegio con `permissions: contents: read` a nivel global y control de concurrencia mediante `cancel-in-progress: true`.
+
+| Job | Nombre del Job (`name`) | Dependencias (`needs`) | Tiempo límite (`timeout`) | Propósito y Comandos Ejecutados |
+|---|---|---|---|---|
+| `calidad` | **Calidad** | Ninguna (inicial) | 5 minutos | Descarga el código con `fetch-depth: 0`, configura Node.js 24 con caché npm multi-lockfile, ejecuta `npm ci`, análisis estático con `npm run lint` (oxlint), compilación con `npm run build` (Vite) y escaneo exhaustivo de secretos con `npm run seguridad:secretos -- --historial`. |
+| `pruebas-unitarias` | **Pruebas unitarias** | `calidad` | 5 minutos | Ejecuta la suite de pruebas unitarias del frontend en la raíz (`npm test`, 99 pruebas con el runner nativo `node:test`), validando la lógica pura de detección facial, rutas, sesión, contratos, estadísticas, recomendaciones y detectores de seguridad. |
+| `pruebas-integracion` | **Pruebas de integración** | `calidad` | 10 minutos | Ejecuta la orquestación global hermética en un único paso mediante `npm run test:todo -- --instalar`. Recorre los 7 paquetes activos, instala dependencias faltantes con `npm ci`, genera clientes de Prisma con URLs de relleno y ejecuta las 389 pruebas unitarias y de integración. |
+| `pruebas-e2e` | **Pruebas E2E (Playwright)** | `pruebas-unitarias`, `pruebas-integracion` | 15 minutos | Restaura o genera caché de binarios en `~/.cache/ms-playwright`, instala el motor Chromium con librerías del sistema Linux (`npx playwright install --with-deps chromium`), ejecuta las 9 pruebas E2E en modo headless (`npm run e2e` con `CI=true`), y publica incondicionalmente (`if: always()`) los artefactos `playwright-report/` y `test-results/`. |
+| `docker` | **Docker** | `calidad` | 5 minutos | Valida la integridad sintáctica, consistencia de redes, mapeo de puertos y resolución de variables de entorno de los 6 servicios definidos en `compose.yaml` mediante `docker compose config`. |
+
+### Decisiones de diseño clave
+
+1. **Node.js 24 en CI frente a Docker Node 22 Alpine:**
+   - En el entorno de CI se configura `node-version: 24` (`actions/setup-node@v4`) debido a que las pruebas unitarias del frontend (`src/services/recomendaciones.test.js`) requieren la API nativa `import { registerHooks } from 'node:module'` para interceptar la carga de módulos en memoria, disponible plenamente en Node 24.
+   - En contraste, los contenedores Docker en producción mantienen `FROM node:22-alpine` en sus respectivos `Dockerfile`, ya que en producción no se ejecutan pruebas ni hooks dinámicos, beneficiándose de una imagen base LTS, ligera y con menor superficie de ataque.
+
+2. **Generación hermética de clientes Prisma con URLs simuladas:**
+   - Los microservicios `auth-service`, `emotions-service` y `library-service` requieren que el cliente `@prisma/client` esté generado en `node_modules` para iniciar y ejecutar sus pruebas.
+   - `prisma generate` valida únicamente la sintaxis del esquema y que existan variables de conexión válidas sintácticamente; no abre sockets de red ni requiere una base de datos real.
+   - El script `test-todo.mjs` automatiza este paso inyectando variables dummy (`DATABASE_URL=postgresql://generate:generate@localhost:5432/generate` y `DIRECT_URL=postgresql://generate:generate@localhost:5432/generate`), asegurando una compilación determinista y hermética.
+
+3. **Control de concurrencia y cancelación de ejecuciones obsoletas:**
+   - Se implementa `concurrency: group: ${{ github.workflow }}-${{ github.ref }}, cancel-in-progress: true`.
+   - Cuando un desarrollador envía nuevos commits a una rama o Pull Request mientras una ejecución previa se encuentra en curso, GitHub Actions cancela inmediatamente el flujo anterior, liberando minutos de ejecución y evitando saturación de runners.
+
+4. **Clonación completa con `fetch-depth: 0` para escaneo de secretos:**
+   - La acción `actions/checkout@v4` realiza por defecto una clonación superficial (`fetch-depth: 1`).
+   - El script `scripts/revisar-secretos.mjs` invoca `git rev-list --all` al recibir el argumento `--historial` para examinar cada parche de commit en la historia del repositorio. Con clonación superficial, solo se evaluaría el último commit.
+   - Declarar `fetch-depth: 0` garantiza que el escaneo histórico sea efectivo al 100 %.
+
+5. **Exclusión justificada del backend monolítico (`backend/`):**
+   - El directorio `backend/` corresponde a un prototipo monolítico previo a la arquitectura orientada a servicios establecida en `pf8_APIGateway` y `pf9_Docker`.
+   - La totalidad de las capacidades de negocio fueron migradas a los microservicios en `microservicios/`. `backend/` no posee pruebas activas en `scripts/test-todo.mjs`, no forma parte de `compose.yaml` y no se despliega en producción. Incluirlo en el pipeline consumiría tiempo de cómputo en paquetes obsoletos.
+
+6. **Exclusión justificada de la colección Postman (pf19):**
+   - La colección de 27 peticiones en `postman/` requiere una infraestructura real activa con base de datos PostgreSQL en Supabase, credenciales de sesión vivas y claves v3 de TMDB, realizando operaciones de escritura y borrado.
+   - Su inclusión en CI introduciría lentitud, fragilidad ante latencias de red externa, riesgos de revocación o rate-limit de cuotas de TMDB y riesgos de seguridad por manejo de credenciales reales.
+   - La cobertura de contratos se encuentra cubierta de forma determinista y sin dependencias externas mediante las 389 pruebas unitarias/integración y las 9 pruebas E2E con backend simulado en memoria (`e2e/support/backendFalso.js`).
+
+### Protocolo de diagnóstico de fallos y gestión de artefactos
+
+Cuando un check de GitHub Actions se marca en rojo (icono ✖), el desarrollador debe seguir el siguiente procedimiento ordenado:
+
+1. **Identificación del Job fallido:**
+   - Acceder a la pestaña **Actions** del repositorio en GitHub o hacer clic en **Details** junto al check fallido en el Pull Request.
+   - Observar el grafo de ejecución: si falla `Calidad`, los jobs posteriores (`Pruebas unitarias`, `Pruebas de integración`, `Docker` y `Pruebas E2E`) no se ejecutarán o serán cancelados.
+2. **Inspección de logs paso a paso:**
+   - Hacer clic sobre el job que presenta el fallo.
+   - Desplegar el paso específico marcado con una cruz roja para examinar la salida estándar (`stdout`) y de error (`stderr`):
+     - *Fallo en Linter:* oxlint reportará el archivo exacto, línea y regla infringida.
+     - *Fallo en Build:* Vite detallará el error de sintaxis, importación rota o recurso no resuelto.
+     - *Fallo en Secretos:* el script `revisar-secretos.mjs` indicará el tipo de patrón detectado y el archivo o commit infractor sin exponer el valor confidencial.
+     - *Fallo en Pruebas Unitarias o de Integración:* `node:test` o la tabla de `test-todo.mjs` detallarán qué paquete falló y el mensaje de aserción incumplido.
+     - *Fallo en Docker:* Docker Compose reportará la línea o variable mal configurada en `compose.yaml`.
+3. **Descarga e inspección de artefactos de Playwright:**
+   - En caso de fallo en el job `Pruebas E2E (Playwright)`, Playwright captura trazas interactivas, capturas de pantalla y videos del navegador.
+   - Al final de la página de la corrida en GitHub Actions, en la sección **Artifacts**, hacer clic en `reporte-playwright` para descargar el archivo comprimido ZIP.
+   - Descomprimir el archivo localmente y abrir `playwright-report/index.html` en cualquier navegador web.
+   - El informe interactivo permite reproducir paso a paso la acción del usuario, examinar los selectores, inspeccionar el DOM y consultar la traza de ejecución en el visor interactivo de Playwright.
+
+### Verificación realizada
+
+| Comprobación | Resultado final |
+|---|---|
+| `npm run lint` | Código 0, sin advertencias ni errores |
+| `npm run build` | Compilación exitosa del frontend con Vite en modo producción |
+| `npm run seguridad:secretos -- --historial` | Código 0, sin secretos detectados en archivos versionados ni historial |
+| `npm test` (Frontend raíz) | **99/99 aprobadas** (lógica de rostro, rutas, sesión, contratos, estadísticas, recomendaciones y detectores de seguridad) |
+| `npm test` en `apigateway/` | **20/20 aprobadas** (helmet, CORS, rate limits, proxy y manejo de errores) |
+| `npm test` en `auth-service` | **45/45 aprobadas** |
+| `npm test` en `emotions-service` | **51/51 aprobadas** (incluyendo validadores Zod) |
+| `npm test` en `catalog-service` | **36/36 aprobadas** (incluyendo validadores Zod) |
+| `npm test` en `recommendations-service` | **88/88 aprobadas** (incluyendo validadores Zod y pruebas HTTP locales) |
+| `npm test` en `library-service` | **50/50 aprobadas** (incluyendo validadores Zod) |
+| `npm run test:todo -- --instalar` | **389/389 aprobadas**, 0 fallos, 7 paquetes en verde en una sola corrida |
+| `npm run e2e` con `CI=true` | **9/9 aprobadas**, 0 fallos (acceso, galería, rostro y detección facial real con Y4M) |
+| `docker compose config` | Validación sintáctica y estructural aprobada para los 6 servicios |
+| Validación sintáctica del YAML (`ci.yml`) | Esquema válido, sin marcadores pendientes, triggers y permisos consistentes |
+## Perfiles, grupos y notificaciones — pf25_MejorasVisuales (2026-11-08)
+
+### Estado de la rama
+
+- Rama de trabajo: `pf25_MejorasVisuales` (PR #24), que ya contiene `origin/dev` completo (`26e13b7`, merge del PR #23 `pf24_GitHubActions`): no hubo commits de `dev` por integrar ni conflictos.
+- Ramas remotas revisadas: todas las `pf1`–`pf24` están integradas en `dev`, salvo `pf13_MSEmociones`, que conserva un commit solo de documentación (`bbcf9b5`, IARECURSO) nunca integrado; no se fusionó.
+
+### Perfiles de una misma cuenta
+
+- `Perfil` guarda ahora `nombre`, `apellido` y `edad` (5 a 120). El principal se crea por trigger y copia los datos de "Queremos conocerte"; editar el principal actualiza también `Usuario`.
+- `auth-service`: `GET/POST /api/perfiles`, `PATCH/DELETE /api/perfiles/:id` (máximo 6; el principal no se borra; borrar un perfil borra en cascada sus datos).
+- Perfil activo: encabezado `X-Butaca-Perfil`. `solicitarApi` lo envía y cada servicio lo verifica contra `req.user.id` (`src/middlewares/perfilActivo.js` en auth, emotions y library; recommendations lo reenvía a emotions). Sin encabezado se usa el principal (compatibilidad con Postman y clientes previos). Perfil ajeno: 403.
+- `Animo`, `Favorito` e `HistorialRecomendacion` tienen `perfilId` con FK compuesta `(perfilId, usuarioId) → Perfil(id, propietarioId)`: un registro nunca puede apuntar al perfil de otra cuenta. Un trigger asigna el principal si una versión anterior inserta sin perfil. Favoritos: único por `(usuarioId, perfilId, tmdbId, tipo)`.
+- Front: `App.jsx` carga `/api/perfiles`, recuerda el perfil en `sessionStorage` (validado contra la cuenta) y monta el contenido con `key` del perfil, así nada del perfil anterior queda en pantalla. El menú de usuario permite cambiar de perfil al instante. Las recomendaciones recientes en `localStorage` se guardan por perfil.
+- Los vínculos de amistad de pf25 (`InvitacionPerfil`) ya no aparecen como perfiles (mezclaban datos de otras cuentas): la tabla se conserva intacta y el intercambio pasa a grupos.
+
+### Grupos e invitaciones (auth-service)
+
+- Tablas `Grupo`, `MiembroGrupo`, `InvitacionGrupo` (por correo; si la cuenta aún no existe se vincula al iniciar sesión en `POST /api/usuarios`) y `RecomendacionGrupo` (`autorNombre` congela el perfil que compartió; `destinatarioId` opcional para un integrante).
+- Rutas: `GET/POST /api/grupos`, `GET/DELETE /api/grupos/:id`, `POST /api/grupos/:id/invitaciones`, `DELETE /api/grupos/:id/invitaciones/:invitacionId`, `DELETE /api/grupos/:id/miembros/:usuarioId` (el creador quita; un integrante sale), `POST /api/grupos/:id/recomendaciones`, `GET /api/invitaciones`, `PUT /api/invitaciones/:id` `{ aceptar }`.
+- Front: pantalla `#grupos` / `#grupos/<id>` (`src/pages/Grupos/`) y botón "Compartir con un grupo" en el detalle de cada título (`src/components/Compartir/`).
+
+### Centro de notificaciones
+
+- Tabla `Notificacion` (`perfilId` nulo = toda la cuenta; definido = solo ese perfil; `clave` única por cuenta para la recomendación del día).
+- Rutas: `GET /api/notificaciones?limite=`, `PATCH /api/notificaciones/:id`, `POST /api/notificaciones/leer-todas`, `POST /api/notificaciones/del-dia`.
+- Tipos: `invitacion-grupo` (aceptar/rechazar desde la campana), `invitacion-aceptada`, `invitacion-rechazada`, `recomendacion-compartida`, `recomendacion-del-dia`, `miembro-removido`, `miembro-salio`, `grupo-eliminado`.
+- Campana en el encabezado (`src/components/Notificaciones/`) con indicador de pendientes; se actualiza cada 60 s. La recomendación del día se elige de forma estable por perfil y fecha con el último ánimo del perfil (o neutral).
+- El gateway enruta `/api/grupos` y `/api/notificaciones` a auth-service y permite `X-Butaca-Perfil` en CORS.
+
+### Migración `20261109120000_perfiles_grupos_notificaciones`
+
+- Ubicación: `microservicios/auth-service/prisma/migrations/` (misma carpeta que las migraciones de pf25). Aditiva: no elimina tablas, columnas ni filas. Solo reemplaza el trigger de actualización del perfil principal y el índice único de `Favorito`.
+- Verificada en un PostgreSQL 17 local descartable: se aplicaron las 8 migraciones previas, datos de ejemplo y luego esta; se comprobaron relleno de `perfilId`, trigger de compatibilidad, FK compuesta, unicidad de favoritos por perfil, cascadas y unicidad de la recomendación del día. También se ejecutaron los servicios reales con Prisma contra esa base.
+- Orden seguro de despliegue: primero la migración (el código anterior sigue funcionando con ella) y después el código. `render.yaml` despliega esta rama automáticamente cuando el CI pasa.
+- **Aplicada en Supabase (2026-11-08)** con autorización del responsable: respaldo lógico previo con `pg_dump` 17 del esquema `public` (guardado fuera del repositorio y restaurado con éxito en un PostgreSQL 17 local: 10 usuarios, 11 perfiles, 8 ánimos, 3 favoritos, 20 historial, 8 migraciones); `prisma migrate status` mostraba solo esta pendiente; `prisma migrate deploy` desde auth-service: «All migrations have been successfully applied». Después: 9 migraciones terminadas, 0 fallidas, mismos conteos, 0 registros sin `perfilId`, y la versión desplegada anterior siguió respondiendo (401 con token inválido, catálogo 200).
+
+### "Mis recomendaciones": causa del error
+
+- Local: `microservicios/recommendations-service/.env` usaba los nombres internos de Docker (`http://auth-service:3021`, …). Fuera de Docker no se resuelven → 503 → "El servicio no está disponible en este momento". Es el único servicio que llama a otros, por eso solo fallaba esa sección.
+- Corrección: valores por defecto `http://localhost:302x` (como el gateway), `.env.example` actualizado y `compose.yaml` fija los nombres de Docker para recommendations-service.
+- Producción (Render gratuito): la cadena gateway → recomendaciones → auth/emociones/catálogo es correcta (token inválido → 401; el catálogo devuelve datos válidos en las 12 combinaciones que usa recomendaciones). Pero tras ~15 min sin uso los servicios se duermen y tardan ~13 s en despertar; mientras tanto el gateway responde 502 (medido el 2026-11-08) y la sección mostraba el error. Ahora la sección reintenta hasta 3 veces (3, 6 y 10 s) ante 502/503 antes de mostrar el error; el botón Reintentar se conserva.
+
+### Formulario "Queremos conocerte" en celulares
+
+- `body` tiene `overflow: hidden`; la pantalla no tenía contenedor con scroll y `place-items: center` cortaba la tarjeta. Ahora `.registro-nombre` usa `height: 100dvh` con `overflow-y: auto`, la tarjeta se centra con `margin: auto` (si no entra, se desplaza), respeta las áreas seguras del iPhone, los campos usan 16 px (sin zoom en iOS) y el campo enfocado se desplaza a la vista. `index.html` agrega `interactive-widget=resizes-content`.
+
+### Pruebas E2E del PR #24
+
+- Causa de 8/10 fallos: el usuario simulado no tenía `edad` (la app quedaba en "Queremos conocerte") y el flujo vigente pasa por "¿Quién va a ver hoy?" (`#perfiles`), no por `#rostro`. Se corrigieron `backendFalso.js` (edad, perfiles, separación por perfil, grupos y notificaciones en `socialFalso.js`) y `entrarComo`.
+- `rostro.spec.js` se adaptó al flujo de pf25 (casilla de autorización premarcada y recomendaciones tras guardar) manteniendo sus garantías: sin autorización no se guarda y solo viajan emoción y confianza.
+- Nuevas: `perfiles.spec.js`, `grupos.spec.js`, `notificaciones.spec.js`, `recomendaciones.spec.js` (recuperación ante 502, error persistente y ánimo del perfil activo) y `movil.spec.js` (iPhone SE 1.ª y 2.ª gen. e iPhone 14 Pro).
+
+### Acceso repetido: "Tu sesión fue validada, pero no pudimos preparar tu cuenta"
+
+- Causa: en Render gratuito el gateway y auth-service se duermen tras ~15 min sin uso. Al volver a ingresar, `POST /api/usuarios` respondía 502/503 mientras despertaban, y el frontend solo reintentaba ~4 s (0; 1,2; 2,5 s) antes de mostrar el error; Reintentar repetía la misma ventana corta. La base y el upsert funcionaban: con los servicios despiertos la misma cuenta entraba con 200 (verificado en producción el 2026-11-08).
+- Además, la versión publicada no era la de esta rama: frontend, gateway y auth-service servían el código de `80ebf6b` (sin `/api/grupos`, `/api/notificaciones` ni `X-Butaca-Perfil` en CORS), aunque el CI de `0d1b73f` pasó.
+- Frontend (`src/lib/cuenta.js`, `useSesion.js`): reintentos con espera creciente hasta ~90 s ante 408/425/429/500/502/503/504 o sin conexión, con mensaje "Estamos despertando los servicios…"; ante 401 renueva el token una vez; un error definitivo no se reintenta. Solo la última validación puede cambiar el estado (INITIAL_SESSION y SIGNED_IN llegan casi juntos) y una renovación de token ya no devuelve a la pantalla de carga. `SIGNED_OUT` olvida la sincronización cacheada. La pantalla de error ofrece Reintentar y Cerrar sesión.
+- auth-service (`usuarios.service.js`): `sincronizar` primero consulta; si la cuenta existe la devuelve sin escribir (antes cada ingreso hacía UPDATE y disparaba los triggers del perfil principal) y solo actualiza el correo si cambió; si no existe la crea y, ante una alta simultánea (P2002), recupera la ya creada. Verificado con Prisma contra PostgreSQL 17 descartable con las 9 migraciones: 3 altas simultáneas → 1 usuario y 1 perfil principal; 5 reingresos conservan nombre, edad y favoritos.
+
+### "Queremos conocerte" con el teclado abierto
+
+- `100dvh` no descuenta el teclado: iOS Safari (y Chrome Android sin `resizes-content`) lo superponen y solo achican `visualViewport`, así que Edad y Continuar quedaban debajo del teclado sin espacio para subirlos. `src/hooks/useTecladoVirtual.js` publica en `--teclado-alto` lo que tapa el teclado y `.registro-nombre` lo suma a su relleno inferior y a `scroll-padding`; al cerrarlo vuelve a 0.
+- E2E `movil.spec.js`: teclado superpuesto simulado en iPhone SE 1.ª/2.ª, iPhone 14 Pro, Pixel 7 y Galaxy S20 (bajar hasta Continuar, volver al encabezado, cerrar teclado y enviar). Sin la corrección falla en los 5 tamaños.
+
+### Grupos entre cuentas diferentes (revisión 2026-11-08)
+
+- Ya existían en pf25 (auth-service, gateway y frontend): crear grupos, invitar por correo (también a quien aún no tiene cuenta: la invitación se vincula al iniciar sesión, sin distinguir mayúsculas), aceptar o rechazar, compartir con todo el grupo o con un integrante, notificaciones al compartir, autor y fecha de cada recomendación, y separación de datos por perfil (`X-Butaca-Perfil` verificado en cada servicio; el detalle del grupo no expone favoritos, historial ni emociones).
+- Faltaba: las invitaciones recibidas solo se podían responder desde la campana (últimas 30 notificaciones). `Grupos.jsx` ahora lista «Invitaciones recibidas» con `GET /api/invitaciones` y permite aceptar o rechazar; campana y página se sincronizan con `butaca:grupos-actualizados`. E2E nuevas en `grupos.spec.js`.
+- Verificado con servicios REALES (gateway, auth, library y emotions) y PostgreSQL 17 con las 9 migraciones, tres cuentas distintas (Google, GitHub con correo en mayúsculas y otra Google) en navegadores aislados y Supabase Auth simulado solo para emitir las identidades: invitación a correos sin cuenta, vínculo al primer ingreso, aceptar y rechazar, avisos al remitente, recomendación grupal y otra individual (la tercera cuenta no ve la individual), autor y fecha, y 403 al usar el perfil de otra cuenta en favoritos, historial, ánimos y notificaciones.
+
+### Rutas reales, «Cargar más», páginas legales y ajustes visuales (2026-11-08)
+
+- **Rutas sin #**: `src/lib/rutas.js` pasa de hash a History API (`/galeria`, `/grupos/<id>`, `/recomendaciones/emocion/<e>`, `/privacidad`, `/terminos`…). Se conserva el enrutador propio (`leerRuta` + `useRuta`) en lugar de sumar React Router. `instalarNavegacion()` (main.jsx) convierte enlaces viejos `/#grupos` en `/grupos`, escucha Atrás/Adelante (`popstate`) e intercepta los `<a href="/ruta">` internos para no recargar la página (respeta Ctrl/Cmd+clic y anclas). El retorno de OAuth (PKCE, `?code=`) no se toca.
+- **Render sin 404**: `butacaweb` es un sitio estático que no está en `render.yaml` y no se pudo configurar una regla de reescritura. `vite.config.js` copia `index.html` a `<ruta>/index.html` para cada pantalla y a `404.html` (rutas con id). Recomendado igualmente en Render: Redirects/Rewrites `/*` → `/index.html` (Rewrite).
+- **Galería**: «Cargar más» con la paginación real de catalog-service (`?pagina=` y `?categoria=`), una página por clic, sin duplicados (`src/pages/Galeria/paginacion.js`), indicador de carga, mensaje al final y error con reintento sin perder lo cargado. Cada categoría tiene su propia lista paginada.
+- **Privacidad y Términos**: borradores en `src/pages/Legal/` basados en el comportamiento real (análisis facial en el navegador, solo emoción y confianza se guardan con autorización, etc.). Lo no definido (responsable, contacto, plazos, jurisdicción, edad mínima) queda marcado como «Pendiente». Observación: la casilla de autorización para guardar emociones empieza marcada (`AccionesResultado.jsx`, `useState(true)`) aunque su comentario dice lo contrario; la política lo marca como pendiente de decisión.
+- **Notificaciones**: tarjetas separadas, no leídas con franja azul y etiqueta «Nueva», botón circular «Marcar como leída» (40 px, 44 px en táctil) con hover/focus/activo/deshabilitado. Sin cambios de lógica.
+- **Logo blanco en Perfiles**: `logobutacablanco.svg` es el mismo SVG con `fill` blanco; el resto de la app usa el azul.
+- **Imágenes no arrastrables**: `draggable={false}` en todas las `<img>` y en los enlaces del logo, y `img { -webkit-user-drag: none; user-select: none }`.
+
+### Recomendaciones por emoción, buscador, navegación móvil y textos legales (2026-11-08)
+
+- **Causa real confirmada tras 17 min de inactividad (2026-11-08)**: un servicio dormido de Render NO despierta con peticiones que salen de otro servicio de Render. Por el gateway: 9 intentos en 73 s, todos 502 `x-render-routing: no-deploy`; una petición externa directa al catálogo: 200 a los 13 s. Los reintentos solos no alcanzaban. Corrección: el gateway agrega `X-Butaca-Despertar` (URL pública de `/health`) cuando recibe ese 502 de Render, y recommendations-service hace lo mismo con sus dependencias; el navegador (`src/lib/despertar.js`) visita esa URL en modo no-cors, como máximo cada 20 s y solo para `https://*.onrender.com/health`. Aplica a la galería y a toda llamada a la API (inicio de sesión incluido).
+- **Galería «No pudimos cargar la galería»**: causa medida en producción. Con catalog-service dormido, Render responde al gateway un 502 inmediato (`x-render-routing: no-deploy`) mientras el servicio arranca (consultado directo, la petición queda retenida ~12 s y responde 200). No era CORS, autenticación ni el catálogo. La galería ahora reintenta solo los fallos transitorios (502/503/504/429/sin conexión) con espera creciente ~70 s mostrando «Estamos preparando tus películas…» y carga sola; un 500/400 se muestra enseguida; tras los reintentos, error con «Reintentar» (`src/pages/Galeria/paginacion.js`).
+- **Emoción → géneros (fuente única)**: `microservicios/catalog-service/src/constants/emociones.js`, con IDs reales de TMDB por tipo (película/serie), géneros excluidos y géneros que solo cuentan combinados (p. ej. Drama en Enojo). TMDB no tiene «biografía», «superhéroes», «deportes», «suspenso» ni «drama psicológico»: se aproximan y está documentado en el archivo. Cada título trae `emociones` (puede tener varias). `/api/catalogo?emocion=` consulta discover con los géneros de la emoción y descarta lo que no corresponde; se combina con `categoria` y `busqueda`. recommendations-service ya no tiene mapeo propio: pide `?emocion=` al catálogo (2 páginas), descarta títulos sin esa emoción, deduplica y alterna géneros (`diversificar`) para que los primeros sean diversos. Con los géneros reales de los 11 títulos de ejemplo se cubren 33 de 37 asociaciones sugeridas, sin asociaciones absurdas (Rick y Morty ≠ Tristeza, Stranger Things ≠ Alegría).
+- **Escaneo**: máximo 3 recomendaciones (`RecomendacionesRostro.jsx`) y el historial guarda esas 3 (`DESTACADAS_POR_ANIMO = 3`). Textos de resultado sobre la «expresión», con aclaración de que no es una evaluación.
+- **Galería**: buscador por nombre (búsqueda de la API, encuentra títulos no cargados y pagina con «Cargar más») y filtro opcional por emoción, independiente del escaneo; cada combinación de filtros tiene su lista paginada.
+- **Navegación móvil (≤1180 px)**: se quitó el menú desplegable; la causa del «espacio blanco» era ese panel (334 px de blanco con la lista vertical). Ahora es una fila horizontal desplazable con los mismos íconos (incluye Perfiles). Medido: con el menú cerrado el encabezado siempre medía 64 px y los filtros empezaban a 12 px; no había otro contenedor con espacio sobrante.
+- **Pie de página**: menú en cuadrícula con íconos (2 columnas en celular, 3 en tablet), logo blanco real, enlaces legales visibles de 40 px.
+- **Scrollbars**: delgadas y redondeadas en azul (`index.css`: `scrollbar-width/color` + `::-webkit-scrollbar`); el panel de notificaciones reserva el espacio de la barra (`scrollbar-gutter: stable`) y se desplaza solo.
+- **Textos legales**: sin marcas «Pendiente» públicas. Responsable: el equipo de estudiantes del proyecto; contacto: el repositorio público en GitHub (sin inventar correos). Edad mínima: 18 años como política del proyecto.
+- **Revisión interna (no publicada)**:
+  - Inconsistencia: el registro (`RegistroNombre.jsx`) y auth-service (`PUT /api/usuarios`, CHECK `Usuario_edad_check`) aceptan edades de 5 a 120 para la cuenta, contra la política de 18+. Corrección propuesta: validar `edad >= 18` para la cuenta en el formulario y en `actualizarUsuario` (auth-service), manteniendo 5–120 para perfiles secundarios; no cambiar el CHECK de la base (lo comparten perfiles y cuentas existentes). Antes, revisar cuántas cuentas existentes tienen menos de 18.
+  - Si Butaca pasa a uso real, definir una persona o institución responsable identificable y un canal privado de contacto.
+  - La casilla «Autorizo guardar esta emoción» sigue marcada por defecto (decisión pendiente del equipo).
+- Orden por relevancia: dentro de cada emoción pesan más los géneros más representativos (primeros de la lista); «Calma» excluye Acción. Validado en producción: ninguna emoción repite el trío de otra (Miedo y Desagrado comparten títulos de terror por su tabla de géneros).

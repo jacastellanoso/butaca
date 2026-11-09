@@ -1,0 +1,447 @@
+/* Encabezado de la aplicación con sesión. Continúa el estilo de la galería
+   (pf10): barra blanca, logo oficial y acciones en pastillas azules. */
+
+.app-header {
+  --header-blue: #0470f6;
+  --header-light: #72b4ff;
+  --header-ink: #062a7a;
+  position: sticky;
+  z-index: 30;
+  top: 0;
+  display: flex;
+  min-height: 64px;
+  align-items: center;
+  gap: clamp(10px, 1.6vw, 22px);
+  padding: 8px clamp(14px, 2.5vw, 34px);
+  color: var(--header-ink);
+  background: #ffffff;
+  box-shadow: 0 5px 18px rgb(0 25 120 / 16%);
+}
+
+.app-header__brand {
+  display: flex;
+  width: clamp(124px, 13vw, 180px);
+  flex: 0 0 auto;
+  align-items: center;
+  margin-right: auto;
+  border-radius: 8px;
+}
+
+.app-header__brand img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.app-header__nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.app-header__link {
+  position: relative;
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 13px 5px 6px;
+  border-radius: 999px;
+  color: var(--header-ink);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 180ms ease, color 180ms ease, transform 180ms ease, box-shadow 180ms ease;
+}
+
+.app-header__icon {
+  display: grid;
+  width: 29px;
+  height: 29px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  color: #ffffff;
+  background: var(--header-blue);
+}
+
+.app-header__icon img {
+  width: 29px;
+  height: 29px;
+  object-fit: contain;
+}
+
+/* Los íconos oficiales son blancos: usan los mismos fondos que la galería (pf10). */
+.app-header__link--rostro .app-header__icon {
+  background: var(--header-light);
+}
+
+.app-header__icon svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+.app-header__link:hover {
+  background: #eaf3ff;
+  transform: translateY(-1px);
+}
+
+.app-header__link[aria-current='page'] {
+  color: #ffffff;
+  background: var(--header-blue);
+  box-shadow: 0 7px 16px rgb(0 56 175 / 22%);
+}
+
+.app-header__link[aria-current='page'] .app-header__icon {
+  background: rgb(255 255 255 / 22%);
+}
+
+/* Menú de usuario */
+
+.app-header__user {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.app-header__user-button {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 12px 3px 3px;
+  border: 2px solid #d9e8ff;
+  border-radius: 999px;
+  color: var(--header-ink);
+  background: #ffffff;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.app-header__user-button:hover,
+.app-header__user-button[aria-expanded='true'] {
+  border-color: var(--header-light);
+  box-shadow: 0 6px 16px rgb(0 56 175 / 16%);
+}
+
+.app-header__user-name {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-header__chevron {
+  width: 8px;
+  height: 8px;
+  margin: -4px 2px 0;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform 180ms ease;
+}
+
+.app-header__user-button[aria-expanded='true'] .app-header__chevron {
+  margin-top: 4px;
+  transform: rotate(-135deg);
+}
+
+.app-header__menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  display: grid;
+  width: min(290px, calc(100vw - 28px));
+  gap: 4px;
+  padding: 10px;
+  border-radius: 18px;
+  color: var(--header-ink);
+  background: #ffffff;
+  box-shadow: 0 18px 44px rgb(0 15 95 / 28%);
+  animation: app-header-menu 160ms ease both;
+}
+
+.app-header__menu-profile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 6px;
+  padding: 8px 8px 14px;
+  border-bottom: 1px solid #e3edfc;
+}
+
+.app-header__menu-profile div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+/* Solo los textos: el avatar también es un <span> y debe conservar su inicial
+   blanca (perfiles sin foto, como uno secundario). */
+.app-header__menu-profile div strong,
+.app-header__menu-profile div span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-header__menu-profile div span {
+  color: #4c5f8f;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.app-header__menu-profile .app-header__menu-etiqueta {
+  color: #0067df;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+/* Cuenta con la que se inició sesión (puede ser distinta del perfil activo). */
+.app-header__menu-cuenta {
+  display: grid;
+  gap: 2px;
+  margin: 0 0 6px;
+  padding: 0 8px 12px;
+  border-bottom: 1px solid #e3edfc;
+  color: #4c5f8f;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.app-header__menu-cuenta strong {
+  color: var(--header-ink);
+}
+
+.app-header__menu-cuenta strong,
+.app-header__menu-cuenta span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-header__menu-item {
+  display: block;
+  width: 100%;
+  padding: 11px 12px;
+  border: 0;
+  border-radius: 12px;
+  color: var(--header-ink);
+  background: transparent;
+  font-size: 14px;
+  font-weight: 700;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.app-header__menu-item:hover {
+  background: #eaf3ff;
+}
+
+.app-header__menu-item--logout {
+  color: #c0163d;
+}
+
+.app-header__menu-item--logout:hover {
+  background: #ffe9ee;
+}
+
+.app-header__menu-item:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.app-header__menu-error {
+  margin: 4px 8px 6px;
+  color: #c0163d;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.app-header__menu-perfiles {
+  display: grid;
+  gap: 2px;
+  margin-bottom: 4px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #e3edfc;
+}
+
+.app-header__menu-titulo {
+  padding: 2px 12px;
+  color: #4c5f8f;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.app-header__menu-perfil {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+}
+
+.app-header__menu-perfil span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Avatar compartido (encabezado y selección de perfiles) */
+
+.avatar-perfil {
+  display: grid;
+  overflow: hidden;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  color: #ffffff;
+  background: linear-gradient(145deg, #5aa8fa, #0000b0);
+  font-weight: 800;
+}
+
+.avatar-perfil img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.avatar-perfil--md {
+  width: 34px;
+  height: 34px;
+  font-size: 15px;
+}
+
+.avatar-perfil--lg {
+  width: 46px;
+  height: 46px;
+  font-size: 20px;
+}
+
+.app-header a:focus-visible,
+.app-header button:focus-visible {
+  outline: 3px solid #0470f6;
+  outline-offset: 3px;
+}
+
+@keyframes app-header-menu {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+/* Entre 1181 y 1440 px entran las seis opciones: el botón de usuario muestra
+   solo el avatar (su nombre sigue en aria-label) y los enlaces se compactan. */
+@media (min-width: 1181px) and (max-width: 1440px) {
+  .app-header {
+    gap: 10px;
+  }
+
+  .app-header__nav {
+    gap: 2px;
+  }
+
+  .app-header__link {
+    padding-right: 10px;
+    font-size: 13px;
+  }
+
+  .app-header__user-name,
+  .app-header__chevron {
+    display: none;
+  }
+
+  .app-header__user-button {
+    padding: 3px;
+  }
+}
+
+/* En escritorio, Perfiles está en el menú de usuario. */
+.app-header__link--perfiles {
+  display: none;
+}
+
+/* Pantallas medianas y chicas: sin menú desplegable. La navegación es una
+   segunda fila horizontal, compacta y desplazable con el dedo, con los mismos
+   íconos del encabezado. Así no aparece el panel blanco de 334 px que tapaba
+   el comienzo de la galería. */
+@media (max-width: 1180px) {
+  .app-header {
+    flex-wrap: wrap;
+    row-gap: 6px;
+    padding-bottom: 6px;
+  }
+
+  .app-header__nav {
+    display: flex;
+    order: 10;
+    width: calc(100% + 2 * clamp(14px, 2.5vw, 34px));
+    flex: 0 0 auto;
+    margin: 0 calc(-1 * clamp(14px, 2.5vw, 34px));
+    padding: 2px clamp(14px, 2.5vw, 34px) 4px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-padding-inline: clamp(14px, 2.5vw, 34px);
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+    gap: 6px;
+    /* Degradado en los bordes: indica que hay más opciones al deslizar. */
+    mask-image: linear-gradient(90deg, transparent 0, #000 12px, #000 calc(100% - 18px), transparent 100%);
+  }
+
+  .app-header__nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .app-header__link {
+    min-height: 40px;
+    flex: 0 0 auto;
+    padding: 4px 12px 4px 5px;
+    border: 1px solid #dbe8fb;
+    font-size: 13px;
+    scroll-snap-align: start;
+  }
+
+  .app-header__link--perfiles {
+    display: inline-flex;
+  }
+
+  .app-header__icon,
+  .app-header__icon img {
+    width: 28px;
+    height: 28px;
+  }
+
+  .app-header__link:hover {
+    transform: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .app-header__user-name,
+  .app-header__chevron {
+    display: none;
+  }
+
+  .app-header__user-button {
+    padding: 3px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-header *,
+  .app-header__menu,
+  .app-header__nav--abierta {
+    animation: none !important;
+    transition: none !important;
+  }
+}

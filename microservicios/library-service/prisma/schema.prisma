@@ -1,0 +1,87 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Usuario {
+  id              String                   @id
+  email           String?
+  edad            Int?
+  datosJson       Json                     @default("{}")
+  creadoEn        DateTime                 @default(now())
+  perfiles        Perfil[]
+  animos          Animo[]
+  favoritos       Favorito[]
+  recomendaciones HistorialRecomendacion[]
+}
+
+// Perfiles de la cuenta (tabla administrada por auth-service). Aquí solo se lee
+// para verificar que el perfil activo pertenece al usuario autenticado.
+model Perfil {
+  id            String  @id @default(uuid())
+  propietarioId String
+  nombre        String
+  esPrincipal   Boolean @default(false)
+  usuario       Usuario @relation(fields: [propietarioId], references: [id], onDelete: Cascade)
+
+  @@unique([id, propietarioId])
+  @@index([propietarioId])
+}
+
+model Animo {
+  id                      String    @id @default(uuid())
+  usuarioId               String
+  // Perfil de la cuenta al que pertenece el registro (desde 20261109120000).
+  perfilId                String?
+  emocion                 String
+  // Opcional desde pf13: una emoción confirmada manualmente no tiene confianza.
+  confianza               Float?
+  // 'deteccion' (face-api.js) o 'confirmada' (elegida por el usuario).
+  origen                  String    @default("deteccion")
+  // Evidencia del consentimiento para conservar el historial (pf13_MSEmociones).
+  // Es distinto del permiso de cámara. Los registros previos quedan en false/null.
+  consentimientoHistorial Boolean   @default(false)
+  consentimientoVersion   String?
+  consentimientoEn        DateTime?
+  creadoEn                DateTime  @default(now())
+  usuario                 Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId, creadoEn])
+}
+
+model Favorito {
+  id        String   @id @default(uuid())
+  usuarioId String
+  perfilId  String?
+  tmdbId    Int
+  tipo      String
+  titulo    String
+  poster    String?
+  creadoEn  DateTime @default(now())
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  // Dos perfiles de la misma cuenta pueden guardar el mismo título.
+  @@unique([usuarioId, perfilId, tmdbId, tipo])
+  @@index([usuarioId, creadoEn])
+}
+
+model HistorialRecomendacion {
+  id           String   @id @default(uuid())
+  usuarioId    String
+  perfilId     String?
+  emocion      String
+  tmdbId       Int
+  tipo         String
+  titulo       String
+  poster       String?
+  calificacion Float?
+  creadoEn     DateTime @default(now())
+  usuario      Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId, creadoEn])
+}

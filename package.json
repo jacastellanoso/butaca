@@ -1,0 +1,35 @@
+{
+  "name": "butaca",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "oxlint",
+    "preview": "vite preview",
+    "test": "node --test \"src/**/*.test.js\" \"scripts/**/*.test.js\"",
+    "test:todo": "node scripts/test-todo.mjs",
+    "e2e": "playwright test",
+    "e2e:ui": "playwright test --ui",
+    "e2e:slow": "playwright test --config playwright.slow.config.js",
+    "e2e:report": "playwright show-report",
+    "seguridad:secretos": "node scripts/revisar-secretos.mjs"
+  },
+  "dependencies": {
+    "@fontsource/montserrat": "^5.3.0",
+    "@supabase/supabase-js": "^2.118.0",
+    "@vladmandic/face-api": "^1.7.15",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@tensorflow/tfjs-backend-wasm": "4.22.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "oxlint": "^1.88.0",
+    "vite": "^8.3.4"
+  }
+}

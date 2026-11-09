@@ -1,0 +1,35 @@
+import 'dotenv/config'
+
+// Único lugar donde se lee process.env en este microservicio.
+export const env = {
+  serviceName: process.env.SERVICE_NAME ?? 'recommendations-service',
+  port: Number(process.env.PORT) || 3024,
+  // Por defecto, servicios en esta misma máquina (npm run dev en cada carpeta),
+  // igual que el API Gateway. compose.yaml y render.yaml fijan sus propias URLs.
+  authServiceUrl: readUrl('AUTH_SERVICE_URL', 'http://localhost:3021'),
+  emotionsServiceUrl: readUrl('EMOTIONS_SERVICE_URL', 'http://localhost:3022'),
+  catalogServiceUrl: readUrl('CATALOG_SERVICE_URL', 'http://localhost:3023'),
+  requestTimeoutMs: readTimeout('REQUEST_TIMEOUT_MS', 45_000),
+  upstreamTimeoutMs: readTimeout('UPSTREAM_TIMEOUT_MS', 30_000),
+}
+
+function readTimeout(name, fallback) {
+  const value = Number(process.env[name] ?? fallback)
+  if (!Number.isInteger(value) || value < 1 || value > 60_000) {
+    throw new Error(`Configuración inválida: ${name}`)
+  }
+  return value
+}
+
+function readUrl(name, fallback) {
+  try {
+    const value = process.env[name] || fallback
+    const normalizedUrl = value.includes('://') ? value : `http://${value}`
+    const url = new URL(normalizedUrl)
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password ||
+        url.pathname !== '/' || url.search || url.hash) throw new Error()
+    return url.origin
+  } catch {
+    throw new Error(`Configuración inválida: ${name}`)
+  }
+}
