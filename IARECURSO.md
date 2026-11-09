@@ -1204,6 +1204,15 @@ Esta verificación sustituye el bloqueo Docker anterior. Docker Desktop estaba i
 
 ## 17. Historial
 
+### 2026-11-08 — Perfiles, grupos, notificaciones y correcciones (`pf25_MejorasVisuales`)
+
+- Perfiles con nombre, apellido y edad por cuenta; datos (ánimos, favoritos, historial, recomendación del día) separados por perfil con `X-Butaca-Perfil` verificado en el servidor.
+- Grupos con invitaciones por correo, recomendaciones compartidas (con autor) y gestión de integrantes; centro de notificaciones con campana.
+- Correcciones: "Mis recomendaciones" en local (URLs de Docker en el `.env`), formulario "Queremos conocerte" en celulares y 8 pruebas E2E del PR #24.
+- Migración `20261109120000_perfiles_grupos_notificaciones` verificada en PostgreSQL local y aplicada en Supabase. Detalle en la sección «Perfiles, grupos y notificaciones — pf25_MejorasVisuales».
+- Migración aplicada en Supabase el 2026-11-08 con autorización, después de un respaldo lógico verificado (restaurado en PostgreSQL 17 local). Conteos sin cambios y versión desplegada anterior funcionando con la base migrada.
+- Verificación: 426/426 unitarias e integración (7 paquetes), 35/35 E2E, lint y build sin errores, sin secretos.
+
 ### 2026-11-04 — Integración continua con GitHub Actions (`pf24_GitHubActions`)
 
 - Se diseñó e implementó el workflow principal de CI en `.github/workflows/ci.yml` activado en `push` y `pull_request` para `dev`, `main` y `pf*`.
@@ -1961,3 +1970,100 @@ Cuando un check de GitHub Actions se marca en rojo (icono ✖), el desarrollador
 | `npm run e2e` con `CI=true` | **9/9 aprobadas**, 0 fallos (acceso, galería, rostro y detección facial real con Y4M) |
 | `docker compose config` | Validación sintáctica y estructural aprobada para los 6 servicios |
 | Validación sintáctica del YAML (`ci.yml`) | Esquema válido, sin marcadores pendientes, triggers y permisos consistentes |
+## Perfiles, grupos y notificaciones — pf25_MejorasVisuales (2026-11-08)
+
+### Estado de la rama
+
+- Rama de trabajo: `pf25_MejorasVisuales` (PR #24), que ya contiene `origin/dev` completo (`26e13b7`, merge del PR #23 `pf24_GitHubActions`): no hubo commits de `dev` por integrar ni conflictos.
+- Ramas remotas revisadas: todas las `pf1`–`pf24` están integradas en `dev`, salvo `pf13_MSEmociones`, que conserva un commit solo de documentación (`bbcf9b5`, IARECURSO) nunca integrado; no se fusionó.
+
+### Perfiles de una misma cuenta
+
+- `Perfil` guarda ahora `nombre`, `apellido` y `edad` (5 a 120). El principal se crea por trigger y copia los datos de "Queremos conocerte"; editar el principal actualiza también `Usuario`.
+- `auth-service`: `GET/POST /api/perfiles`, `PATCH/DELETE /api/perfiles/:id` (máximo 6; el principal no se borra; borrar un perfil borra en cascada sus datos).
+- Perfil activo: encabezado `X-Butaca-Perfil`. `solicitarApi` lo envía y cada servicio lo verifica contra `req.user.id` (`src/middlewares/perfilActivo.js` en auth, emotions y library; recommendations lo reenvía a emotions). Sin encabezado se usa el principal (compatibilidad con Postman y clientes previos). Perfil ajeno: 403.
+- `Animo`, `Favorito` e `HistorialRecomendacion` tienen `perfilId` con FK compuesta `(perfilId, usuarioId) → Perfil(id, propietarioId)`: un registro nunca puede apuntar al perfil de otra cuenta. Un trigger asigna el principal si una versión anterior inserta sin perfil. Favoritos: único por `(usuarioId, perfilId, tmdbId, tipo)`.
+- Front: `App.jsx` carga `/api/perfiles`, recuerda el perfil en `sessionStorage` (validado contra la cuenta) y monta el contenido con `key` del perfil, así nada del perfil anterior queda en pantalla. El menú de usuario permite cambiar de perfil al instante. Las recomendaciones recientes en `localStorage` se guardan por perfil.
+- Los vínculos de amistad de pf25 (`InvitacionPerfil`) ya no aparecen como perfiles (mezclaban datos de otras cuentas): la tabla se conserva intacta y el intercambio pasa a grupos.
+
+### Grupos e invitaciones (auth-service)
+
+- Tablas `Grupo`, `MiembroGrupo`, `InvitacionGrupo` (por correo; si la cuenta aún no existe se vincula al iniciar sesión en `POST /api/usuarios`) y `RecomendacionGrupo` (`autorNombre` congela el perfil que compartió; `destinatarioId` opcional para un integrante).
+- Rutas: `GET/POST /api/grupos`, `GET/DELETE /api/grupos/:id`, `POST /api/grupos/:id/invitaciones`, `DELETE /api/grupos/:id/invitaciones/:invitacionId`, `DELETE /api/grupos/:id/miembros/:usuarioId` (el creador quita; un integrante sale), `POST /api/grupos/:id/recomendaciones`, `GET /api/invitaciones`, `PUT /api/invitaciones/:id` `{ aceptar }`.
+- Front: pantalla `#grupos` / `#grupos/<id>` (`src/pages/Grupos/`) y botón "Compartir con un grupo" en el detalle de cada título (`src/components/Compartir/`).
+
+### Centro de notificaciones
+
+- Tabla `Notificacion` (`perfilId` nulo = toda la cuenta; definido = solo ese perfil; `clave` única por cuenta para la recomendación del día).
+- Rutas: `GET /api/notificaciones?limite=`, `PATCH /api/notificaciones/:id`, `POST /api/notificaciones/leer-todas`, `POST /api/notificaciones/del-dia`.
+- Tipos: `invitacion-grupo` (aceptar/rechazar desde la campana), `invitacion-aceptada`, `invitacion-rechazada`, `recomendacion-compartida`, `recomendacion-del-dia`, `miembro-removido`, `miembro-salio`, `grupo-eliminado`.
+- Campana en el encabezado (`src/components/Notificaciones/`) con indicador de pendientes; se actualiza cada 60 s. La recomendación del día se elige de forma estable por perfil y fecha con el último ánimo del perfil (o neutral).
+- El gateway enruta `/api/grupos` y `/api/notificaciones` a auth-service y permite `X-Butaca-Perfil` en CORS.
+
+### Migración `20261109120000_perfiles_grupos_notificaciones`
+
+- Ubicación: `microservicios/auth-service/prisma/migrations/` (misma carpeta que las migraciones de pf25). Aditiva: no elimina tablas, columnas ni filas. Solo reemplaza el trigger de actualización del perfil principal y el índice único de `Favorito`.
+- Verificada en un PostgreSQL 17 local descartable: se aplicaron las 8 migraciones previas, datos de ejemplo y luego esta; se comprobaron relleno de `perfilId`, trigger de compatibilidad, FK compuesta, unicidad de favoritos por perfil, cascadas y unicidad de la recomendación del día. También se ejecutaron los servicios reales con Prisma contra esa base.
+- Orden seguro de despliegue: primero la migración (el código anterior sigue funcionando con ella) y después el código. `render.yaml` despliega esta rama automáticamente cuando el CI pasa.
+- **Aplicada en Supabase (2026-11-08)** con autorización del responsable: respaldo lógico previo con `pg_dump` 17 del esquema `public` (guardado fuera del repositorio y restaurado con éxito en un PostgreSQL 17 local: 10 usuarios, 11 perfiles, 8 ánimos, 3 favoritos, 20 historial, 8 migraciones); `prisma migrate status` mostraba solo esta pendiente; `prisma migrate deploy` desde auth-service: «All migrations have been successfully applied». Después: 9 migraciones terminadas, 0 fallidas, mismos conteos, 0 registros sin `perfilId`, y la versión desplegada anterior siguió respondiendo (401 con token inválido, catálogo 200).
+
+### "Mis recomendaciones": causa del error
+
+- Local: `microservicios/recommendations-service/.env` usaba los nombres internos de Docker (`http://auth-service:3021`, …). Fuera de Docker no se resuelven → 503 → "El servicio no está disponible en este momento". Es el único servicio que llama a otros, por eso solo fallaba esa sección.
+- Corrección: valores por defecto `http://localhost:302x` (como el gateway), `.env.example` actualizado y `compose.yaml` fija los nombres de Docker para recommendations-service.
+- Producción (Render gratuito): la cadena gateway → recomendaciones → auth/emociones/catálogo es correcta (token inválido → 401; el catálogo devuelve datos válidos en las 12 combinaciones que usa recomendaciones). Pero tras ~15 min sin uso los servicios se duermen y tardan ~13 s en despertar; mientras tanto el gateway responde 502 (medido el 2026-11-08) y la sección mostraba el error. Ahora la sección reintenta hasta 3 veces (3, 6 y 10 s) ante 502/503 antes de mostrar el error; el botón Reintentar se conserva.
+
+### Formulario "Queremos conocerte" en celulares
+
+- `body` tiene `overflow: hidden`; la pantalla no tenía contenedor con scroll y `place-items: center` cortaba la tarjeta. Ahora `.registro-nombre` usa `height: 100dvh` con `overflow-y: auto`, la tarjeta se centra con `margin: auto` (si no entra, se desplaza), respeta las áreas seguras del iPhone, los campos usan 16 px (sin zoom en iOS) y el campo enfocado se desplaza a la vista. `index.html` agrega `interactive-widget=resizes-content`.
+
+### Pruebas E2E del PR #24
+
+- Causa de 8/10 fallos: el usuario simulado no tenía `edad` (la app quedaba en "Queremos conocerte") y el flujo vigente pasa por "¿Quién va a ver hoy?" (`#perfiles`), no por `#rostro`. Se corrigieron `backendFalso.js` (edad, perfiles, separación por perfil, grupos y notificaciones en `socialFalso.js`) y `entrarComo`.
+- `rostro.spec.js` se adaptó al flujo de pf25 (casilla de autorización premarcada y recomendaciones tras guardar) manteniendo sus garantías: sin autorización no se guarda y solo viajan emoción y confianza.
+- Nuevas: `perfiles.spec.js`, `grupos.spec.js`, `notificaciones.spec.js`, `recomendaciones.spec.js` (recuperación ante 502, error persistente y ánimo del perfil activo) y `movil.spec.js` (iPhone SE 1.ª y 2.ª gen. e iPhone 14 Pro).
+
+### Acceso repetido: "Tu sesión fue validada, pero no pudimos preparar tu cuenta"
+
+- Causa: en Render gratuito el gateway y auth-service se duermen tras ~15 min sin uso. Al volver a ingresar, `POST /api/usuarios` respondía 502/503 mientras despertaban, y el frontend solo reintentaba ~4 s (0; 1,2; 2,5 s) antes de mostrar el error; Reintentar repetía la misma ventana corta. La base y el upsert funcionaban: con los servicios despiertos la misma cuenta entraba con 200 (verificado en producción el 2026-11-08).
+- Además, la versión publicada no era la de esta rama: frontend, gateway y auth-service servían el código de `80ebf6b` (sin `/api/grupos`, `/api/notificaciones` ni `X-Butaca-Perfil` en CORS), aunque el CI de `0d1b73f` pasó.
+- Frontend (`src/lib/cuenta.js`, `useSesion.js`): reintentos con espera creciente hasta ~90 s ante 408/425/429/500/502/503/504 o sin conexión, con mensaje "Estamos despertando los servicios…"; ante 401 renueva el token una vez; un error definitivo no se reintenta. Solo la última validación puede cambiar el estado (INITIAL_SESSION y SIGNED_IN llegan casi juntos) y una renovación de token ya no devuelve a la pantalla de carga. `SIGNED_OUT` olvida la sincronización cacheada. La pantalla de error ofrece Reintentar y Cerrar sesión.
+- auth-service (`usuarios.service.js`): `sincronizar` primero consulta; si la cuenta existe la devuelve sin escribir (antes cada ingreso hacía UPDATE y disparaba los triggers del perfil principal) y solo actualiza el correo si cambió; si no existe la crea y, ante una alta simultánea (P2002), recupera la ya creada. Verificado con Prisma contra PostgreSQL 17 descartable con las 9 migraciones: 3 altas simultáneas → 1 usuario y 1 perfil principal; 5 reingresos conservan nombre, edad y favoritos.
+
+### "Queremos conocerte" con el teclado abierto
+
+- `100dvh` no descuenta el teclado: iOS Safari (y Chrome Android sin `resizes-content`) lo superponen y solo achican `visualViewport`, así que Edad y Continuar quedaban debajo del teclado sin espacio para subirlos. `src/hooks/useTecladoVirtual.js` publica en `--teclado-alto` lo que tapa el teclado y `.registro-nombre` lo suma a su relleno inferior y a `scroll-padding`; al cerrarlo vuelve a 0.
+- E2E `movil.spec.js`: teclado superpuesto simulado en iPhone SE 1.ª/2.ª, iPhone 14 Pro, Pixel 7 y Galaxy S20 (bajar hasta Continuar, volver al encabezado, cerrar teclado y enviar). Sin la corrección falla en los 5 tamaños.
+
+### Grupos entre cuentas diferentes (revisión 2026-11-08)
+
+- Ya existían en pf25 (auth-service, gateway y frontend): crear grupos, invitar por correo (también a quien aún no tiene cuenta: la invitación se vincula al iniciar sesión, sin distinguir mayúsculas), aceptar o rechazar, compartir con todo el grupo o con un integrante, notificaciones al compartir, autor y fecha de cada recomendación, y separación de datos por perfil (`X-Butaca-Perfil` verificado en cada servicio; el detalle del grupo no expone favoritos, historial ni emociones).
+- Faltaba: las invitaciones recibidas solo se podían responder desde la campana (últimas 30 notificaciones). `Grupos.jsx` ahora lista «Invitaciones recibidas» con `GET /api/invitaciones` y permite aceptar o rechazar; campana y página se sincronizan con `butaca:grupos-actualizados`. E2E nuevas en `grupos.spec.js`.
+- Verificado con servicios REALES (gateway, auth, library y emotions) y PostgreSQL 17 con las 9 migraciones, tres cuentas distintas (Google, GitHub con correo en mayúsculas y otra Google) en navegadores aislados y Supabase Auth simulado solo para emitir las identidades: invitación a correos sin cuenta, vínculo al primer ingreso, aceptar y rechazar, avisos al remitente, recomendación grupal y otra individual (la tercera cuenta no ve la individual), autor y fecha, y 403 al usar el perfil de otra cuenta en favoritos, historial, ánimos y notificaciones.
+
+### Rutas reales, «Cargar más», páginas legales y ajustes visuales (2026-11-08)
+
+- **Rutas sin #**: `src/lib/rutas.js` pasa de hash a History API (`/galeria`, `/grupos/<id>`, `/recomendaciones/emocion/<e>`, `/privacidad`, `/terminos`…). Se conserva el enrutador propio (`leerRuta` + `useRuta`) en lugar de sumar React Router. `instalarNavegacion()` (main.jsx) convierte enlaces viejos `/#grupos` en `/grupos`, escucha Atrás/Adelante (`popstate`) e intercepta los `<a href="/ruta">` internos para no recargar la página (respeta Ctrl/Cmd+clic y anclas). El retorno de OAuth (PKCE, `?code=`) no se toca.
+- **Render sin 404**: `butacaweb` es un sitio estático que no está en `render.yaml` y no se pudo configurar una regla de reescritura. `vite.config.js` copia `index.html` a `<ruta>/index.html` para cada pantalla y a `404.html` (rutas con id). Recomendado igualmente en Render: Redirects/Rewrites `/*` → `/index.html` (Rewrite).
+- **Galería**: «Cargar más» con la paginación real de catalog-service (`?pagina=` y `?categoria=`), una página por clic, sin duplicados (`src/pages/Galeria/paginacion.js`), indicador de carga, mensaje al final y error con reintento sin perder lo cargado. Cada categoría tiene su propia lista paginada.
+- **Privacidad y Términos**: borradores en `src/pages/Legal/` basados en el comportamiento real (análisis facial en el navegador, solo emoción y confianza se guardan con autorización, etc.). Lo no definido (responsable, contacto, plazos, jurisdicción, edad mínima) queda marcado como «Pendiente». Observación: la casilla de autorización para guardar emociones empieza marcada (`AccionesResultado.jsx`, `useState(true)`) aunque su comentario dice lo contrario; la política lo marca como pendiente de decisión.
+- **Notificaciones**: tarjetas separadas, no leídas con franja azul y etiqueta «Nueva», botón circular «Marcar como leída» (40 px, 44 px en táctil) con hover/focus/activo/deshabilitado. Sin cambios de lógica.
+- **Logo blanco en Perfiles**: `logobutacablanco.svg` es el mismo SVG con `fill` blanco; el resto de la app usa el azul.
+- **Imágenes no arrastrables**: `draggable={false}` en todas las `<img>` y en los enlaces del logo, y `img { -webkit-user-drag: none; user-select: none }`.
+
+### Recomendaciones por emoción, buscador, navegación móvil y textos legales (2026-11-08)
+
+- **Causa real confirmada tras 17 min de inactividad (2026-11-08)**: un servicio dormido de Render NO despierta con peticiones que salen de otro servicio de Render. Por el gateway: 9 intentos en 73 s, todos 502 `x-render-routing: no-deploy`; una petición externa directa al catálogo: 200 a los 13 s. Los reintentos solos no alcanzaban. Corrección: el gateway agrega `X-Butaca-Despertar` (URL pública de `/health`) cuando recibe ese 502 de Render, y recommendations-service hace lo mismo con sus dependencias; el navegador (`src/lib/despertar.js`) visita esa URL en modo no-cors, como máximo cada 20 s y solo para `https://*.onrender.com/health`. Aplica a la galería y a toda llamada a la API (inicio de sesión incluido).
+- **Galería «No pudimos cargar la galería»**: causa medida en producción. Con catalog-service dormido, Render responde al gateway un 502 inmediato (`x-render-routing: no-deploy`) mientras el servicio arranca (consultado directo, la petición queda retenida ~12 s y responde 200). No era CORS, autenticación ni el catálogo. La galería ahora reintenta solo los fallos transitorios (502/503/504/429/sin conexión) con espera creciente ~70 s mostrando «Estamos preparando tus películas…» y carga sola; un 500/400 se muestra enseguida; tras los reintentos, error con «Reintentar» (`src/pages/Galeria/paginacion.js`).
+- **Emoción → géneros (fuente única)**: `microservicios/catalog-service/src/constants/emociones.js`, con IDs reales de TMDB por tipo (película/serie), géneros excluidos y géneros que solo cuentan combinados (p. ej. Drama en Enojo). TMDB no tiene «biografía», «superhéroes», «deportes», «suspenso» ni «drama psicológico»: se aproximan y está documentado en el archivo. Cada título trae `emociones` (puede tener varias). `/api/catalogo?emocion=` consulta discover con los géneros de la emoción y descarta lo que no corresponde; se combina con `categoria` y `busqueda`. recommendations-service ya no tiene mapeo propio: pide `?emocion=` al catálogo (2 páginas), descarta títulos sin esa emoción, deduplica y alterna géneros (`diversificar`) para que los primeros sean diversos. Con los géneros reales de los 11 títulos de ejemplo se cubren 33 de 37 asociaciones sugeridas, sin asociaciones absurdas (Rick y Morty ≠ Tristeza, Stranger Things ≠ Alegría).
+- **Escaneo**: máximo 3 recomendaciones (`RecomendacionesRostro.jsx`) y el historial guarda esas 3 (`DESTACADAS_POR_ANIMO = 3`). Textos de resultado sobre la «expresión», con aclaración de que no es una evaluación.
+- **Galería**: buscador por nombre (búsqueda de la API, encuentra títulos no cargados y pagina con «Cargar más») y filtro opcional por emoción, independiente del escaneo; cada combinación de filtros tiene su lista paginada.
+- **Navegación móvil (≤1180 px)**: se quitó el menú desplegable; la causa del «espacio blanco» era ese panel (334 px de blanco con la lista vertical). Ahora es una fila horizontal desplazable con los mismos íconos (incluye Perfiles). Medido: con el menú cerrado el encabezado siempre medía 64 px y los filtros empezaban a 12 px; no había otro contenedor con espacio sobrante.
+- **Pie de página**: menú en cuadrícula con íconos (2 columnas en celular, 3 en tablet), logo blanco real, enlaces legales visibles de 40 px.
+- **Scrollbars**: delgadas y redondeadas en azul (`index.css`: `scrollbar-width/color` + `::-webkit-scrollbar`); el panel de notificaciones reserva el espacio de la barra (`scrollbar-gutter: stable`) y se desplaza solo.
+- **Textos legales**: sin marcas «Pendiente» públicas. Responsable: el equipo de estudiantes del proyecto; contacto: el repositorio público en GitHub (sin inventar correos). Edad mínima: 18 años como política del proyecto.
+- **Revisión interna (no publicada)**:
+  - Inconsistencia: el registro (`RegistroNombre.jsx`) y auth-service (`PUT /api/usuarios`, CHECK `Usuario_edad_check`) aceptan edades de 5 a 120 para la cuenta, contra la política de 18+. Corrección propuesta: validar `edad >= 18` para la cuenta en el formulario y en `actualizarUsuario` (auth-service), manteniendo 5–120 para perfiles secundarios; no cambiar el CHECK de la base (lo comparten perfiles y cuentas existentes). Antes, revisar cuántas cuentas existentes tienen menos de 18.
+  - Si Butaca pasa a uso real, definir una persona o institución responsable identificable y un canal privado de contacto.
+  - La casilla «Autorizo guardar esta emoción» sigue marcada por defecto (decisión pendiente del equipo).
+- Orden por relevancia: dentro de cada emoción pesan más los géneros más representativos (primeros de la lista); «Calma» excluye Acción. Validado en producción: ninguna emoción repite el trío de otra (Miedo y Desagrado comparten títulos de terror por su tabla de géneros).

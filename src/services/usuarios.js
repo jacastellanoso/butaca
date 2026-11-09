@@ -14,6 +14,10 @@ export function sincronizarUsuario() {
   return sincronizacion
 }
 
+export function actualizarNombreUsuario(nombre, apellido, edad) {
+  return solicitarApi('/api/usuarios', { method: 'PUT', body: { nombre, apellido, edad } })
+}
+
 /** Al cerrar sesión la próxima cuenta debe volver a sincronizarse. */
 export function olvidarSincronizacion() {
   sincronizacion = null

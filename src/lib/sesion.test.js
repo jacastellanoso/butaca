@@ -55,6 +55,17 @@ test('un fallo de red no cierra la sesión: devuelve error para reintentar', asy
   assert.deepEqual(await validarSesion(cliente({ falla: true })), { estado: 'error' })
 })
 
+test('un fallo transitorio conserva una sesión local que ya identifica al usuario', async () => {
+  const session = { access_token: 'token-ficticio', user: { id: 'u-recordado', email: 'recordado@example.com' } }
+  const c = cliente({ session, errorUser: { status: 0, message: 'fetch failed' } })
+  assert.deepEqual(await validarSesion(c), {
+    estado: 'autenticado',
+    usuario: session.user,
+    verificacionPendiente: true,
+  })
+  assert.ok(!c.llamadas.some((llamada) => llamada.startsWith('signOut')))
+})
+
 test('una respuesta sin id de usuario no se acepta', async () => {
   assert.deepEqual(await validarSesion(cliente({ user: {} })), { estado: 'anonimo' })
 })

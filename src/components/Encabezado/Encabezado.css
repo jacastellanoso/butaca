@@ -180,17 +180,50 @@
   gap: 3px;
 }
 
-.app-header__menu-profile strong,
-.app-header__menu-profile span {
+/* Solo los textos: el avatar también es un <span> y debe conservar su inicial
+   blanca (perfiles sin foto, como uno secundario). */
+.app-header__menu-profile div strong,
+.app-header__menu-profile div span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.app-header__menu-profile span {
+.app-header__menu-profile div span {
   color: #4c5f8f;
   font-size: 12px;
   font-weight: 600;
+}
+
+.app-header__menu-profile .app-header__menu-etiqueta {
+  color: #0067df;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+/* Cuenta con la que se inició sesión (puede ser distinta del perfil activo). */
+.app-header__menu-cuenta {
+  display: grid;
+  gap: 2px;
+  margin: 0 0 6px;
+  padding: 0 8px 12px;
+  border-bottom: 1px solid #e3edfc;
+  color: #4c5f8f;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.app-header__menu-cuenta strong {
+  color: var(--header-ink);
+}
+
+.app-header__menu-cuenta strong,
+.app-header__menu-cuenta span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .app-header__menu-item {
@@ -232,6 +265,36 @@
   font-weight: 600;
 }
 
+.app-header__menu-perfiles {
+  display: grid;
+  gap: 2px;
+  margin-bottom: 4px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #e3edfc;
+}
+
+.app-header__menu-titulo {
+  padding: 2px 12px;
+  color: #4c5f8f;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.app-header__menu-perfil {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+}
+
+.app-header__menu-perfil span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Avatar compartido (encabezado y selección de perfiles) */
 
 .avatar-perfil {
@@ -263,50 +326,6 @@
   font-size: 20px;
 }
 
-/* Botón hamburguesa (solo en pantallas medianas y chicas) */
-
-.app-header__toggle {
-  display: none;
-  width: 44px;
-  height: 44px;
-  flex: 0 0 auto;
-  place-items: center;
-  border: 0;
-  border-radius: 50%;
-  color: #ffffff;
-  background: var(--header-blue);
-  cursor: pointer;
-}
-
-.app-header__toggle-bars,
-.app-header__toggle-bars::before,
-.app-header__toggle-bars::after {
-  display: block;
-  width: 18px;
-  height: 2.5px;
-  border-radius: 2px;
-  background: currentColor;
-}
-
-.app-header__toggle-bars {
-  position: relative;
-}
-
-.app-header__toggle-bars::before,
-.app-header__toggle-bars::after {
-  position: absolute;
-  left: 0;
-  content: '';
-}
-
-.app-header__toggle-bars::before {
-  top: -6px;
-}
-
-.app-header__toggle-bars::after {
-  top: 6px;
-}
-
 .app-header a:focus-visible,
 .app-header button:focus-visible {
   outline: 3px solid #0470f6;
@@ -320,39 +339,90 @@
   }
 }
 
-@media (max-width: 1180px) {
-  .app-header__toggle {
-    display: grid;
-    order: 3;
-  }
-
-  .app-header__user {
-    order: 2;
+/* Entre 1181 y 1440 px entran las seis opciones: el botón de usuario muestra
+   solo el avatar (su nombre sigue en aria-label) y los enlaces se compactan. */
+@media (min-width: 1181px) and (max-width: 1440px) {
+  .app-header {
+    gap: 10px;
   }
 
   .app-header__nav {
-    position: absolute;
-    top: 100%;
-    right: 0;
-    left: 0;
-    display: none;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 4px;
-    padding: 10px clamp(14px, 2.5vw, 34px) 16px;
-    background: #ffffff;
-    box-shadow: 0 14px 24px rgb(0 25 120 / 18%);
-  }
-
-  .app-header__nav--abierta {
-    display: flex;
-    animation: app-header-menu 160ms ease both;
+    gap: 2px;
   }
 
   .app-header__link {
-    min-height: 48px;
-    padding: 6px 14px 6px 8px;
-    font-size: 15px;
+    padding-right: 10px;
+    font-size: 13px;
+  }
+
+  .app-header__user-name,
+  .app-header__chevron {
+    display: none;
+  }
+
+  .app-header__user-button {
+    padding: 3px;
+  }
+}
+
+/* En escritorio, Perfiles está en el menú de usuario. */
+.app-header__link--perfiles {
+  display: none;
+}
+
+/* Pantallas medianas y chicas: sin menú desplegable. La navegación es una
+   segunda fila horizontal, compacta y desplazable con el dedo, con los mismos
+   íconos del encabezado. Así no aparece el panel blanco de 334 px que tapaba
+   el comienzo de la galería. */
+@media (max-width: 1180px) {
+  .app-header {
+    flex-wrap: wrap;
+    row-gap: 6px;
+    padding-bottom: 6px;
+  }
+
+  .app-header__nav {
+    display: flex;
+    order: 10;
+    width: calc(100% + 2 * clamp(14px, 2.5vw, 34px));
+    flex: 0 0 auto;
+    margin: 0 calc(-1 * clamp(14px, 2.5vw, 34px));
+    padding: 2px clamp(14px, 2.5vw, 34px) 4px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-padding-inline: clamp(14px, 2.5vw, 34px);
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+    gap: 6px;
+    /* Degradado en los bordes: indica que hay más opciones al deslizar. */
+    mask-image: linear-gradient(90deg, transparent 0, #000 12px, #000 calc(100% - 18px), transparent 100%);
+  }
+
+  .app-header__nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .app-header__link {
+    min-height: 40px;
+    flex: 0 0 auto;
+    padding: 4px 12px 4px 5px;
+    border: 1px solid #dbe8fb;
+    font-size: 13px;
+    scroll-snap-align: start;
+  }
+
+  .app-header__link--perfiles {
+    display: inline-flex;
+  }
+
+  .app-header__icon,
+  .app-header__icon img {
+    width: 28px;
+    height: 28px;
+  }
+
+  .app-header__link:hover {
+    transform: none;
   }
 }
 

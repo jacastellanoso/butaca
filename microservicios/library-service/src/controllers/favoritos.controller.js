@@ -19,7 +19,7 @@ export async function listarFavoritos(req, res) {
   }
 
   try {
-    const respuesta = await favoritosService.listar(req.user.id, datos)
+    const respuesta = await favoritosService.listar(req.user.id, req.perfilId, datos)
     return res.json(respuesta)
   } catch (fallo) {
     registrarFallo('consultar', fallo)
@@ -37,7 +37,7 @@ export async function agregarFavorito(req, res) {
   }
 
   try {
-    const { favorito, creado } = await favoritosService.agregar(req.user.id, datos)
+    const { favorito, creado } = await favoritosService.agregar(req.user.id, req.perfilId, datos)
     return res.status(creado ? 201 : 200).json(favorito)
   } catch (fallo) {
     if (fallo?.code === 'P2003') {
@@ -59,7 +59,7 @@ export async function eliminarFavorito(req, res) {
   }
 
   try {
-    const eliminado = await favoritosService.eliminar(req.user.id, req.params.id)
+    const eliminado = await favoritosService.eliminar(req.user.id, req.perfilId, req.params.id)
     if (!eliminado) {
       return res.status(404).json(noEncontrado)
     }

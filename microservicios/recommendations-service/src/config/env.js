@@ -4,16 +4,18 @@ import 'dotenv/config'
 export const env = {
   serviceName: process.env.SERVICE_NAME ?? 'recommendations-service',
   port: Number(process.env.PORT) || 3024,
-  authServiceUrl: readUrl('AUTH_SERVICE_URL', 'http://auth-service:3021'),
-  emotionsServiceUrl: readUrl('EMOTIONS_SERVICE_URL', 'http://emotions-service:3022'),
-  catalogServiceUrl: readUrl('CATALOG_SERVICE_URL', 'http://catalog-service:3023'),
-  requestTimeoutMs: readTimeout('REQUEST_TIMEOUT_MS', 4000),
-  upstreamTimeoutMs: readTimeout('UPSTREAM_TIMEOUT_MS', 2500),
+  // Por defecto, servicios en esta misma máquina (npm run dev en cada carpeta),
+  // igual que el API Gateway. compose.yaml y render.yaml fijan sus propias URLs.
+  authServiceUrl: readUrl('AUTH_SERVICE_URL', 'http://localhost:3021'),
+  emotionsServiceUrl: readUrl('EMOTIONS_SERVICE_URL', 'http://localhost:3022'),
+  catalogServiceUrl: readUrl('CATALOG_SERVICE_URL', 'http://localhost:3023'),
+  requestTimeoutMs: readTimeout('REQUEST_TIMEOUT_MS', 45_000),
+  upstreamTimeoutMs: readTimeout('UPSTREAM_TIMEOUT_MS', 30_000),
 }
 
 function readTimeout(name, fallback) {
   const value = Number(process.env[name] ?? fallback)
-  if (!Number.isInteger(value) || value < 1 || value > 4000) {
+  if (!Number.isInteger(value) || value < 1 || value > 60_000) {
     throw new Error(`Configuración inválida: ${name}`)
   }
   return value
@@ -21,7 +23,9 @@ function readTimeout(name, fallback) {
 
 function readUrl(name, fallback) {
   try {
-    const url = new URL(process.env[name] || fallback)
+    const value = process.env[name] || fallback
+    const normalizedUrl = value.includes('://') ? value : `http://${value}`
+    const url = new URL(normalizedUrl)
     if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password ||
         url.pathname !== '/' || url.search || url.hash) throw new Error()
     return url.origin

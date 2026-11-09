@@ -1,45 +1,17 @@
 import { useEffect, useId, useRef, useState } from 'react'
 
-import iconoEscanear from '../../../iconoescanearme.svg'
-import iconoRecomendaciones from '../../../iconomisreconocimientos.svg'
 import logoButaca from '../../../logobutacaoficial.svg'
-import { IconoCorazon } from '../BotonFavorito/BotonFavorito.jsx'
+import { EVENTO_NAVEGACION } from '../../lib/rutas.js'
+import CentroNotificaciones from '../Notificaciones/CentroNotificaciones.jsx'
+import { OPCIONES } from './opcionesNavegacion.jsx'
 import './Encabezado.css'
-
-function IconoGaleria() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <rect x="3" y="3" width="7.5" height="7.5" rx="2" />
-      <rect x="13.5" y="3" width="7.5" height="7.5" rx="2" />
-      <rect x="3" y="13.5" width="7.5" height="7.5" rx="2" />
-      <rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2" />
-    </svg>
-  )
-}
-
-function IconoDashboard() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <path d="M4 20V11M10 20V4M16 20v-6M22 20H2" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
-    </svg>
-  )
-}
-
-// Opciones del menú principal. `clave` coincide con la pantalla o sección activa.
-const OPCIONES = [
-  { clave: 'galeria', href: '#galeria', etiqueta: 'Galería', icono: <IconoGaleria /> },
-  { clave: 'rostro', href: '#rostro', etiqueta: 'Escanearme', imagen: iconoEscanear },
-  { clave: 'recomendaciones', href: '#recomendaciones', etiqueta: 'Mis recomendaciones', imagen: iconoRecomendaciones },
-  { clave: 'dashboard', href: '#dashboard', etiqueta: 'Dashboard', icono: <IconoDashboard /> },
-  { clave: 'favoritos', href: '#favoritos', etiqueta: 'Favoritos', icono: <IconoCorazon lleno /> },
-]
 
 export function AvatarPerfil({ perfil, tamano = 'md' }) {
   const [fallo, setFallo] = useState(false)
   return (
     <span className={`avatar-perfil avatar-perfil--${tamano}`} aria-hidden="true">
       {perfil?.avatar && !fallo ? (
-        <img src={perfil.avatar} alt="" referrerPolicy="no-referrer" onError={() => setFallo(true)} />
+        <img draggable={false} src={perfil.avatar} alt="" referrerPolicy="no-referrer" onError={() => setFallo(true)} />
       ) : (
         perfil?.inicial ?? 'B'
       )}
@@ -49,22 +21,20 @@ export function AvatarPerfil({ perfil, tamano = 'md' }) {
 
 /**
  * Encabezado de las pantallas con sesión: navegación de toda la aplicación y
- * menú de usuario (cambiar perfil y cerrar sesión).
- * activa: 'galeria' | 'rostro' | 'recomendaciones' | 'dashboard' | 'favoritos' | 'historial'
+ * menú de usuario (perfil activo, cambio rápido de perfil y cerrar sesión) y
+ * centro de notificaciones.
+ * activa: 'galeria' | 'rostro' | 'recomendaciones' | 'grupos' | 'dashboard' | 'favoritos' | 'historial'
  */
-function Encabezado({ activa, perfil, onCerrarSesion }) {
-  const [menuAbierto, setMenuAbierto] = useState(false)
+function Encabezado({ activa, perfil, cuenta, perfiles = [], onCambiarPerfil, onCerrarSesion }) {
   const [usuarioAbierto, setUsuarioAbierto] = useState(false)
   const [cerrando, setCerrando] = useState(false)
   const [error, setError] = useState('')
-  const menuId = useId()
   const usuarioId = useId()
   const usuarioRef = useRef(null)
 
   useEffect(() => {
     const cerrarConEscape = (event) => {
       if (event.key === 'Escape') {
-        setMenuAbierto(false)
         setUsuarioAbierto(false)
       }
     }
@@ -72,16 +42,15 @@ function Encabezado({ activa, perfil, onCerrarSesion }) {
       if (!usuarioRef.current?.contains(event.target)) setUsuarioAbierto(false)
     }
     const cerrarAlNavegar = () => {
-      setMenuAbierto(false)
       setUsuarioAbierto(false)
     }
     document.addEventListener('keydown', cerrarConEscape)
     document.addEventListener('mousedown', cerrarAfuera)
-    window.addEventListener('hashchange', cerrarAlNavegar)
+    window.addEventListener(EVENTO_NAVEGACION, cerrarAlNavegar)
     return () => {
       document.removeEventListener('keydown', cerrarConEscape)
       document.removeEventListener('mousedown', cerrarAfuera)
-      window.removeEventListener('hashchange', cerrarAlNavegar)
+      window.removeEventListener(EVENTO_NAVEGACION, cerrarAlNavegar)
     }
   }, [])
 
@@ -96,31 +65,20 @@ function Encabezado({ activa, perfil, onCerrarSesion }) {
     }
   }
 
+  const otrosPerfiles = perfiles.filter((otro) => otro.id !== perfil?.id)
+
   // Historial vive dentro del dashboard.
   const claveActiva = activa === 'historial' || activa === 'emociones' ? 'dashboard' : activa
 
   return (
     <header className="app-header">
-      <a className="app-header__brand" href="#galeria" aria-label="Butaca: ir a la galería">
-        <img src={logoButaca} alt="Butaca" />
+      <a className="app-header__brand" draggable={false} href="/galeria" aria-label="Butaca: ir a la galería">
+        <img draggable={false} src={logoButaca} alt="Butaca" />
       </a>
 
-      <button
-        className="app-header__toggle"
-        type="button"
-        aria-expanded={menuAbierto}
-        aria-controls={menuId}
-        onClick={() => setMenuAbierto((abierto) => !abierto)}
-      >
-        <span className="app-header__toggle-bars" aria-hidden="true" />
-        <span className="visually-hidden">{menuAbierto ? 'Cerrar menú' : 'Abrir menú'}</span>
-      </button>
-
-      <nav
-        id={menuId}
-        className={`app-header__nav${menuAbierto ? ' app-header__nav--abierta' : ''}`}
-        aria-label="Navegación principal"
-      >
+      {/* En pantallas medianas y chicas es una fila horizontal desplazable debajo
+          del logo (sin menú desplegable que tape la página). */}
+      <nav className="app-header__nav" aria-label="Navegación principal">
         {OPCIONES.map(({ clave, href, etiqueta, icono, imagen }) => (
           <a
             key={clave}
@@ -128,11 +86,13 @@ function Encabezado({ activa, perfil, onCerrarSesion }) {
             href={href}
             aria-current={claveActiva === clave ? 'page' : undefined}
           >
-            <span className="app-header__icon">{imagen ? <img src={imagen} alt="" aria-hidden="true" /> : icono}</span>
+            <span className="app-header__icon">{imagen ? <img draggable={false} src={imagen} alt="" aria-hidden="true" /> : icono}</span>
             <span>{etiqueta}</span>
           </a>
         ))}
       </nav>
+
+      <CentroNotificaciones key={perfil?.id ?? 'cuenta'} perfilId={perfil?.id} />
 
       <div className="app-header__user" ref={usuarioRef}>
         <button
@@ -141,6 +101,7 @@ function Encabezado({ activa, perfil, onCerrarSesion }) {
           aria-expanded={usuarioAbierto}
           aria-controls={usuarioId}
           aria-haspopup="true"
+          aria-label={`Menú de ${perfil?.nombre ?? 'mi cuenta'}`}
           onClick={() => setUsuarioAbierto((abierto) => !abierto)}
         >
           <AvatarPerfil perfil={perfil} />
@@ -153,12 +114,39 @@ function Encabezado({ activa, perfil, onCerrarSesion }) {
             <div className="app-header__menu-profile">
               <AvatarPerfil perfil={perfil} tamano="lg" />
               <div>
-                <strong>{perfil?.nombre}</strong>
-                {perfil?.email && <span>{perfil.email}</span>}
+                <span className="app-header__menu-etiqueta">Perfil activo</span>
+                <strong data-testid="perfil-activo">{perfil?.nombre}</strong>
+                <span>{perfil?.edad ? `${perfil.edad} años` : perfil?.esPrincipal ? 'Perfil principal' : 'Perfil'}</span>
               </div>
             </div>
-            <a className="app-header__menu-item" href="#perfiles">
-              Cambiar perfil
+            {/* La cuenta (quien inició sesión) es distinta del perfil que está mirando. */}
+            {cuenta && (
+              <p className="app-header__menu-cuenta" data-testid="cuenta-sesion">
+                Cuenta: <strong>{cuenta.nombre}</strong>
+                {cuenta.email && <span>{cuenta.email}</span>}
+              </p>
+            )}
+            {otrosPerfiles.length > 0 && onCambiarPerfil && (
+              <div className="app-header__menu-perfiles" role="group" aria-label="Cambiar de perfil">
+                <span className="app-header__menu-titulo">Cambiar a</span>
+                {otrosPerfiles.map((otro) => (
+                  <button
+                    key={otro.id}
+                    className="app-header__menu-item app-header__menu-perfil"
+                    type="button"
+                    onClick={() => {
+                      setUsuarioAbierto(false)
+                      onCambiarPerfil(otro.id)
+                    }}
+                  >
+                    <AvatarPerfil perfil={otro} />
+                    <span>{otro.nombre}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            <a className="app-header__menu-item" href="/perfiles">
+              {otrosPerfiles.length > 0 ? 'Administrar perfiles' : 'Cambiar perfil'}
             </a>
             <button
               className="app-header__menu-item app-header__menu-item--logout"

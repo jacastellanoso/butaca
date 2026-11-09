@@ -5,6 +5,9 @@ import { errorHandler } from './middlewares/errorHandler.js'
 import { notFound } from './middlewares/notFound.js'
 import { sesionesRouter } from './routes/sesiones.routes.js'
 import { usuariosRouter } from './routes/usuarios.routes.js'
+import { gruposRouter } from './routes/grupos.routes.js'
+import { notificacionesRouter } from './routes/notificaciones.routes.js'
+import { invitacionesRouter, perfilesRouter } from './routes/perfiles.routes.js'
 
 // app.js crea y exporta Express sin listen (lo usan las pruebas).
 export const app = express()
@@ -24,6 +27,10 @@ app.get('/health', (req, res) => {
 
 app.use('/api/sesiones', sesionesRouter)
 app.use('/api/usuarios', usuariosRouter)
+app.use('/api/perfiles', perfilesRouter)
+app.use('/api/invitaciones', invitacionesRouter)
+app.use('/api/grupos', gruposRouter)
+app.use('/api/notificaciones', notificacionesRouter)
 
 app.use(notFound)
 app.use(errorHandler)

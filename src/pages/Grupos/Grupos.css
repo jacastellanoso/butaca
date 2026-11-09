@@ -1,0 +1,334 @@
+/* Grupos: mismo fondo y tarjetas blancas del dashboard (Dashboard.css). */
+
+.grupos-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+  align-items: start;
+  gap: clamp(14px, 2vw, 24px);
+}
+
+/* La lista es una tarjeta blanca; el detalle muestra su título sobre el azul. */
+.grupos-lista {
+  padding: 18px;
+  border-radius: 22px;
+  color: var(--dash-ink);
+  background: var(--dash-surface);
+  box-shadow: 0 14px 30px rgb(0 15 95 / 20%);
+}
+
+.grupos-lista h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.grupo-detalle h2 {
+  margin: 0 0 8px;
+  color: #ffffff;
+  font-size: clamp(22px, 2.4vw, 30px);
+  text-shadow: 0 4px 16px rgb(0 15 120 / 25%);
+}
+
+.grupos-items {
+  display: grid;
+  gap: 6px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.grupos-items a {
+  display: grid;
+  gap: 2px;
+  padding: 12px 14px;
+  border: 2px solid var(--dash-line);
+  border-radius: 14px;
+  color: var(--dash-ink);
+  text-decoration: none;
+  transition: border-color 160ms ease, background 160ms ease;
+}
+
+.grupos-items a:hover,
+.grupos-items a[aria-current='page'] {
+  border-color: var(--dash-light);
+  background: var(--dash-soft);
+}
+
+.grupos-items small,
+.grupos-miembros small {
+  color: var(--dash-ink-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Invitaciones recibidas: arriba de la lista, resaltadas en celeste. */
+.grupos-invitaciones {
+  margin: 14px 0 4px;
+  padding: 12px;
+  border: 2px solid var(--dash-light);
+  border-radius: 16px;
+  background: var(--dash-soft);
+}
+
+.grupos-invitaciones h3 {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+.grupos-invitaciones ul {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.grupos-invitaciones p {
+  display: grid;
+  gap: 2px;
+  margin: 0 0 8px;
+  font-size: 14px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.grupos-invitaciones small {
+  color: var(--dash-ink-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.grupos-invitaciones__acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.grupos-ayuda {
+  margin: 10px 0 0;
+  color: var(--dash-ink-2);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.grupos-ayuda a {
+  color: var(--dash-blue);
+  font-weight: 700;
+}
+
+.grupos-form {
+  display: grid;
+  gap: 8px;
+  margin-top: 6px;
+  color: var(--dash-ink);
+}
+
+.grupos-form label {
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.grupos-form input,
+.grupos-form select {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 2px solid #c9d8f2;
+  border-radius: 12px;
+  color: var(--dash-ink);
+  background: #ffffff;
+  font: inherit;
+  font-size: max(16px, 1rem);
+}
+
+.grupos-form input:focus-visible,
+.grupos-form select:focus-visible {
+  outline: 3px solid var(--dash-light);
+  outline-offset: 1px;
+  border-color: var(--dash-blue);
+}
+
+.grupos-form__fila {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.grupos-form__fila input {
+  flex: 1 1 180px;
+}
+
+.grupos-form__error,
+.grupos-form__ok {
+  margin: 4px 0 0;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.grupos-form__error {
+  color: #a00028;
+}
+
+.grupos-form__ok {
+  color: #0b6b3a;
+}
+
+.grupo-detalle__cabecera {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.grupo-detalle__cabecera p {
+  margin: -2px 0 8px;
+  color: #ffffff;
+  opacity: 0.85;
+}
+
+.grupos-chip {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  color: var(--dash-blue);
+  background: var(--dash-soft);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.grupos-peligro {
+  border-color: #ffffff !important;
+  color: #c0163d !important;
+  background: #ffffff !important;
+}
+
+.grupo-detalle__columnas {
+  display: grid;
+  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+  align-items: start;
+  gap: 16px;
+}
+
+.grupos-tarjeta {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--dash-line);
+  border-radius: 18px;
+  color: var(--dash-ink);
+  background: #fbfdff;
+}
+
+.grupos-tarjeta h3 {
+  margin: 0 0 10px;
+  font-size: 16px;
+}
+
+.grupos-tarjeta h4 {
+  margin: 16px 0 6px;
+  font-size: 13px;
+}
+
+.grupos-miembros,
+.grupos-pendientes {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 14px;
+  padding: 0;
+  list-style: none;
+}
+
+.grupos-miembros li,
+.grupos-pendientes li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.grupos-pendientes li span {
+  flex: 1 1 auto;
+  overflow: hidden;
+  color: var(--dash-ink-2);
+  font-size: 13px;
+  text-overflow: ellipsis;
+}
+
+.grupos-miembros__avatar {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  color: #ffffff;
+  background: linear-gradient(145deg, #5aa8fa, #0047d6);
+  font-weight: 800;
+}
+
+.grupos-miembros__datos {
+  display: grid;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.grupos-miembros__datos strong,
+.grupos-miembros__datos small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.grupos-quitar {
+  min-height: 32px;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 999px;
+  color: #a00028;
+  background: #ffe9ee;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.grupos-compartir {
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--dash-line);
+}
+
+.grupos-compartir h3 {
+  margin-bottom: 2px;
+}
+
+.grupos-compartir > button {
+  justify-self: start;
+}
+
+.grupos-recomendaciones {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 140px), 1fr));
+  margin-top: 6px;
+}
+
+.grupos-autor {
+  margin: 6px 0;
+  color: var(--dash-ink-2);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.grupos-autor strong {
+  color: var(--dash-ink);
+}
+
+@media (max-width: 1100px) {
+  .grupo-detalle__columnas {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 860px) {
+  .grupos-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

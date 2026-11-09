@@ -15,15 +15,17 @@ const animoSelect = {
 
 // Solo se consultan registros guardados con autorización explícita; los
 // ánimos previos a pf13 (consentimientoHistorial = false) no forman parte del historial.
-const delUsuario = (usuarioId) => ({ usuarioId, consentimientoHistorial: true })
+// Cada perfil de la cuenta tiene su propio historial (perfilId verificado en perfilActivo).
+const delUsuario = (usuarioId, perfilId) => ({ usuarioId, perfilId, consentimientoHistorial: true })
 
 export const animosService = {
   // No crea al Usuario: esa responsabilidad es de auth-service (POST /api/usuarios).
   // Si no existe, Prisma rechaza la clave foránea con P2003.
-  async registrar(usuarioId, { emocion, confianza, origen }) {
+  async registrar(usuarioId, perfilId, { emocion, confianza, origen }) {
     return prisma.animo.create({
       data: {
         usuarioId,
+        perfilId,
         emocion,
         confianza,
         origen,
@@ -35,8 +37,8 @@ export const animosService = {
     })
   },
 
-  async listar(usuarioId, { pagina, limite, emocion, origen, desde, hasta, orden }) {
-    const where = { ...delUsuario(usuarioId) }
+  async listar(usuarioId, perfilId, { pagina, limite, emocion, origen, desde, hasta, orden }) {
+    const where = { ...delUsuario(usuarioId, perfilId) }
     if (emocion) where.emocion = emocion
     if (origen) where.origen = origen
     if (desde || hasta) {
@@ -63,9 +65,9 @@ export const animosService = {
     }
   },
 
-  async obtener(usuarioId, id) {
+  async obtener(usuarioId, perfilId, id) {
     return prisma.animo.findFirst({
-      where: { id, ...delUsuario(usuarioId) },
+      where: { id, ...delUsuario(usuarioId, perfilId) },
       select: animoSelect,
     })
   },

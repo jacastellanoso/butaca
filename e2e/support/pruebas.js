@@ -35,9 +35,18 @@ export function menu(page, nombre) {
   return page.getByRole('navigation', { name: 'Navegación principal' }).getByRole('link', { name: nombre })
 }
 
-/** Elige el perfil en "¿Quién va a ver hoy?" y espera la galería. */
+/**
+ * Flujo vigente (pf25): con sesión iniciada se llega a "¿Quién va a ver hoy?";
+ * se elige el perfil (por defecto el principal, "Majo Prueba") y se espera la galería.
+ */
 export async function entrarComo(page, nombre = 'Majo Prueba') {
   await page.goto('/')
-  await page.getByRole('button', { name: new RegExp(nombre) }).click()
-  await expect(page).toHaveURL(/#galeria$/)
+  await expect(page).toHaveURL(/\/perfiles$/)
+  await page.getByRole('button', { name: `Entrar como ${nombre}` }).click()
+  await expect(page).toHaveURL(/\/galeria$/)
+}
+
+/** El botón del menú de usuario muestra el perfil activo. */
+export function botonUsuario(page) {
+  return page.locator('.app-header__user-button')
 }

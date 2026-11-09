@@ -11,9 +11,11 @@ const config = {
   emotionsServiceUrl: 'http://emotions.test', catalogServiceUrl: 'http://catalog.test',
   requestTimeoutMs: 1000, upstreamTimeoutMs: 500,
 }
-const item = (tmdbId = 1, tipoTmdb = 'movie', calificacion = 8) => ({
+const TODAS = ['neutral', 'happy', 'sad', 'angry', 'fearful', 'disgusted', 'surprised']
+// emociones y generos vienen de catalog-service (constants/emociones.js).
+const item = (tmdbId = 1, tipoTmdb = 'movie', calificacion = 8, emociones = TODAS, generos = ['Drama']) => ({
   tmdbId, tipoTmdb, titulo: `Título ${tmdbId}`, descripcion: '', poster: null,
-  fecha: null, calificacion, esDemostracion: false,
+  fecha: null, calificacion, esDemostracion: false, emociones, generos,
 })
 const json = (body, status = 200) => Response.json(body, { status })
 
@@ -52,16 +54,15 @@ test('sesión rechazada no consulta datos', async (t) => {
   assert.equal(f.calls.length, 1)
 })
 
-for (const [emocion, categorias] of Object.entries({
-  happy: ['Comedia', 'Acción'], sad: ['Comedia', 'Animación'], angry: ['Acción', 'Comedia'],
-  fearful: ['Comedia', 'Animación'], disgusted: ['Acción', 'Ciencia ficción'],
-  surprised: ['Ciencia ficción', 'Terror'], neutral: ['Drama', 'Acción'],
-})) {
-  test(`mapeo y contrato ${emocion}`, async (t) => {
+for (const emocion of TODAS) {
+  test(`contrato ${emocion}: el catálogo aplica la relación emoción → géneros`, async (t) => {
     const f = await fixture(t)
     const { response, body } = await f.request(`emocion=${emocion}`)
     assert.equal(response.status, 200)
-    assert.deepEqual(f.calls.slice(1).map((call) => call.url.searchParams.get('categoria')), categorias)
+    // Una consulta por página candidata, siempre con la emoción (fuente única en catalog-service).
+    assert.deepEqual(f.calls.slice(1).map((call) => Object.fromEntries(call.url.searchParams)), [
+      { tipo: 'movie', emocion, pagina: '1' }, { tipo: 'movie', emocion, pagina: '2' },
+    ])
     assert.equal(f.calls[0].headers.Authorization, 'Bearer valid')
     assert.ok(f.calls.slice(1).every((call) => !call.headers.Authorization && call.redirect === 'error'))
     assert.deepEqual(body, { emocion, tipo: 'movie', fuente: 'tmdb', resultados: [{
@@ -111,17 +112,37 @@ for (const query of ['', `emocion=happy&animoId=${id}`, 'emocion=no', 'emocion='
   })
 }
 
-test('deduplicación, prioridad, calificación, desempate y máximo veinte', async (t) => {
+test('deduplicación entre páginas, orden de relevancia del catálogo y máximo veinte', async (t) => {
   const f = await fixture(t, (url) => {
     if (url.hostname !== 'catalog.test') return
-    return json({ fuente: 'tmdb', resultados: url.searchParams.get('categoria') === 'Comedia'
+    return json({ fuente: 'tmdb', resultados: url.searchParams.get('pagina') === '1'
       ? [item(3), item(2), item(1, 'movie', 9)]
-      : [item(1), ...Array.from({ length: 30 }, (_, i) => item(i + 4))].reverse() })
+      : [item(1), ...Array.from({ length: 30 }, (_, i) => item(i + 4))] })
   })
   const { body } = await f.request()
   assert.equal(body.resultados.length, 20)
-  assert.deepEqual(body.resultados.slice(0, 4).map((x) => x.tmdbId), [1, 2, 3, 4])
+  assert.deepEqual(body.resultados.slice(0, 4).map((x) => x.tmdbId), [3, 2, 1, 4])
   assert.equal(new Set(body.resultados.map((x) => x.tmdbId)).size, 20)
+})
+
+test('nunca recomienda títulos que el catálogo no relaciona con la emoción', async (t) => {
+  const f = await fixture(t, (url) => url.hostname === 'catalog.test' && json({ fuente: 'tmdb', resultados: [
+    item(1, 'movie', 8, ['fearful', 'surprised']), item(2, 'movie', 8, ['happy']), item(3, 'movie', 8, []), { ...item(4), emociones: undefined },
+  ] }))
+  const { response, body } = await f.request('emocion=fearful')
+  assert.equal(response.status, 200)
+  assert.deepEqual(body.resultados.map((x) => x.tmdbId), [1])
+})
+
+test('las primeras recomendaciones son diversas: se alternan géneros', async (t) => {
+  const f = await fixture(t, (url) => url.hostname === 'catalog.test' && url.searchParams.get('pagina') === '1' && json({ fuente: 'tmdb', resultados: [
+    item(1, 'movie', 8, TODAS, ['Comedia']), item(2, 'movie', 8, TODAS, ['Comedia']), item(3, 'movie', 8, TODAS, ['Comedia']),
+    item(4, 'movie', 8, TODAS, ['Animación']), item(5, 'movie', 8, TODAS, ['Acción']), item(6, 'movie', 8, TODAS, ['Animación']),
+  ] }))
+  const { body } = await f.request()
+  // Las tres primeras son de tres géneros distintos; no se pierde ningún título.
+  assert.deepEqual(body.resultados.slice(0, 3).map((x) => x.tmdbId), [1, 4, 5])
+  assert.deepEqual(body.resultados.map((x) => x.tmdbId).sort((a, b) => a - b), [1, 2, 3, 4, 5, 6])
 })
 
 test('vacío válido sin sustitutos', async (t) => {
@@ -131,14 +152,13 @@ test('vacío válido sin sustitutos', async (t) => {
   assert.deepEqual(body.resultados, [])
 })
 
-test('calificación null del catálogo es válida y se ordena al final', async (t) => {
+test('calificación null del catálogo es válida', async (t) => {
   const f = await fixture(t, (url) => url.hostname === 'catalog.test' && json({
     fuente: 'tmdb', resultados: [item(1, 'movie', null), item(2, 'movie', 0)],
   }))
   const { response, body } = await f.request()
   assert.equal(response.status, 200)
-  assert.deepEqual(body.resultados.map((x) => x.tmdbId), [2, 1])
-  assert.equal(body.resultados[1].calificacion, null)
+  assert.deepEqual(body.resultados.map((x) => [x.tmdbId, x.calificacion]), [[1, null], [2, 0]])
 })
 
 test('rechaza contenido de demostración', async (t) => {
@@ -173,7 +193,7 @@ for (const host of ['auth.test', 'emotions.test', 'catalog.test']) {
 }
 
 test('fallo parcial explícito', async (t) => {
-  const f = await fixture(t, (url) => url.searchParams.get('categoria') === 'Acción' && json({}, 503))
+  const f = await fixture(t, (url) => url.hostname === 'catalog.test' && url.searchParams.get('pagina') === '2' && json({}, 503))
   const { response, body } = await f.request()
   assert.equal(response.status, 503)
   assert.ok(!Object.hasOwn(body, 'resultados'))
@@ -201,3 +221,19 @@ for (const mode of ['cabeceras', 'body', 'global']) {
     assert.ok(performance.now() - start < 1000)
   })
 }
+
+test('una dependencia dormida en Render se informa con X-Butaca-Despertar', async (t) => {
+  const f = await fixture(t, (url) => url.hostname === 'catalog.test' &&
+    new Response('<!DOCTYPE html>', { status: 502, headers: { 'x-render-routing': 'no-deploy', 'Content-Type': 'text/html' } }),
+  { catalogServiceUrl: 'https://catalog.test' })
+  const { response } = await f.request()
+  assert.equal(response.status, 503)
+  assert.equal(response.headers.get('x-butaca-despertar'), 'https://catalog.test/health')
+})
+
+test('un 503 propio de una dependencia (sin x-render-routing) no pide despertar nada', async (t) => {
+  const f = await fixture(t, (url) => url.hostname === 'catalog.test' && json({ error: 'x' }, 503), { catalogServiceUrl: 'https://catalog.test' })
+  const { response } = await f.request()
+  assert.equal(response.status, 503)
+  assert.equal(response.headers.get('x-butaca-despertar'), null)
+})

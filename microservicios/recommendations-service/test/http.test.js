@@ -14,7 +14,7 @@ test('contratos sobre HTTP con dependencias simuladas', async (t) => {
   const calls = []
   const upstream = createServer((req, res) => {
     const url = new URL(req.url, 'http://local.test')
-    calls.push({ path: url.pathname, authorization: req.headers.authorization })
+    calls.push({ path: url.pathname, authorization: req.headers.authorization, perfil: req.headers['x-butaca-perfil'] })
     res.setHeader('Content-Type', 'application/json')
     const send = (status, body) => { res.statusCode = status; res.end(JSON.stringify(body)) }
     if (url.pathname === '/api/sesiones') {
@@ -28,17 +28,20 @@ test('contratos sobre HTTP con dependencias simuladas', async (t) => {
     }
     if (url.pathname === `/api/animos/${animoId}`) {
       if (mode === 'animo-ajeno') return send(404, {})
+      if (mode === 'perfil-ajeno') return send(403, {})
       return send(200, { id: animoId, emocion: 'sad', consentimientoHistorial: mode !== 'sin-consentimiento' })
     }
     if (url.pathname === '/api/catalogo') {
       if (mode === 'body-timeout') { res.writeHead(200); res.write('{'); return }
       if (mode === 'catalog-invalid-json') return res.end('{')
       if (mode === 'catalog-invalid-shape') return send(200, { resultados: {} })
-      if (mode === 'catalog-unavailable' || (mode === 'partial' && url.searchParams.get('categoria') === 'Acción')) return send(503, {})
+      if (mode === 'catalog-unavailable' || (mode === 'partial' && url.searchParams.get('pagina') === '2')) return send(503, {})
       const tipo = url.searchParams.get('tipo')
       return send(200, { fuente: 'tmdb', resultados: mode === 'empty' ? [] : [{
         tmdbId: 42, tipoTmdb: tipo, titulo: 'Contenido de prueba HTTP', descripcion: '',
         poster: null, fecha: null, calificacion: null, esDemostracion: false,
+        // catalog-service relaciona el título con la emoción pedida (constants/emociones.js).
+        emociones: [url.searchParams.get('emocion')], generos: ['Drama'],
       }] })
     }
     send(404, {})
@@ -58,9 +61,9 @@ test('contratos sobre HTTP con dependencias simuladas', async (t) => {
     t.after(() => new Promise((resolve) => { server.close(resolve); server.closeAllConnections() }))
     baseUrl = `http://127.0.0.1:${server.address().port}`
   }
-  const request = async (query, token = 'Bearer prueba-ficticia') => {
+  const request = async (query, token = 'Bearer prueba-ficticia', extra = {}) => {
     const response = await fetch(`${baseUrl}/api/recomendaciones?${query}`, {
-      headers: token ? { Authorization: token } : {},
+      headers: token ? { Authorization: token, ...extra } : {},
     })
     assert.match(response.headers.get('content-type'), /application\/json/)
     return { status: response.status, body: await response.json() }
@@ -86,11 +89,20 @@ test('contratos sobre HTTP con dependencias simuladas', async (t) => {
     assert.equal(body.resultados[0].tipo, 'tv')
     assert.equal(calls.find((call) => call.path.startsWith('/api/animos/')).authorization, 'Bearer prueba-ficticia')
   })
+  await t.test('el perfil activo se reenvía a emociones y no al catálogo', async () => {
+    const perfil = '0a000000-0000-4000-8000-00000000000a'
+    const { status } = await request(`animoId=${animoId}`, 'Bearer prueba-ficticia', { 'X-Butaca-Perfil': perfil })
+    assert.equal(status, 200)
+    assert.equal(calls.findLast((call) => call.path.startsWith('/api/animos/')).perfil, perfil)
+    assert.ok(calls.filter((call) => call.path === '/api/catalogo').every((call) => !call.perfil))
+    const invalido = await request(`animoId=${animoId}`, 'Bearer prueba-ficticia', { 'X-Butaca-Perfil': 'otro' })
+    assert.equal(invalido.status, 400)
+  })
   await t.test('sin sesión', async () => assert.equal((await request('emocion=happy', null)).status, 401))
   await t.test('validación de parámetros', async () => assert.equal((await request('emocion=happy&tipo=tv&tipo=movie')).status, 400))
   for (const [scenario, expected, query = 'emocion=happy'] of [
     ['auth-invalid', 401], ['auth-unavailable', 503], ['redirect', 503],
-    ['animo-ajeno', 404, `animoId=${animoId}`], ['sin-consentimiento', 404, `animoId=${animoId}`],
+    ['animo-ajeno', 404, `animoId=${animoId}`], ['perfil-ajeno', 403, `animoId=${animoId}`], ['sin-consentimiento', 404, `animoId=${animoId}`],
     ['catalog-invalid-json', 502], ['catalog-invalid-shape', 502],
     ['catalog-unavailable', 503], ['partial', 503], ['auth-timeout', 503], ['body-timeout', 503],
   ]) {

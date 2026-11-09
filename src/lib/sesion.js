@@ -27,7 +27,12 @@ export async function validarSesion(cliente) {
         await cliente.auth.signOut({ scope: 'local' }).catch(() => {})
         return { estado: 'anonimo' }
       }
-      return { estado: 'error' }
+      // Un fallo transitorio no debe expulsar a quien conserva una sesión local.
+      // Las API siguen verificando el JWT antes de entregar datos protegidos.
+      const usuarioLocal = sesion.session.user
+      return usuarioLocal?.id
+        ? { estado: 'autenticado', usuario: usuarioLocal, verificacionPendiente: true }
+        : { estado: 'error' }
     }
     if (!data?.user?.id) return { estado: 'anonimo' }
     return { estado: 'autenticado', usuario: data.user }

@@ -7,17 +7,17 @@ import iconoRecomendaciones from '../../../../iconomisreconocimientos.svg'
 function EncabezadoGaleria() {
   return (
     <header className="gallery-header">
-      <a className="gallery-brand" href="#galeria" aria-label="Ir al inicio de la galería">
-        <img src={logoButaca} alt="Butaca" />
+      <a className="gallery-brand" draggable={false} href="/galeria" aria-label="Ir al inicio de la galería">
+        <img draggable={false} src={logoButaca} alt="Butaca" />
       </a>
 
       <nav className="gallery-nav" aria-label="Acciones de la galería">
-        <a className="gallery-action gallery-action--scan" href="#rostro">
-          <img src={iconoEscanear} alt="" aria-hidden="true" />
+        <a className="gallery-action gallery-action--scan" href="/rostro">
+          <img draggable={false} src={iconoEscanear} alt="" aria-hidden="true" />
           <span>Escanearme</span>
         </a>
-        <a className="gallery-action gallery-action--recommendations" href="#recomendaciones">
-          <img src={iconoRecomendaciones} alt="" aria-hidden="true" />
+        <a className="gallery-action gallery-action--recommendations" href="/recomendaciones">
+          <img draggable={false} src={iconoRecomendaciones} alt="" aria-hidden="true" />
           <span>Mis Recomendaciones</span>
         </a>
       </nav>

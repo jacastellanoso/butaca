@@ -1,0 +1,383 @@
+/* Campana del encabezado y panel de notificaciones (mismos azules del encabezado). */
+
+.notificaciones {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.notificaciones__boton {
+  position: relative;
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 2px solid #d9e8ff;
+  border-radius: 50%;
+  color: #0470f6;
+  background: #ffffff;
+  cursor: pointer;
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.notificaciones__boton svg {
+  width: 22px;
+  height: 22px;
+  fill: currentColor;
+}
+
+.notificaciones__boton:hover,
+.notificaciones__boton[aria-expanded='true'] {
+  border-color: #72b4ff;
+  box-shadow: 0 6px 16px rgb(0 56 175 / 16%);
+}
+
+.notificaciones__boton:focus-visible {
+  outline: 3px solid #72b4ff;
+  outline-offset: 2px;
+}
+
+.notificaciones__indicador {
+  position: absolute;
+  top: -5px;
+  right: -6px;
+  display: grid;
+  min-width: 21px;
+  height: 21px;
+  place-items: center;
+  padding: 0 5px;
+  border: 2px solid #ffffff;
+  border-radius: 999px;
+  color: #ffffff;
+  background: #e0193f;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.notificaciones__panel {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 10px);
+  right: 0;
+  display: flex;
+  width: min(380px, calc(100vw - 24px));
+  max-height: min(70vh, 560px);
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 18px;
+  color: #062a7a;
+  background: #ffffff;
+  box-shadow: 0 18px 44px rgb(0 15 95 / 28%);
+  animation: app-header-menu 160ms ease both;
+}
+
+.notificaciones__cabecera {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid #e3edfc;
+}
+
+.notificaciones__cabecera h2 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.notificaciones__todas,
+.notificaciones__vacio button {
+  min-height: 32px;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 999px;
+  color: #0470f6;
+  background: #eaf3ff;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.notificaciones__vacio,
+.notificaciones__error {
+  margin: 0;
+  padding: 18px 16px;
+  color: #4c5f8f;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.notificaciones__error {
+  padding: 10px 16px;
+  color: #a00028;
+  background: #ffe9ee;
+}
+
+/* Lista: fondo celeste suave para que cada notificación se lea como una tarjeta. */
+.notificaciones__lista {
+  display: grid;
+  min-height: 0; /* puede achicarse dentro del panel y desplazarse por sí sola */
+  align-content: start;
+  gap: 10px;
+  margin: 0;
+  padding: 12px 6px 12px 12px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* Reserva el lugar de la barra: no tapa las tarjetas ni las corre al aparecer. */
+  scrollbar-gutter: stable;
+  scrollbar-color: #9cc4f5 transparent;
+  background: #f1f6ff;
+  list-style: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.notificaciones__lista::-webkit-scrollbar-thumb {
+  background-color: #9cc4f5;
+}
+
+.notificaciones__lista::-webkit-scrollbar-thumb:hover {
+  background-color: #0470f6;
+}
+
+/* Cada notificación: tarjeta blanca con borde suave, sombra y columnas que no se pisan. */
+.notificacion {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+  padding: 14px 12px 14px 16px;
+  border: 1px solid #dde8fb;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgb(0 40 140 / 6%);
+  transition: box-shadow 160ms ease, border-color 160ms ease;
+}
+
+.notificacion:not(:has(.notificacion__poster)) {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.notificacion:hover {
+  border-color: #c4d9fb;
+  box-shadow: 0 6px 16px rgb(0 40 140 / 10%);
+}
+
+/* No leída: franja azul a la izquierda, fondo levemente azulado y título más fuerte. */
+.notificacion--nueva {
+  border-color: #b8d4ff;
+  background: linear-gradient(90deg, #eaf3ff 0%, #ffffff 70%);
+  box-shadow: 0 4px 14px rgb(4 112 246 / 14%);
+}
+
+.notificacion--nueva::before {
+  position: absolute;
+  top: 12px;
+  bottom: 12px;
+  left: 0;
+  width: 4px;
+  border-radius: 0 4px 4px 0;
+  background: #0470f6;
+  content: '';
+}
+
+/* Leída: se atenúa para que lo nuevo resalte. */
+.notificacion:not(.notificacion--nueva) .notificacion__titulo,
+.notificacion:not(.notificacion--nueva) p {
+  color: #4c5f8f;
+}
+
+.notificacion__poster {
+  width: 46px;
+  height: 69px;
+  border-radius: 10px;
+  object-fit: cover;
+  background: #d9e8ff;
+  box-shadow: 0 4px 10px rgb(0 40 140 / 18%);
+}
+
+.notificacion__cuerpo {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.notificacion__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.notificacion__tipo {
+  color: #0470f6;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.notificacion__nueva {
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: #ffffff;
+  background: #0470f6;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+}
+
+.notificacion__titulo {
+  color: #062a7a;
+  font-size: 14px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.notificacion__cuerpo p {
+  margin: 0;
+  color: #34477a;
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.notificacion__cuerpo time,
+.notificacion__estado {
+  color: #6b7ba3;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.notificacion__acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.notificacion__acciones button {
+  min-height: 40px;
+  padding: 8px 16px;
+  border: 0;
+  border-radius: 999px;
+  color: #ffffff;
+  background: #0470f6;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 160ms ease, transform 120ms ease;
+}
+
+.notificacion__acciones button:hover:not(:disabled) {
+  background: #005bd1;
+}
+
+.notificacion__acciones .notificacion__rechazar {
+  color: #a00028;
+  background: #ffe9ee;
+}
+
+.notificacion__acciones .notificacion__rechazar:hover:not(:disabled) {
+  background: #ffd6df;
+}
+
+.notificacion__acciones button:focus-visible,
+.notificacion__enlace:focus-visible {
+  outline: 3px solid #72b4ff;
+  outline-offset: 2px;
+}
+
+.notificacion__acciones button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.notificacion__enlace {
+  justify-self: start;
+  margin-top: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  color: #0470f6;
+  background: #eaf3ff;
+  font-size: 13px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.notificacion__enlace:hover {
+  background: #d9e8ff;
+}
+
+/* «Marcar como leída»: botón circular azul y blanco, 40 px (44 px en táctil). */
+.notificacion__leer {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border: 2px solid #b8d4ff;
+  border-radius: 50%;
+  color: #0470f6;
+  background: #ffffff;
+  box-shadow: 0 2px 6px rgb(0 40 140 / 10%);
+  cursor: pointer;
+  transition: background 160ms ease, color 160ms ease, border-color 160ms ease, transform 120ms ease, box-shadow 160ms ease;
+}
+
+.notificacion__leer svg {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+}
+
+.notificacion__leer:hover {
+  border-color: #0470f6;
+  color: #ffffff;
+  background: #0470f6;
+  box-shadow: 0 6px 14px rgb(4 112 246 / 30%);
+}
+
+.notificacion__leer:focus-visible {
+  outline: 3px solid #72b4ff;
+  outline-offset: 2px;
+}
+
+.notificacion__leer:active {
+  background: #005bd1;
+  transform: scale(0.94);
+}
+
+.notificacion__leer:disabled {
+  border-color: #dde8fb;
+  color: #9fb2d9;
+  background: #f4f7fd;
+  box-shadow: none;
+  cursor: not-allowed;
+  transform: none;
+}
+
+@media (pointer: coarse) {
+  .notificacion__leer {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+@media (max-width: 520px) {
+  /* Debajo del encabezado móvil (logo + fila de navegación, ~110 px). */
+  .notificaciones__panel {
+    position: fixed;
+    top: 116px;
+    right: 12px;
+    left: 12px;
+    width: auto;
+    max-height: calc(100dvh - 132px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .notificaciones__panel {
+    animation: none;
+  }
+}

@@ -11,14 +11,32 @@ datasource db {
 model Usuario {
   id        String     @id
   email     String?
+  edad      Int?
+  datosJson Json       @default("{}")
   creadoEn  DateTime   @default(now())
+  perfiles  Perfil[]
   animos    Animo[]
   favoritos Favorito[]
+}
+
+// Perfiles de la cuenta (tabla administrada por auth-service). Aquí solo se lee
+// para verificar que el perfil activo pertenece al usuario autenticado.
+model Perfil {
+  id            String  @id @default(uuid())
+  propietarioId String
+  nombre        String
+  esPrincipal   Boolean @default(false)
+  usuario       Usuario @relation(fields: [propietarioId], references: [id], onDelete: Cascade)
+
+  @@unique([id, propietarioId])
+  @@index([propietarioId])
 }
 
 model Animo {
   id                      String    @id @default(uuid())
   usuarioId               String
+  // Perfil de la cuenta al que pertenece el registro (desde 20261109120000).
+  perfilId                String?
   emocion                 String
   // Opcional desde pf13: una emoción confirmada manualmente no tiene confianza.
   confianza               Float?
@@ -38,6 +56,7 @@ model Animo {
 model Favorito {
   id        String   @id @default(uuid())
   usuarioId String
+  perfilId  String?
   tmdbId    Int
   tipo      String
   titulo    String
@@ -45,5 +64,6 @@ model Favorito {
   creadoEn  DateTime @default(now())
   usuario   Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
 
-  @@unique([usuarioId, tmdbId, tipo])
+  // Dos perfiles de la misma cuenta pueden guardar el mismo título.
+  @@unique([usuarioId, perfilId, tmdbId, tipo])
 }

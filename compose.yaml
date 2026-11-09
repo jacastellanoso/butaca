@@ -96,6 +96,11 @@ services:
     environment:
       SERVICE_NAME: recommendations-service
       PORT: 3024
+      # Dentro de la red de Docker los servicios se llaman por su nombre. Tienen
+      # prioridad sobre el .env (que usa localhost para ejecutar sin Docker).
+      AUTH_SERVICE_URL: http://auth-service:3021
+      EMOTIONS_SERVICE_URL: http://emotions-service:3022
+      CATALOG_SERVICE_URL: http://catalog-service:3023
     networks:
       - microservices
     restart: unless-stopped

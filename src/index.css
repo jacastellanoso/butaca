@@ -25,6 +25,54 @@ body {
   overflow: hidden;
 }
 
+/* Barras de desplazamiento delgadas y redondeadas en el azul de Butaca.
+   - Chrome/Edge 121+ y Firefox usan scrollbar-width y scrollbar-color.
+   - Safari usa ::-webkit-scrollbar.
+   - Si el navegador no permite personalizarlas, quedan las nativas: el
+     desplazamiento con mouse, teclado y dedo no cambia. */
+:root {
+  --scroll-pulgar: rgb(114 180 255 / 75%);
+  --scroll-pulgar-hover: #72b4ff;
+}
+
+* {
+  scrollbar-color: var(--scroll-pulgar) transparent;
+  scrollbar-width: thin;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-color: var(--scroll-pulgar);
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scroll-pulgar-hover);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Imágenes de la interfaz (logos, portadas, avatares, decoraciones): no se
+   arrastran ni se seleccionan por accidente con el mouse o el dedo. Cada <img>
+   lleva además draggable={false}. No afecta al texto, botones ni scroll. */
+img {
+  -webkit-user-drag: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
 button,
 input,
 textarea,

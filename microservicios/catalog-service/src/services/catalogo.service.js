@@ -5,6 +5,7 @@ import {
   GENEROS_TMDB_POR_CATEGORIA,
   PAGINACION_CATALOGO,
 } from '../constants/catalogo.js'
+import { emocionesDeGeneros, REGLAS_EMOCION, relevanciaParaEmocion } from '../constants/emociones.js'
 
 const SINOPSIS_POR_DEFECTO = 'Sin sinopsis disponible en español.'
 
@@ -32,6 +33,15 @@ export function extraerAnio(fechaTexto) {
   }
   const anio = Number.parseInt(fechaTexto.trim().slice(0, 4), 10)
   return Number.isInteger(anio) && anio > 1800 && anio < 3000 ? anio : null
+}
+
+export function idsDeGeneros(registroTmdb) {
+  const ids = []
+  if (Array.isArray(registroTmdb?.genre_ids)) ids.push(...registroTmdb.genre_ids.map(Number))
+  if (Array.isArray(registroTmdb?.genres)) {
+    for (const genero of registroTmdb.genres) ids.push(Number(typeof genero === 'object' && genero !== null ? genero.id : genero))
+  }
+  return ids.filter(Number.isFinite)
 }
 
 export function mapearGenerosACategorias(registroTmdb) {
@@ -110,6 +120,8 @@ export function normalizarElementoCatalogo(registroTmdb, tipoPorDefecto = 'movie
     anio,
     fecha,
     generos: mapearGenerosACategorias(registroTmdb),
+    // Emociones con las que se relaciona (constants/emociones.js); puede ser más de una.
+    emociones: emocionesDeGeneros(idsDeGeneros(registroTmdb), tipoTmdb),
     calificacion,
     sinopsis,
     descripcion: sinopsis,
@@ -241,6 +253,27 @@ async function consultarTmdb(ruta, parametros = {}, { permitirNoEncontrado = fal
   }
 }
 
+/** discover/<tipo> con los géneros de la emoción (OR) y sin los excluidos. */
+function consultaPorEmocion(emocion, tipo, pagina, categoria) {
+  const regla = REGLAS_EMOCION[emocion][tipo]
+  const generosCategoria = categoria && categoria !== 'Todos' ? GENEROS_TMDB_POR_CATEGORIA[categoria] : null
+  return {
+    ruta: `/discover/${tipo}`,
+    tipoPorDefecto: tipo,
+    parametros: {
+      language: 'es-ES',
+      include_adult: 'false',
+      page: pagina,
+      sort_by: 'popularity.desc',
+      // Evita títulos casi desconocidos con géneros mal cargados.
+      'vote_count.gte': tipo === 'tv' ? 20 : 50,
+      // Con categoría, se pide la categoría y la emoción se aplica al filtrar.
+      with_genres: (generosCategoria ?? regla.generos).join('|'),
+      without_genres: regla.excluidos.join(','),
+    },
+  }
+}
+
 function resolverConsultaListado({ tipo, categoria, busqueda, pagina }) {
   const parametros = {
     language: 'es-ES',
@@ -284,13 +317,54 @@ function resolverConsultaListado({ tipo, categoria, busqueda, pagina }) {
   }
 }
 
+/**
+ * Títulos relacionados con una emoción (constants/emociones.js). Con tipo
+ * 'all' se consultan películas y series en paralelo y se intercalan. Cada
+ * resultado se vuelve a comprobar con sus géneros: nunca se devuelve un
+ * título que no corresponda razonablemente a la emoción.
+ */
+async function listarPorEmocion({ tipo, categoria, emocion, pagina }) {
+  const tipos = tipo === 'all' ? ['movie', 'tv'] : [tipo]
+  const respuestas = await Promise.all(tipos.map(async (tipoTmdb) => {
+    const { ruta, tipoPorDefecto, parametros } = consultaPorEmocion(emocion, tipoTmdb, pagina, categoria)
+    const datos = await consultarTmdb(ruta, parametros)
+    const lista = (Array.isArray(datos?.results) ? datos.results : [])
+      .filter((item) => item && typeof item === 'object' && item.id)
+      .map((item, posicion) => ({ item, posicion, relevancia: relevanciaParaEmocion(idsDeGeneros(item), emocion, tipoTmdb) }))
+      .filter(({ relevancia }) => relevancia > 0)
+      // Más representativos primero; a igual relevancia, el orden de popularidad de TMDB.
+      .sort((a, b) => b.relevancia - a.relevancia || a.posicion - b.posicion)
+      .map(({ item }) => normalizarElementoCatalogo(item, tipoPorDefecto))
+      .filter((elemento) => categoria === 'Todos' || elemento.generos.includes(categoria))
+    return { lista, totalPaginas: Number(datos?.total_pages) || 0, totalResultados: Number(datos?.total_results) || 0 }
+  }))
+
+  // Intercala películas y series para que la página no sea de un solo tipo.
+  const resultados = []
+  const largo = Math.max(...respuestas.map((r) => r.lista.length))
+  for (let i = 0; i < largo; i++) {
+    for (const { lista } of respuestas) if (lista[i]) resultados.push(lista[i])
+  }
+  const totalPaginas = Math.min(Math.max(...respuestas.map((r) => r.totalPaginas)), PAGINACION_CATALOGO.paginaMaxima)
+  const totalResultados = respuestas.reduce((suma, r) => suma + r.totalResultados, 0)
+
+  return {
+    fuente: 'tmdb',
+    filtros: { tipo, categoria, busqueda: null, emocion, pagina },
+    resultados,
+    paginacion: { pagina, totalPaginas, totalResultados, total: totalResultados },
+  }
+}
+
 export const catalogoService = {
   async listar({
     tipo = 'all',
     categoria = 'Todos',
     busqueda = null,
+    emocion = null,
     pagina = PAGINACION_CATALOGO.paginaPorDefecto,
   } = {}) {
+    if (emocion && !busqueda) return listarPorEmocion({ tipo: tipo || 'all', categoria: categoria || 'Todos', emocion, pagina: Number(pagina) || 1 })
     const tipoNormalizado = tipo || 'all'
     const categoriaNormalizada = categoria || 'Todos'
     const busquedaLimpia =
@@ -326,6 +400,10 @@ export const catalogoService = {
         elemento.generos.includes(categoriaNormalizada),
       )
     }
+    // Búsqueda con filtro de emoción: solo los títulos relacionados con ella.
+    if (busquedaLimpia && emocion) {
+      resultados = resultados.filter((elemento) => elemento.emociones.includes(emocion))
+    }
 
     const totalResultados = Number(datosTmdb?.total_results) || resultados.length
     const totalPaginasRaw = Number(datosTmdb?.total_pages) || (resultados.length > 0 ? 1 : 0)
@@ -338,6 +416,7 @@ export const catalogoService = {
         tipo: tipoNormalizado,
         categoria: categoriaNormalizada,
         busqueda: busquedaLimpia,
+        emocion: emocion ?? null,
         pagina: paginaSolicitada,
       },
       resultados,

@@ -10,9 +10,12 @@ function readPositiveInteger(value, fallback) {
 
 function readServiceUrl(value, fallback) {
   const serviceUrl = value || fallback
+  const normalizedUrl = serviceUrl.includes('://')
+    ? serviceUrl
+    : `http://${serviceUrl}`
 
   try {
-    return new URL(serviceUrl).origin
+    return new URL(normalizedUrl).origin
   } catch {
     throw new Error(`URL de microservicio inválida: ${serviceUrl}`)
   }
@@ -55,7 +58,7 @@ export const env = {
   rateLimitMax: readPositiveInteger(process.env.RATE_LIMIT_MAX, 300),
   rateLimitWriteMax: readPositiveInteger(process.env.RATE_LIMIT_WRITE_MAX, 60),
   maxBodyBytes: readPositiveInteger(process.env.MAX_BODY_BYTES, 32 * 1024),
-  proxyTimeoutMs: readPositiveInteger(process.env.PROXY_TIMEOUT_MS, 5000),
+  proxyTimeoutMs: readPositiveInteger(process.env.PROXY_TIMEOUT_MS, 60_000),
   authServiceUrl: readServiceUrl(
     process.env.AUTH_SERVICE_URL,
     'http://localhost:3021',

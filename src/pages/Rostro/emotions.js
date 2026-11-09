@@ -2,11 +2,11 @@
 // (`detection.expressions`). La detección real se integró en `pf17_FaceAPI`.
 export const EMOTIONS = {
   neutral: { label: 'Calma', description: 'Tu expresión se ve tranquila.' },
-  happy: { label: 'Alegría', description: 'Se nota que hoy estás de buen humor.' },
-  sad: { label: 'Tristeza', description: 'Parece que hoy necesitás algo reconfortante.' },
-  angry: { label: 'Enojo', description: 'Parece que hoy querés soltar tensión.' },
+  happy: { label: 'Alegría', description: 'Tu expresión se ve alegre.' },
+  sad: { label: 'Tristeza', description: 'Tu expresión se parece a la tristeza.' },
+  angry: { label: 'Enojo', description: 'Tu expresión se parece al enojo.' },
   fearful: { label: 'Miedo', description: 'Tu expresión muestra algo de inquietud.' },
-  disgusted: { label: 'Desagrado', description: 'Algo no terminó de convencerte hoy.' },
+  disgusted: { label: 'Desagrado', description: 'Tu expresión se parece al desagrado.' },
   surprised: { label: 'Sorpresa', description: 'Tu expresión muestra asombro.' },
 }
 

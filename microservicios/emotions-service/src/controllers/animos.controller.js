@@ -19,7 +19,7 @@ export async function registrarAnimo(req, res) {
   }
 
   try {
-    const animo = await animosService.registrar(req.user.id, datos)
+    const animo = await animosService.registrar(req.user.id, req.perfilId, datos)
     return res.status(201).json(animo)
   } catch (fallo) {
     if (fallo?.code === 'P2003') {
@@ -40,7 +40,7 @@ export async function listarAnimos(req, res) {
   }
 
   try {
-    return res.json(await animosService.listar(req.user.id, datos))
+    return res.json(await animosService.listar(req.user.id, req.perfilId, datos))
   } catch (fallo) {
     registrarFallo('consultar', fallo)
     return res.status(500).json({ error: 'No se pudo consultar el historial emocional. Intentá de nuevo.' })
@@ -55,7 +55,7 @@ export async function obtenerAnimo(req, res) {
   }
 
   try {
-    const animo = await animosService.obtener(req.user.id, req.params.id)
+    const animo = await animosService.obtener(req.user.id, req.perfilId, req.params.id)
     return animo ? res.json(animo) : res.status(404).json(noEncontrado)
   } catch (fallo) {
     registrarFallo('consultar', fallo)

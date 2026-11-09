@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { CATEGORIAS_GALERIA, PAGINACION_CATALOGO, TIPOS_CATALOGO, TIPOS_DETALLE } from '../constants/catalogo.js'
+import { EMOCIONES } from '../constants/emociones.js'
 
 const texto = (nombre) => z.string({ error: `El parámetro ${nombre} no es válido.` })
 const opcion = (nombre, opciones, porDefecto) => texto(nombre)
@@ -20,6 +21,9 @@ const esquemaConsultaCatalogo = z.object({
     .max(PAGINACION_CATALOGO.longitudMaximaBusqueda,
       `El parámetro busqueda no puede superar ${PAGINACION_CATALOGO.longitudMaximaBusqueda} caracteres.`)
     .optional().transform((valor) => valor || null),
+  // Filtro opcional por emoción (constants/emociones.js).
+  emocion: texto('emocion').pipe(z.enum(EMOCIONES, { error: 'El parámetro emocion no es válido.' })).optional()
+    .transform((valor) => valor ?? null),
 })
 const tmdbIdMaximo = 999_999_999
 const esquemaIdDetalle = entero('tmdbId', 1, tmdbIdMaximo)

@@ -31,7 +31,7 @@ function SeccionFavoritos() {
           <h2 id="dash-favoritos-title">Mis favoritos</h2>
           <p>Las películas y series que guardaste. Tocá el corazón para quitarlas.</p>
         </div>
-        <a className="dash-button dash-button--primary" href="#galeria">Explorar la galería</a>
+        <a className="dash-button dash-button--primary" href="/galeria">Explorar la galería</a>
       </div>
 
       <div className="rec-controls">
@@ -58,7 +58,7 @@ function SeccionFavoritos() {
           estado="empty"
           titulo={tipo ? 'No hay favoritos de este tipo' : 'Todavía no tenés favoritos'}
           mensaje="Agregalos con el corazón desde la galería o desde tus recomendaciones."
-          accion={<a className="dash-button dash-button--primary" href="#recomendaciones">Ver recomendaciones</a>}
+          accion={<a className="dash-button dash-button--primary" href="/recomendaciones">Ver recomendaciones</a>}
         />
       )}
       {favoritos?.estado === 'ready' && lista.length > 0 && (

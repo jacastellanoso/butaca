@@ -5,7 +5,7 @@ import { validarConsultaCatalogo, validarParametrosDetalle } from '../src/valida
 const fallo = (error) => ({ status: 400, error })
 test('consulta mantiene defaults, búsqueda nula y claves desconocidas ignoradas', () => {
   assert.deepEqual(validarConsultaCatalogo({ extra: ['a', 'b'] }),
-    { datos: { tipo: 'all', categoria: 'Todos', pagina: 1, busqueda: null } })
+    { datos: { tipo: 'all', categoria: 'Todos', pagina: 1, busqueda: null, emocion: null } })
   assert.deepEqual(validarConsultaCatalogo(), validarConsultaCatalogo(null))
 })
 for (const pagina of ['1', '500', ' 001 ']) {

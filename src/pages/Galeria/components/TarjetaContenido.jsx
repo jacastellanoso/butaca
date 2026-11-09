@@ -8,7 +8,7 @@ function TarjetaContenido({ contenido, index, onSelect }) {
       aria-label={`Ver detalles de ${contenido.titulo}`}
     >
       {contenido.portada ? (
-        <img src={contenido.portada} alt={`Portada de ${contenido.titulo}`} />
+        <img draggable={false} src={contenido.portada} alt={`Portada de ${contenido.titulo}`} />
       ) : (
         <span className="content-card__placeholder" aria-hidden="true">
           <span className="content-card__mark">B</span>

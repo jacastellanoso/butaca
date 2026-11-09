@@ -15,7 +15,7 @@ function TarjetaPelicula({ contenido, index = 0, destacada = false, pie, onDetal
     <article className="movie-card" style={{ '--card-index': index }}>
       <div className="movie-card__poster">
         {portada ? (
-          <img src={portada} alt={`Póster de ${titulo}`} loading="lazy" />
+          <img draggable={false} src={portada} alt={`Póster de ${titulo}`} loading="lazy" />
         ) : (
           <span className="movie-card__placeholder" aria-hidden="true">B</span>
         )}

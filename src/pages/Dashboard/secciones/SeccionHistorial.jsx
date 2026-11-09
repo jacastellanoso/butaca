@@ -111,7 +111,7 @@ function SeccionHistorial() {
                 {recomendaciones.datos.resultados.map((item) => (
                   <li key={item.id} className="history-list__item">
                     {item.poster ? (
-                      <img src={item.poster} alt="" loading="lazy" />
+                      <img draggable={false} src={item.poster} alt="" loading="lazy" />
                     ) : (
                       <span className="history-list__placeholder" aria-hidden="true">B</span>
                     )}

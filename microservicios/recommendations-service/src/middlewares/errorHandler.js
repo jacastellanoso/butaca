@@ -4,7 +4,11 @@ import { DependencyError } from '../clients/servicios.client.js'
 // No registrar excepciones de red: pueden incluir URLs o credenciales.
 export function errorHandler(error, req, res, next) {
   if (res.writableEnded || res.destroyed) return
-  if (error instanceof DependencyError) return res.status(error.status).json({ error: error.message })
+  if (error instanceof DependencyError) {
+    // El gateway expone este encabezado: el navegador despierta la dependencia dormida.
+    if (error.despertar) res.set('X-Butaca-Despertar', error.despertar)
+    return res.status(error.status).json({ error: error.message })
+  }
   console.error(`[${env.serviceName}] Error interno no controlado.`)
 
   if (res.headersSent) {

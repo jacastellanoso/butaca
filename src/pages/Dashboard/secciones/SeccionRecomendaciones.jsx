@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import { useDetalleContenido } from '../../../hooks/useDetalleContenido.js'
-import { hashDeRecomendaciones } from '../../../lib/rutas.js'
+import { rutaDeRecomendaciones } from '../../../lib/rutas.js'
 import { completarGeneros } from '../../../services/detallesCatalogo.js'
 import { obtenerAnimo, obtenerUltimoAnimo } from '../../../services/emociones.js'
 import { obtenerRecomendaciones } from '../../../services/recomendaciones.js'
@@ -12,6 +12,8 @@ import TarjetaPelicula from '../components/TarjetaPelicula.jsx'
 import { COLORES_EMOCION, EMOCIONES_ORDEN } from '../estadisticas.js'
 import { etiquetaEmocion, formatearFechaHora } from '../formato.js'
 
+const ESPERAS_REINTENTO_MS = [3000, 6000, 10000]
+
 const TIPOS = [
   { valor: 'movie', etiqueta: 'Películas' },
   { valor: 'tv', etiqueta: 'Series' },
@@ -19,9 +21,9 @@ const TIPOS = [
 
 /**
  * Resuelve de dónde sale el ánimo:
- * - #recomendaciones/animo/:id → registro propio guardado con consentimiento.
- * - #recomendaciones/emocion/:e → emoción elegida o recién detectada, sin guardar.
- * - #recomendaciones → último ánimo guardado; si no hay, se invita a escanear.
+ * - /recomendaciones/animo/:id → registro propio guardado con consentimiento.
+ * - /recomendaciones/emocion/:e → emoción elegida o recién detectada, sin guardar.
+ * - /recomendaciones → último ánimo guardado; si no hay, se invita a escanear.
  */
 async function resolverOrigen({ emocion, animoId }) {
   if (animoId) {
@@ -49,20 +51,37 @@ function SeccionRecomendaciones({ emocion, animoId }) {
     setEstado('loading')
     setError('')
 
+    // Ánimo + recomendaciones. Ante 502/503 (en Render gratuito los servicios
+    // dormidos tardan ~13 s en despertar y el gateway responde 502 mientras
+    // tanto) se reintenta con esperas crecientes antes de mostrar el error.
+    const consultar = async () => {
+      const nuevoOrigen = await resolverOrigen({ emocion, animoId })
+      if (nuevoOrigen.tipo === 'ninguno') return { nuevoOrigen, respuesta: null }
+      const parametros = nuevoOrigen.animo ? { animoId: nuevoOrigen.animo.id, tipo } : { emocion: nuevoOrigen.emocion, tipo }
+      return { nuevoOrigen, respuesta: await obtenerRecomendaciones(parametros) }
+    }
+
     ;(async () => {
       try {
-        const nuevoOrigen = await resolverOrigen({ emocion, animoId })
+        let resultado
+        for (let reintento = 0; ; reintento += 1) {
+          try {
+            resultado = await consultar()
+            break
+          } catch (fallo) {
+            if (fallo?.codigo !== 'servicio-no-disponible' || reintento >= ESPERAS_REINTENTO_MS.length) throw fallo
+            await new Promise((resolve) => window.setTimeout(resolve, ESPERAS_REINTENTO_MS[reintento]))
+            if (!activo) return
+          }
+        }
         if (!activo) return
+        const { nuevoOrigen, respuesta } = resultado
         setOrigen(nuevoOrigen)
         if (nuevoOrigen.tipo === 'ninguno') {
           setResultados([])
           setEstado('sin-animo')
           return
         }
-
-        const parametros = nuevoOrigen.animo ? { animoId: nuevoOrigen.animo.id, tipo } : { emocion: nuevoOrigen.emocion, tipo }
-        const respuesta = await obtenerRecomendaciones(parametros)
-        if (!activo) return
         setResultados(respuesta.resultados)
         setEstado('ready')
 
@@ -92,7 +111,7 @@ function SeccionRecomendaciones({ emocion, animoId }) {
           <h2 id="dash-recomendaciones-title">Mis recomendaciones</h2>
           <p>Películas y series reales de TMDB elegidas por el servicio de recomendaciones según tu ánimo.</p>
         </div>
-        <a className="dash-button dash-button--primary" href="#rostro">Escanear de nuevo</a>
+        <a className="dash-button dash-button--primary" href="/rostro">Escanear de nuevo</a>
       </div>
 
       {emocionActual && (
@@ -117,7 +136,7 @@ function SeccionRecomendaciones({ emocion, animoId }) {
             <a
               key={clave}
               className="rec-chip"
-              href={hashDeRecomendaciones({ emocion: clave })}
+              href={rutaDeRecomendaciones({ emocion: clave })}
               aria-current={origen?.tipo === 'emocion' && emocionActual === clave ? 'true' : undefined}
             >
               <i style={{ background: COLORES_EMOCION[clave] }} aria-hidden="true" />
@@ -149,7 +168,7 @@ function SeccionRecomendaciones({ emocion, animoId }) {
           estado="empty"
           titulo="Todavía no sabemos cómo te sentís"
           mensaje="Escaneá tu rostro o elegí una emoción arriba para recibir recomendaciones."
-          accion={<a className="dash-button dash-button--primary" href="#rostro">Ir al escáner</a>}
+          accion={<a className="dash-button dash-button--primary" href="/rostro">Ir al escáner</a>}
         />
       )}
       {estado === 'ready' && resultados.length === 0 && (

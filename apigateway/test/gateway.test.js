@@ -9,10 +9,22 @@ const upstreamServer = createServer((req, res) => {
 
   req.on('data', (chunk) => chunks.push(chunk))
   req.on('end', () => {
+    // Render con el servicio dormido: 502 HTML inmediato con x-render-routing.
+    if (req.url.startsWith('/api/catalogo/dormido')) {
+      res.writeHead(502, { 'Content-Type': 'text/html', 'x-render-routing': 'no-deploy' })
+      res.end('<!DOCTYPE html><title>502</title>')
+      return
+    }
+    if (req.url.startsWith('/api/catalogo/fallo-propio')) {
+      res.writeHead(502, { 'Content-Type': 'application/json' })
+      res.end('{"error":"TMDB"}')
+      return
+    }
     receivedRequest = {
       method: req.method,
       url: req.url,
       authorization: req.headers.authorization,
+      ...(req.headers['x-butaca-perfil'] && { perfil: req.headers['x-butaca-perfil'] }),
       body: Buffer.concat(chunks).toString('utf8'),
     }
 
@@ -181,4 +193,56 @@ test('las rutas de favoritos e historial llegan a library-service con su autoriz
     authorization: 'Bearer token-de-prueba',
     body: '',
   })
+})
+test('grupos, invitaciones y notificaciones se dirigen a auth-service', async () => {
+  // En esta suite auth-service apunta a un puerto cerrado: el 502 identifica el destino.
+  for (const [method, ruta] of [
+    ['GET', '/api/grupos'],
+    ['POST', '/api/grupos/00000000-0000-4000-8000-000000000001/recomendaciones'],
+    ['PUT', '/api/invitaciones/00000000-0000-4000-8000-000000000002'],
+    ['PATCH', '/api/notificaciones/00000000-0000-4000-8000-000000000003'],
+  ]) {
+    const res = await fetch(`${baseUrl}${ruta}`, { method, headers: { Authorization: 'Bearer token-de-prueba' } })
+    assert.equal(res.status, 502, ruta)
+    assert.equal((await res.json()).service, 'auth-service', ruta)
+  }
+})
+
+test('el encabezado del perfil activo se reenvía sin cambios al microservicio', async () => {
+  const perfil = '0a000000-0000-4000-8000-00000000000a'
+  const res = await fetch(`${baseUrl}/api/favoritos`, {
+    headers: { Authorization: 'Bearer token-de-prueba', 'X-Butaca-Perfil': perfil },
+  })
+  assert.equal(res.status, 200)
+  assert.equal(receivedRequest.perfil, perfil)
+})
+
+test('un servicio dormido en Render indica al navegador cómo despertarlo (solo URLs https)', async () => {
+  const { urlParaDespertar } = await import('../src/routes/gateway.routes.js')
+  assert.equal(urlParaDespertar({ target: 'https://butaca-catalog.onrender.com' }), 'https://butaca-catalog.onrender.com/health')
+  assert.equal(urlParaDespertar({ target: 'http://catalog-service:3023' }), null)
+  assert.equal(urlParaDespertar({ target: 'no es url' }), null)
+
+  // En pruebas el destino es http local: no se expone ninguna URL para despertar.
+  const dormido = await fetch(`${baseUrl}/api/catalogo/dormido`, { headers: { Origin: 'http://localhost:5173' } })
+  assert.equal(dormido.status, 502)
+  assert.equal(dormido.headers.get('x-butaca-despertar'), null)
+  // El encabezado se expone por CORS para que el frontend pueda leerlo.
+  assert.match(dormido.headers.get('access-control-expose-headers') ?? '', /X-Butaca-Despertar/)
+})
+
+test('solo el 502 de Render (x-render-routing) de un destino https recibe X-Butaca-Despertar', async () => {
+  const { marcarServicioDormido } = await import('../src/routes/gateway.routes.js')
+  const catalogo = { target: 'https://butaca-catalog.onrender.com' }
+  const respuesta = (statusCode, headers) => ({ statusCode, headers })
+
+  const dormido = respuesta(502, { 'x-render-routing': 'no-deploy' })
+  marcarServicioDormido(dormido, catalogo)
+  assert.equal(dormido.headers['x-butaca-despertar'], 'https://butaca-catalog.onrender.com/health')
+
+  // Un 502 propio del servicio (TMDB caído) o una respuesta correcta no se marcan.
+  for (const otra of [respuesta(502, {}), respuesta(200, { 'x-render-routing': 'x' }), respuesta(500, { 'x-render-routing': 'x' })]) {
+    marcarServicioDormido(otra, catalogo)
+    assert.equal(otra.headers['x-butaca-despertar'], undefined)
+  }
 })

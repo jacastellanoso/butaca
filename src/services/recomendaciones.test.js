@@ -153,6 +153,12 @@ test('los componentes React existentes renderizan películas y series adaptadas,
     jsx: { runtime: 'automatic' },
   })
   modulos.set(urlBoton.href, codigoBoton)
+  // pf25: el detalle permite compartir con grupos (solo se muestra con sesión).
+  const urlCompartir = new URL('../components/Compartir/CompartirContenido.jsx', import.meta.url)
+  const { code: codigoCompartir } = await transformWithOxc(await readFile(urlCompartir, 'utf8'), urlCompartir.pathname, {
+    jsx: { runtime: 'automatic' },
+  })
+  modulos.set(urlCompartir.href, codigoCompartir)
   const jsxHooks = registerHooks({
     load(url, context, nextLoad) {
       if (modulos.has(url)) return { format: 'module', shortCircuit: true, source: modulos.get(url) }

@@ -1,16 +1,16 @@
 import { useEffect, useState } from 'react'
 
-import { leerRuta } from '../lib/rutas.js'
+import { EVENTO_NAVEGACION, leerRuta } from '../lib/rutas.js'
 
-/** Ruta actual a partir del hash; se actualiza con cada hashchange. */
+/** Ruta actual a partir de location.pathname; se actualiza con cada navegación y con Atrás/Adelante. */
 export function useRuta() {
-  const [hash, setHash] = useState(() => window.location.hash)
+  const [ruta, setRuta] = useState(() => window.location.pathname)
 
   useEffect(() => {
-    const actualizar = () => setHash(window.location.hash)
-    window.addEventListener('hashchange', actualizar)
-    return () => window.removeEventListener('hashchange', actualizar)
+    const actualizar = () => setRuta(window.location.pathname)
+    window.addEventListener(EVENTO_NAVEGACION, actualizar)
+    return () => window.removeEventListener(EVENTO_NAVEGACION, actualizar)
   }, [])
 
-  return { hash, ...leerRuta(hash) }
+  return { ruta, ...leerRuta(ruta) }
 }

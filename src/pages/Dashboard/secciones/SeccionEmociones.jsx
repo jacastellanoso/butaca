@@ -101,7 +101,7 @@ function SeccionEmociones() {
           <h2 id="dash-emociones-title">Mis emociones</h2>
           <p>Resultados que autorizaste guardar desde el escáner. Solo vos podés verlos.</p>
         </div>
-        <a className="dash-button dash-button--primary" href="#rostro">Registrar cómo me siento</a>
+        <a className="dash-button dash-button--primary" href="/rostro">Registrar cómo me siento</a>
       </div>
 
       <FiltrosHistorial valores={filtros} onChange={setFiltros} />
@@ -119,7 +119,7 @@ function SeccionEmociones() {
               ? 'Probá con otra emoción o un rango de fechas más amplio.'
               : 'Escaneá tu rostro y autorizá guardar el resultado para ver aquí cómo cambia tu ánimo.'
           }
-          accion={!filtrando && <a className="dash-button dash-button--primary" href="#rostro">Ir al escáner</a>}
+          accion={!filtrando && <a className="dash-button dash-button--primary" href="/rostro">Ir al escáner</a>}
         />
       )}
 
@@ -185,7 +185,7 @@ function SeccionEmociones() {
             <article className="dash-card">
               <header className="dash-card__head">
                 <h3>Registros recientes</h3>
-                <a className="dash-link-button" href="#historial">Ver historial</a>
+                <a className="dash-link-button" href="/historial">Ver historial</a>
               </header>
               <ol className="dash-timeline">
                 {registros.slice(0, 6).map((animo) => <FilaAnimo key={animo.id} animo={animo} />)}

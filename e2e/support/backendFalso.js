@@ -12,8 +12,20 @@
 import { randomUUID } from 'node:crypto'
 
 import { SUPABASE_URL, TOKEN_PRUEBA, USUARIO_PRUEBA } from './sesion.js'
+import { SocialFalso } from './socialFalso.js'
 
 const EMOCIONES = ['neutral', 'happy', 'sad', 'angry', 'fearful', 'disgusted', 'surprised']
+
+// Emociones por género (simplificación de catalog-service/src/constants/emociones.js).
+const EMOCIONES_POR_GENERO = {
+  Acción: ['happy', 'angry', 'surprised'],
+  Comedia: ['neutral', 'happy'],
+  Drama: ['sad'],
+  Terror: ['fearful', 'disgusted'],
+}
+function emocionesDe(generos) {
+  return [...new Set(generos.flatMap((g) => EMOCIONES_POR_GENERO[g] ?? []))]
+}
 
 // Catálogo mínimo con la forma normalizada de catalog-service (pf14).
 export const CATALOGO = [
@@ -21,6 +33,7 @@ export const CATALOGO = [
   { tmdbId: 102, tipoTmdb: 'movie', titulo: 'Noche de terror', anio: 2024, generos: ['Terror'], calificacion: 6.4 },
   { tmdbId: 201, tipoTmdb: 'tv', titulo: 'Serie del ánimo', anio: 2026, generos: ['Drama'], calificacion: 8.6 },
 ].map((item) => ({
+  emociones: emocionesDe(item.generos),
   id: `${item.tipoTmdb}-${item.tmdbId}`,
   tipo: item.tipoTmdb === 'movie' ? 'Película' : 'Serie',
   fecha: `${item.anio}-01-15`,
@@ -36,6 +49,9 @@ const RECOMENDACIONES = {
   movie: [
     { tmdbId: 301, titulo: 'Risas garantizadas', fecha: '2025-03-01', calificacion: 7.1 },
     { tmdbId: 302, titulo: 'Un día brillante', fecha: '2024-07-20', calificacion: 6.9 },
+    { tmdbId: 303, titulo: 'Aventura en familia', fecha: '2023-05-02', calificacion: 7.4 },
+    { tmdbId: 304, titulo: 'Canción del verano', fecha: '2022-12-12', calificacion: 6.5 },
+    { tmdbId: 305, titulo: 'Volar alto', fecha: '2021-08-30', calificacion: 7.0 },
   ],
   tv: [{ tmdbId: 401, titulo: 'Temporada feliz', fecha: '2026-02-10', calificacion: 8.2 }],
 }
@@ -62,11 +78,80 @@ export class BackendFalso {
     this.peticiones = []
     // Rutas que deben fallar: { '/api/catalogo': 502 }.
     this.fallas = {}
+    // Fallas que se resuelven solas: { '/api/recomendaciones': { status: 502, veces: 1 } }.
+    this.fallasTemporales = {}
+    // Catálogo grande y paginado (catalogoPaginado()); null = CATALOGO fijo de una página.
+    this.catalogoGrande = null
+    this.usuario = {
+      id: USUARIO_PRUEBA.id,
+      email: USUARIO_PRUEBA.email,
+      nombre: 'Majo',
+      apellido: 'Prueba',
+      edad: 28,
+      creadoEn: '2026-10-01T12:00:00.000Z',
+    }
+    // Perfiles, grupos, invitaciones y notificaciones (auth-service).
+    this.social = new SocialFalso(this.usuario)
+  }
+
+  /** Perfil principal de la cuenta con sesión. */
+  get perfilPrincipal() {
+    return this.social.principal
   }
 
   /** Simula que un microservicio está caído (el gateway respondería 502). */
   fallar(prefijo, status = 502) {
     this.fallas[prefijo] = status
+  }
+
+  /** Simula un servicio dormido (Render gratuito): falla `veces` y luego responde. */
+  fallarVeces(prefijo, status = 502, veces = 1) {
+    this.fallasTemporales[prefijo] = { status, veces }
+  }
+
+  /**
+   * Catálogo paginado como catalog-service: `porPagina` títulos por página y
+   * `paginas` páginas por categoría. Como en TMDB, la página siguiente repite
+   * el último título de la anterior (la galería no debe duplicarlo).
+   */
+  catalogoPaginado({ paginas = 3, porPagina = 6 } = {}) {
+    const generos = ['Acción', 'Comedia', 'Drama', 'Terror']
+    this.catalogoGrande = { paginas, porPagina, items: [] }
+    let id = 1000
+    for (const genero of generos) {
+      for (let i = 0; i < paginas * porPagina; i++) {
+        id += 1
+        const tipoTmdb = id % 2 ? 'movie' : 'tv'
+        this.catalogoGrande.items.push({
+          id: `${tipoTmdb}-${id}`, tmdbId: id, tipoTmdb, tipo: tipoTmdb === 'movie' ? 'Película' : 'Serie',
+          titulo: `${genero} ${i + 1}`, anio: 2025, fecha: '2025-01-15', generos: [genero], calificacion: 7,
+          sinopsis: `Sinopsis de ${genero} ${i + 1}.`, portada: null, poster: null, esDemostracion: false,
+          emociones: emocionesDe([genero]),
+        })
+      }
+    }
+  }
+
+  #catalogo(route, url) {
+    // Filtros como catalog-service: categoría, emoción y búsqueda por nombre.
+    const categoria = url.searchParams.get('categoria')
+    const emocion = url.searchParams.get('emocion')
+    const busqueda = (url.searchParams.get('busqueda') ?? '').toLowerCase()
+    const filtrar = (lista) => lista
+      .filter((c) => !categoria || c.generos.includes(categoria))
+      .filter((c) => !emocion || c.emociones.includes(emocion))
+      .filter((c) => !busqueda || c.titulo.toLowerCase().includes(busqueda))
+    if (!this.catalogoGrande) return json(route, 200, { fuente: 'tmdb', resultados: filtrar(CATALOGO) })
+    const { porPagina, items } = this.catalogoGrande
+    const pagina = Number(url.searchParams.get('pagina') ?? 1)
+    const lista = filtrar(items)
+    const total = Math.max(1, Math.ceil(lista.length / porPagina))
+    const inicio = Math.max(0, (pagina - 1) * porPagina - (pagina > 1 ? 1 : 0))
+    return json(route, 200, {
+      fuente: 'tmdb',
+      resultados: lista.slice(inicio, (pagina - 1) * porPagina + porPagina),
+      paginacion: { pagina, totalPaginas: total, totalResultados: lista.length, total: lista.length },
+    })
   }
 
   peticionesA(metodo, ruta) {
@@ -94,10 +179,16 @@ export class BackendFalso {
     const metodo = request.method()
     const ruta = url.pathname
     const body = request.postData() ? request.postDataJSON() : undefined
-    this.peticiones.push({ metodo, ruta, query: url.search, body, authorization: request.headers().authorization })
+    const encabezadoPerfil = request.headers()['x-butaca-perfil']
+    this.peticiones.push({ metodo, ruta, query: url.search, body, authorization: request.headers().authorization, perfil: encabezadoPerfil })
 
     const falla = Object.entries(this.fallas).find(([prefijo]) => ruta.startsWith(prefijo))
     if (falla) return json(route, falla[1], { error: 'El servicio solicitado no está disponible temporalmente.' })
+    const temporal = Object.entries(this.fallasTemporales).find(([prefijo, f]) => ruta.startsWith(prefijo) && f.veces > 0)
+    if (temporal) {
+      temporal[1].veces -= 1
+      return json(route, temporal[1].status, { error: 'El servicio solicitado no está disponible temporalmente.' })
+    }
 
     // Igual que requireAuth en cada microservicio (el catálogo es público).
     const conToken = request.headers().authorization === `Bearer ${TOKEN_PRUEBA}`
@@ -106,28 +197,56 @@ export class BackendFalso {
     }
 
     if (ruta === '/api/usuarios' && metodo === 'POST') {
-      return json(route, 200, { id: USUARIO_PRUEBA.id, email: USUARIO_PRUEBA.email })
+      return json(route, 200, this.usuario)
     }
-    if (ruta === '/api/catalogo' && metodo === 'GET') {
-      return json(route, 200, { fuente: 'tmdb', resultados: CATALOGO })
+    if (ruta === '/api/usuarios' && metodo === 'PUT') {
+      Object.assign(this.usuario, { nombre: body.nombre, apellido: body.apellido, edad: body.edad })
+      // Igual que el trigger de la base: el perfil principal copia los datos de la cuenta.
+      Object.assign(this.perfilPrincipal, { nombre: body.nombre, apellido: body.apellido, edad: body.edad })
+      return json(route, 200, this.usuario)
     }
+    if (ruta === '/api/catalogo' && metodo === 'GET') return this.#catalogo(route, url)
     const detalle = ruta.match(/^\/api\/catalogo\/(movie|tv)\/(\d+)$/)
     if (detalle && metodo === 'GET') {
       const item = CATALOGO.find((c) => c.tipoTmdb === detalle[1] && c.tmdbId === Number(detalle[2]))
       return item ? json(route, 200, item) : json(route, 404, { error: 'No encontrado.' })
     }
-    if (ruta === '/api/recomendaciones' && metodo === 'GET') return this.#recomendaciones(route, url)
-    if (ruta.startsWith('/api/animos')) return this.#animos(route, metodo, ruta, url, body)
-    if (ruta.startsWith('/api/favoritos')) return this.#favoritos(route, metodo, ruta, url, body)
-    if (ruta.startsWith('/api/historial')) return this.#historial(route, metodo, ruta, url, body)
+    // Perfil activo verificado, como perfilActivo en cada microservicio.
+    const { perfil, status, error } = this.social.perfilDe(encabezadoPerfil)
+    if (!perfil) return json(route, status, { error })
+
+    const social = this.social.atender(metodo, ruta, url, body, perfil)
+    if (social) {
+      const [codigo, cuerpo, extra] = social
+      if (extra?.perfilEliminado) this.#borrarDatosDePerfil(extra.perfilEliminado)
+      return codigo === 204 ? route.fulfill({ status: 204 }) : json(route, codigo, cuerpo)
+    }
+    if (ruta === '/api/recomendaciones' && metodo === 'GET') return this.#recomendaciones(route, url, perfil)
+    if (ruta.startsWith('/api/animos')) return this.#animos(route, metodo, ruta, url, body, perfil)
+    if (ruta.startsWith('/api/favoritos')) return this.#favoritos(route, metodo, ruta, url, body, perfil)
+    if (ruta.startsWith('/api/historial')) return this.#historial(route, metodo, ruta, url, body, perfil)
 
     return json(route, 404, { error: 'Ruta no encontrada en el API Gateway.', path: ruta })
   }
 
-  #recomendaciones(route, url) {
+  #borrarDatosDePerfil(perfilId) {
+    this.animos = this.animos.filter((a) => a.perfilId !== perfilId)
+    this.favoritos = this.favoritos.filter((f) => f.perfilId !== perfilId)
+    this.historial = this.historial.filter((h) => h.perfilId !== perfilId)
+  }
+
+  /** Registros de un perfil, sin el campo interno perfilId (como select en Prisma). */
+  #del(lista, perfil) {
+    return lista.filter((r) => r.perfilId === perfil.id).map(({ perfilId: _perfilId, ...resto }) => resto)
+  }
+
+  #recomendaciones(route, url, perfil) {
     const tipo = url.searchParams.get('tipo') ?? 'movie'
     const animoId = url.searchParams.get('animoId')
-    const emocion = animoId ? this.animos.find((a) => a.id === animoId)?.emocion : url.searchParams.get('emocion')
+    const emocion = animoId
+      ? this.animos.find((a) => a.id === animoId && a.perfilId === perfil.id)?.emocion
+      : url.searchParams.get('emocion')
+    if (animoId && !emocion) return json(route, 404, { error: 'El registro emocional no existe.' })
     if (!EMOCIONES.includes(emocion)) return json(route, 400, { error: 'La emoción no es válida.' })
 
     const resultados = RECOMENDACIONES[tipo].map((item) => ({
@@ -139,7 +258,7 @@ export class BackendFalso {
     return json(route, 200, { emocion, tipo, fuente: 'tmdb', resultados })
   }
 
-  #animos(route, metodo, ruta, url, body) {
+  #animos(route, metodo, ruta, url, body, perfil) {
     if (metodo === 'POST') {
       // Mismas reglas que emotions-service (pf13): consentimiento explícito obligatorio.
       if (body?.consentimientoHistorial !== true) {
@@ -156,47 +275,48 @@ export class BackendFalso {
         consentimientoEn: new Date().toISOString(),
         creadoEn: new Date().toISOString(),
       }
-      this.animos.unshift(animo)
+      this.animos.unshift({ ...animo, perfilId: perfil.id })
       return json(route, 201, animo)
     }
     const id = ruta.split('/')[3]
     if (id) {
-      const animo = this.animos.find((a) => a.id === id)
+      const animo = this.#del(this.animos, perfil).find((a) => a.id === id)
       return animo ? json(route, 200, animo) : json(route, 404, { error: 'El registro emocional no existe.' })
     }
-    return json(route, 200, paginar(this.animos, url))
+    return json(route, 200, paginar(this.#del(this.animos, perfil), url))
   }
 
-  #favoritos(route, metodo, ruta, url, body) {
+  #favoritos(route, metodo, ruta, url, body, perfil) {
+    const propios = this.#del(this.favoritos, perfil)
     if (metodo === 'POST') {
-      const existente = this.favoritos.find((f) => f.tmdbId === body.tmdbId && f.tipo === body.tipo)
+      const existente = propios.find((f) => f.tmdbId === body.tmdbId && f.tipo === body.tipo)
       if (existente) return json(route, 200, existente)
       const favorito = { id: randomUUID(), ...body, poster: body.poster ?? null, creadoEn: new Date().toISOString() }
-      this.favoritos.unshift(favorito)
+      this.favoritos.unshift({ ...favorito, perfilId: perfil.id })
       return json(route, 201, favorito)
     }
     if (metodo === 'DELETE') {
       const id = ruta.split('/')[3]
       const antes = this.favoritos.length
-      this.favoritos = this.favoritos.filter((f) => f.id !== id)
+      this.favoritos = this.favoritos.filter((f) => !(f.id === id && f.perfilId === perfil.id))
       return antes === this.favoritos.length
         ? json(route, 404, { error: 'Ese favorito no existe.' })
         : route.fulfill({ status: 204 })
     }
     const tipo = url.searchParams.get('tipo')
-    return json(route, 200, paginar(this.favoritos.filter((f) => !tipo || f.tipo === tipo), url))
+    return json(route, 200, paginar(propios.filter((f) => !tipo || f.tipo === tipo), url))
   }
 
-  #historial(route, metodo, ruta, url, body) {
+  #historial(route, metodo, ruta, url, body, perfil) {
     if (metodo === 'POST') {
       const registro = { id: randomUUID(), ...body, creadoEn: new Date().toISOString() }
-      this.historial.unshift(registro)
+      this.historial.unshift({ ...registro, perfilId: perfil.id })
       return json(route, 201, registro)
     }
     if (metodo === 'DELETE') {
-      this.historial = this.historial.filter((h) => h.id !== ruta.split('/')[3])
+      this.historial = this.historial.filter((h) => !(h.id === ruta.split('/')[3] && h.perfilId === perfil.id))
       return route.fulfill({ status: 204 })
     }
-    return json(route, 200, paginar(this.historial, url))
+    return json(route, 200, paginar(this.#del(this.historial, perfil), url))
   }
 }

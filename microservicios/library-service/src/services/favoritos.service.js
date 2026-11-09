@@ -10,8 +10,8 @@ const favoritoSelect = {
 }
 
 export const favoritosService = {
-  async listar(usuarioId, { pagina, limite, tipo, orden }) {
-    const where = { usuarioId }
+  async listar(usuarioId, perfilId, { pagina, limite, tipo, orden }) {
+    const where = { usuarioId, perfilId }
     if (tipo) where.tipo = tipo
 
     const [resultados, total] = await Promise.all([
@@ -36,11 +36,12 @@ export const favoritosService = {
     }
   },
 
-  async agregar(usuarioId, { tmdbId, tipo, titulo, poster }) {
+  async agregar(usuarioId, perfilId, { tmdbId, tipo, titulo, poster }) {
     const existente = await prisma.favorito.findUnique({
       where: {
-        usuarioId_tmdbId_tipo: {
+        usuarioId_perfilId_tmdbId_tipo: {
           usuarioId,
+          perfilId,
           tmdbId,
           tipo,
         },
@@ -55,6 +56,7 @@ export const favoritosService = {
     const favorito = await prisma.favorito.create({
       data: {
         usuarioId,
+        perfilId,
         tmdbId,
         tipo,
         titulo,
@@ -66,11 +68,12 @@ export const favoritosService = {
     return { favorito, creado: true }
   },
 
-  async eliminar(usuarioId, id) {
+  async eliminar(usuarioId, perfilId, id) {
     const resultado = await prisma.favorito.deleteMany({
       where: {
         id,
         usuarioId,
+        perfilId,
       },
     })
 
