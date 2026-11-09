@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 
+import { fechaEnZona } from './support/fechas.js'
 import { botonUsuario, entrarComo, expect, test } from './support/pruebas.js'
 import { USUARIO_PRUEBA } from './support/sesion.js'
 
@@ -9,20 +10,30 @@ const campana = (page) => page.getByRole('button', { name: /^Notificaciones/ })
 const panel = (page) => page.getByRole('region', { name: 'Centro de notificaciones' })
 const delDia = (backend) => backend.social.notificaciones.filter((n) => n.tipo === 'recomendacion-del-dia')
 
-function hoyLocal() {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+/**
+ * Días válidos para la recomendación del día: la fecha local del NAVEGADOR
+ * (fixture `timezoneId`), no la del proceso de Node. En GitHub Actions Node usa
+ * UTC y, entre las 18:00 y las 24:00 de Guatemala, UTC ya está en el día
+ * siguiente. Si la medianoche cae durante la prueba, vale el día de antes o el
+ * de después.
+ */
+function diasPosibles(zona, antes) {
+  return [...new Set([fechaEnZona(zona, antes), fechaEnZona(zona)])]
 }
 
-test('la campana indica pendientes, incluye la recomendación del día y permite marcarlas como leídas', async ({ page, backend }) => {
+test('la campana indica pendientes, incluye la recomendación del día y permite marcarlas como leídas', async ({ page, backend, timezoneId }) => {
   backend.social.invitarAlUsuario({ desde: 'leo', grupo: 'Club de cine' })
+  const antes = new Date()
   await entrarComo(page)
 
   // Invitación + recomendación del día generada para el perfil activo.
   await expect(campana(page)).toHaveAccessibleName('Notificaciones, 2 sin leer')
   await expect(campana(page)).toContainText('2')
   const [registro] = backend.peticionesA('POST', '/api/notificaciones/del-dia')
-  expect(registro.body).toMatchObject({ fecha: hoyLocal(), tipo: 'movie' })
+  expect(registro.body).toMatchObject({ tipo: 'movie' })
+  // La fecha es el día local de la persona (zona del navegador), no el de UTC.
+  expect(diasPosibles(timezoneId, antes)).toContain(registro.body.fecha)
+  expect(registro.body.fecha).toBe(await page.evaluate(() => new Date().toLocaleDateString('en-CA')))
   expect(registro.perfil).toBe(backend.perfilPrincipal.id)
 
   await campana(page).click()
@@ -76,3 +87,30 @@ test('la recomendación del día pertenece al perfil activo', async ({ page, bac
   await campana(page).click()
   await expect(panel(page).getByText('Tu recomendación del día')).toHaveCount(1)
 })
+
+// La recomendación del día sigue el día local en cualquier zona horaria, también
+// en los extremos (UTC+14 y UTC−11), donde la fecha local suele diferir de UTC.
+for (const zona of ['America/Guatemala', 'Pacific/Kiritimati', 'Pacific/Pago_Pago']) {
+  test.describe(`zona horaria ${zona}`, () => {
+    test.use({ timezoneId: zona })
+
+    test('la recomendación del día usa la fecha local del navegador y no se duplica al recargar', async ({ page, backend, timezoneId }) => {
+      expect(timezoneId).toBe(zona)
+      const antes = new Date()
+      await entrarComo(page)
+      await expect(campana(page)).toHaveAccessibleName(/sin leer/)
+      // El navegador realmente está en esa zona horaria.
+      expect(await page.evaluate(() => Intl.DateTimeFormat().resolvedOptions().timeZone)).toBe(zona)
+      const [registro] = backend.peticionesA('POST', '/api/notificaciones/del-dia')
+      expect(diasPosibles(zona, antes)).toContain(registro.body.fecha)
+      // Coincide con el calendario que ve la persona en su dispositivo.
+      expect(registro.body.fecha).toBe(await page.evaluate(() => new Date().toLocaleDateString('en-CA')))
+
+      // Mismo día local: al recargar no se pide otra recomendación del día.
+      await page.reload()
+      await expect(campana(page)).toBeVisible()
+      await expect.poll(() => delDia(backend).length).toBe(1)
+      expect(backend.peticionesA('POST', '/api/notificaciones/del-dia')).toHaveLength(1)
+    })
+  })
+}
